@@ -157,18 +157,19 @@ func (r *PromotionStrategyReconciler) upsertChangeTransferPolicy(ctx context.Con
 			},
 		},
 		Spec: promoterv1alpha1.ChangeTransferPolicySpec{
-			RepositoryReference:    ps.Spec.RepositoryReference,
-			ProposedBranch:         fmt.Sprintf("%s-%s", environment.Branch, "next"),
-			ActiveBranch:           environment.Branch,
-			ActiveCommitStatuses:   append(environment.ActiveCommitStatuses, ps.Spec.ActiveCommitStatuses...),
-			ProposedCommitStatuses: append(environment.ProposedCommitStatuses, ps.Spec.ProposedCommitStatuses...),
+			RepositoryReference: ps.Spec.RepositoryReference,
+			ProposedBranch:      fmt.Sprintf("%s-%s", environment.Branch, "next"),
+			ActiveBranch:        environment.Branch,
+			// ActiveCommitStatuses: become the next environments previousEnvironmentCommitStatuses
+			//ActiveCommitStatuses:   append(environment.PreviousEnvironmentCommitStatuses, ps.Spec.PreviousEnvironmentCommitStatuses...),
+			ProposedCommitStatuses: append(environment.CommitStatuses, ps.Spec.CommitStatuses...),
 			AutoMerge:              environment.AutoMerge,
 		},
 	}
 
 	previousEnvironmentIndex, _ := utils.GetPreviousEnvironmentStatusByBranch(*ps, environment.Branch)
 	environmentIndex, _ := utils.GetEnvironmentByBranch(*ps, environment.Branch)
-	if environmentIndex > 0 && len(ps.Spec.ActiveCommitStatuses) != 0 || (previousEnvironmentIndex >= 0 && len(ps.Spec.Environments[previousEnvironmentIndex].ActiveCommitStatuses) != 0) {
+	if environmentIndex > 0 && len(ps.Spec.PreviousEnvironmentCommitStatuses) != 0 || (previousEnvironmentIndex >= 0 && len(ps.Spec.Environments[previousEnvironmentIndex].PreviousEnvironmentCommitStatuses) != 0) {
 		previousEnvironmentCommitStatusSelector := promoterv1alpha1.CommitStatusSelector{
 			Key: promoterv1alpha1.PreviousEnvironmentCommitStatusKey,
 		}
@@ -255,9 +256,9 @@ func (r *PromotionStrategyReconciler) calculateStatus(ps *promoterv1alpha1.Promo
 			return fmt.Errorf("ChangeTransferPolicy not found in map for branch %s while calculating activeCommitStatus", environment.Branch)
 		}
 		activeEnvStatus := ctpsByBranch[environment.Branch].Status.Active
-		r.setEnvironmentCommitStatus(&ps.Status.Environments[i].Active.CommitStatus, len(environment.ActiveCommitStatuses)+len(ps.Spec.ActiveCommitStatuses), activeEnvStatus)
+		r.setEnvironmentCommitStatus(&ps.Status.Environments[i].Active.CommitStatus, len(environment.PreviousEnvironmentCommitStatuses)+len(ps.Spec.PreviousEnvironmentCommitStatuses), activeEnvStatus)
 		proposedEnvStatus := ctpsByBranch[environment.Branch].Status.Proposed
-		r.setEnvironmentCommitStatus(&ps.Status.Environments[i].Proposed.CommitStatus, len(environment.ProposedCommitStatuses)+len(ps.Spec.ProposedCommitStatuses), proposedEnvStatus)
+		r.setEnvironmentCommitStatus(&ps.Status.Environments[i].Proposed.CommitStatus, len(environment.CommitStatuses)+len(ps.Spec.CommitStatuses), proposedEnvStatus)
 	}
 	return nil
 }
@@ -405,7 +406,7 @@ func (r *PromotionStrategyReconciler) updatePreviousEnvironmentCommitStatus(ctx 
 			commitStatusPhase = promoterv1alpha1.CommitPhaseSuccess
 		}
 
-		if environmentIndex > 0 && len(ps.Spec.ActiveCommitStatuses) != 0 || (previousEnvironmentIndex >= 0 && len(ps.Spec.Environments[previousEnvironmentIndex].ActiveCommitStatuses) != 0) {
+		if environmentIndex > 0 && len(ps.Spec.PreviousEnvironmentCommitStatuses) != 0 || (previousEnvironmentIndex >= 0 && len(ps.Spec.Environments[previousEnvironmentIndex].PreviousEnvironmentCommitStatuses) != 0) {
 			// Since there is at least one configured active check, and since this is not the first environment,
 			// we should not create a commit status for the previous environment.
 			err := r.createOrUpdatePreviousEnvironmentCommitStatus(ctx, ctpMap[environment.Branch], commitStatusPhase, previousEnvironmentStatus, ctpMap[ps.Spec.Environments[previousEnvironmentIndex].Branch].Status.Active.CommitStatuses)

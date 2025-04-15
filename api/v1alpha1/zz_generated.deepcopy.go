@@ -510,13 +510,13 @@ func (in *Environment) DeepCopyInto(out *Environment) {
 		*out = new(bool)
 		**out = **in
 	}
-	if in.ActiveCommitStatuses != nil {
-		in, out := &in.ActiveCommitStatuses, &out.ActiveCommitStatuses
+	if in.PreviousEnvironmentCommitStatuses != nil {
+		in, out := &in.PreviousEnvironmentCommitStatuses, &out.PreviousEnvironmentCommitStatuses
 		*out = make([]CommitStatusSelector, len(*in))
 		copy(*out, *in)
 	}
-	if in.ProposedCommitStatuses != nil {
-		in, out := &in.ProposedCommitStatuses, &out.ProposedCommitStatuses
+	if in.CommitStatuses != nil {
+		in, out := &in.CommitStatuses, &out.CommitStatuses
 		*out = make([]CommitStatusSelector, len(*in))
 		copy(*out, *in)
 	}
@@ -878,13 +878,13 @@ func (in *PromotionStrategyList) DeepCopyObject() runtime.Object {
 func (in *PromotionStrategySpec) DeepCopyInto(out *PromotionStrategySpec) {
 	*out = *in
 	out.RepositoryReference = in.RepositoryReference
-	if in.ActiveCommitStatuses != nil {
-		in, out := &in.ActiveCommitStatuses, &out.ActiveCommitStatuses
+	if in.PreviousEnvironmentCommitStatuses != nil {
+		in, out := &in.PreviousEnvironmentCommitStatuses, &out.PreviousEnvironmentCommitStatuses
 		*out = make([]CommitStatusSelector, len(*in))
 		copy(*out, *in)
 	}
-	if in.ProposedCommitStatuses != nil {
-		in, out := &in.ProposedCommitStatuses, &out.ProposedCommitStatuses
+	if in.CommitStatuses != nil {
+		in, out := &in.CommitStatuses, &out.CommitStatuses
 		*out = make([]CommitStatusSelector, len(*in))
 		copy(*out, *in)
 	}

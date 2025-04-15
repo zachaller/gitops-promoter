@@ -209,14 +209,14 @@ func (r *ChangeTransferPolicyReconciler) calculateStatus(ctx context.Context, ct
 		ctp.Spec.ProposedBranch: proposedShas,
 	})
 
-	err = r.setCommitStatusState(ctx, &ctp.Status.Active, ctp.Spec.ActiveCommitStatuses, gitOperations, activeShas)
-	if err != nil {
-		var tooManyMatchingShaError *TooManyMatchingShaError
-		if errors.As(err, &tooManyMatchingShaError) {
-			r.Recorder.Event(ctp, "Warning", "TooManyMatchingSha", "There are to many matching SHAs for the active commit status")
-		}
-		return fmt.Errorf("failed to set active commit status state: %w", err)
-	}
+	//err = r.setCommitStatusState(ctx, &ctp.Status.Active, ctp.Spec.ActiveCommitStatuses, gitOperations, activeShas)
+	//if err != nil {
+	//	var tooManyMatchingShaError *TooManyMatchingShaError
+	//	if errors.As(err, &tooManyMatchingShaError) {
+	//		r.Recorder.Event(ctp, "Warning", "TooManyMatchingSha", "There are to many matching SHAs for the active commit status")
+	//	}
+	//	return fmt.Errorf("failed to set active commit status state: %w", err)
+	//}
 
 	err = r.setCommitStatusState(ctx, &ctp.Status.Proposed, ctp.Spec.ProposedCommitStatuses, gitOperations, proposedShas)
 	if err != nil {

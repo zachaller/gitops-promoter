@@ -31,22 +31,22 @@ type PromotionStrategySpec struct {
 	// +kubebuilder:validation:Required
 	RepositoryReference ObjectReference `json:"gitRepositoryRef"`
 
-	// ActiveCommitStatuses are commit statuses describing an actively running dry commit. If an active commit status
+	// PreviousEnvironmentCommitStatuses are commit statuses describing an actively running dry commit. If an active commit status
 	// is failing for an environment, subsequent environments will not deploy the failing commit.
 	//
 	// The commit statuses specified in this field apply to all environments in the promotion sequence. You can also
 	// specify commit statuses for individual environments in the `environments` field.
 	// +kubebuilder:validation:Optional
-	ActiveCommitStatuses []CommitStatusSelector `json:"activeCommitStatuses"`
+	PreviousEnvironmentCommitStatuses []CommitStatusSelector `json:"previousEnvironmentCommitStatuses"`
 
-	// ProposedCommitStatuses are commit statuses describing a proposed dry commit, i.e. one that is not yet running
+	// CommitStatuses are commit statuses describing a proposed dry commit, i.e. one that is not yet running
 	// in a live environment. If a proposed commit status is failing for a given environment, the dry commit will not
 	// be promoted to that environment.
 	//
 	// The commit statuses specified in this field apply to all environments in the promotion sequence. You can also
 	// specify commit statuses for individual environments in the `environments` field.
 	// +kubebuilder:validation:Optional
-	ProposedCommitStatuses []CommitStatusSelector `json:"proposedCommitStatuses"`
+	CommitStatuses []CommitStatusSelector `json:"commitStatuses"`
 
 	// Environments is the sequence of environments that a dry commit will be promoted through.
 	// +kubebuilder:validation:MinItems:=1
@@ -61,21 +61,21 @@ type Environment struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:=true
 	AutoMerge *bool `json:"autoMerge,omitempty"`
-	// ActiveCommitStatuses are commit statuses describing an actively running dry commit. If an active commit status
+	// PreviousEnvironmentCommitStatuses are commit statuses describing an actively running dry commit. If an active commit status
 	// is failing for an environment, subsequent environments will not deploy the failing commit.
 	//
 	// The commit statuses specified in this field apply to this environment only. You can also specify commit statuses
 	// for all environments in the `spec.activeCommitStatuses` field.
 	// +kubebuilder:validation:Optional
-	ActiveCommitStatuses []CommitStatusSelector `json:"activeCommitStatuses"`
-	// ProposedCommitStatuses are commit statuses describing a proposed dry commit, i.e. one that is not yet running
+	PreviousEnvironmentCommitStatuses []CommitStatusSelector `json:"previousEnvironmentCommitStatuses"`
+	// CommitStatuses are commit statuses describing a proposed dry commit, i.e. one that is not yet running
 	// in a live environment. If a proposed commit status is failing for a given environment, the dry commit will not
 	// be promoted to that environment.
 	//
 	// The commit statuses specified in this field apply to this environment only. You can also specify commit statuses
-	// for all environments in the `spec.proposedCommitStatuses` field.
+	// for all environments in the `spec.commitStatuses` field.
 	// +kubebuilder:validation:Optional
-	ProposedCommitStatuses []CommitStatusSelector `json:"proposedCommitStatuses"`
+	CommitStatuses []CommitStatusSelector `json:"commitStatuses"`
 }
 
 // GetAutoMerge returns the value of the AutoMerge field, defaulting to true if the field is nil.

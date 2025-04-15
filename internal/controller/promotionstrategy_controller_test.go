@@ -249,7 +249,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				Namespace: "default",
 			}
 
-			promotionStrategy.Spec.ActiveCommitStatuses = []promoterv1alpha1.CommitStatusSelector{
+			promotionStrategy.Spec.PreviousEnvironmentCommitStatuses = []promoterv1alpha1.CommitStatusSelector{
 				{
 					Key: healthCheckCSKey,
 				},
@@ -455,7 +455,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				Namespace: "default",
 			}
 
-			promotionStrategy.Spec.ProposedCommitStatuses = []promoterv1alpha1.CommitStatusSelector{
+			promotionStrategy.Spec.CommitStatuses = []promoterv1alpha1.CommitStatusSelector{
 				{
 					Key: "no-deployments-allowed",
 				},
@@ -608,7 +608,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				Namespace: "default",
 			}
 
-			promotionStrategy.Spec.ActiveCommitStatuses = []promoterv1alpha1.CommitStatusSelector{
+			promotionStrategy.Spec.PreviousEnvironmentCommitStatuses = []promoterv1alpha1.CommitStatusSelector{
 				{
 					Key: argocdCSLabel,
 				},
