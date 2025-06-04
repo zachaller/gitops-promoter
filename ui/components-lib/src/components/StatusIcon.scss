@@ -1,0 +1,20 @@
+@use '../styles/colors' as *;
+
+
+.status-icon {
+  font-size: 1.3em;
+  vertical-align: middle;
+
+  &.status-success {
+    color: $argo-success-color;
+  }
+  &.status-pending {
+    color: $argo-running;
+  }
+  &.status-failure {
+    color: $argo-failed-color;
+  }
+  &.status-unknown {
+    color: $argo-color-gray-5;
+  }
+} 

@@ -1,42 +1,38 @@
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-bin/*
-Dockerfile.cross
+# macOS
+.DS_Store
 
-# Test binary, built with `go test -c`
-*.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
-*.out
-*.out.*
-
-# Go workspace file
-go.work
-
-# Kubernetes Generated files - skip generated files, except for vendored files
-!vendor/**/zz_generated.*
-
-# editor and IDE paraphernalia
-.idea
-.vscode
-*.swp
-*.swo
-*~
-
-# Github Certificates
-*.pem
-secret.yaml
-install.yaml
-
-junit.xml
-
-./install.yaml
-release_dist
-
-venv
-
+# Node.js
 node_modules/
+dist/
+build/
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Dependency directories
+ui/components-lib/node_modules/
+ui/dashboard/node_modules/
+
+# Build output
+ui/components-lib/dist/
+ui/dashboard/dist/
+
+# Misc
+*.log
+
+# Ignore local secrets
+secret.yaml 

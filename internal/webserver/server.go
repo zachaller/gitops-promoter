@@ -301,6 +301,15 @@ func (ws *WebServer) httpGet(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, cs)
 
+	case "gitrepository":
+		gr := &promoterv1alpha1.GitRepository{}
+		err := ws.Get(c, client.ObjectKey{Namespace: namespace, Name: name}, gr)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, err.Error())
+			return
+		}
+		c.JSON(http.StatusOK, gr)
+
 	default:
 		c.JSON(http.StatusBadRequest, "invalid kind")
 	}
@@ -353,6 +362,15 @@ func (ws *WebServer) httpList(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusOK, csl.Items)
+
+	case "gitrepository":
+		grl := &promoterv1alpha1.GitRepositoryList{}
+		err := ws.List(c, grl, listOptions)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, err.Error())
+			return
+		}
+		c.JSON(http.StatusOK, grl.Items)
 
 	case "namespace":
 		if c.Query("namespace") != "" {
