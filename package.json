@@ -1,0 +1,9 @@
+{
+  "name": "gitops-promoter-monorepo",
+  "private": true,
+  "workspaces": [
+    "ui/shared",
+    "ui/components-lib",
+    "ui/dashboard"
+  ]
+} 
