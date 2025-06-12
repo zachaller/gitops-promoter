@@ -99,17 +99,17 @@ export async function getEnvironmentDetails(ctp: any): Promise<any> {
   const owner = 'Shirly8';
   const repo = 'argocon-gitops-promoter-hydrate-demo';
 
-  // Dry commit info
+  // Dry commit
   const dry = active.dry || {};
   const drySha = dry.sha ? dry.sha.slice(0, 7) : '-';
   const { author: dryCommitAuthor, message: dryCommitMessage, url: dryCommitUrl } = await getCommitEnrichment(owner, repo, dry.sha);
 
-  // Hydrated commit info
+  // Hydrated commit 
   const hydratedSha = hydrated.sha ? hydrated.sha.slice(0, 7) : '-';
   const { author: hydratedCommitAuthor, message: hydratedCommitMessage, url: hydratedCommitUrl } = await getCommitEnrichment(owner, repo, hydrated.sha);
 
 
-  // Proposed info
+  // Proposed
   const proposedDry = proposed.dry || {};
   const proposedSha = proposedDry.sha ? proposedDry.sha.slice(0, 7) : '-';
   const proposedCommitStatuses = proposed.commitStatuses || [];
