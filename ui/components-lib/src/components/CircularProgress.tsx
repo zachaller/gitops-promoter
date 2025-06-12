@@ -3,7 +3,7 @@ import './CircularProgress.scss';
 const CircularProgress = ({ percent }: { percent: number }) => {
   const radius = 13;
   const stroke = 4;
-  const normalizedRadius = radius - stroke / 2;
+  const normalizedRadius = Math.max(1, radius - stroke / 2);
   const circumference = normalizedRadius * 2 * Math.PI;
   const strokeDashoffset = circumference - (percent / 100) * circumference;
 

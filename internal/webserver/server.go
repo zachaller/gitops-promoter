@@ -301,6 +301,15 @@ func (ws *WebServer) httpGet(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, cs)
 
+	case "argocdcommitstatus":
+		acs := &promoterv1alpha1.ArgoCDCommitStatus{}
+		err := ws.Get(c, client.ObjectKey{Namespace: namespace, Name: name}, acs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, err.Error())
+			return
+		}
+		c.JSON(http.StatusOK, acs)
+
 	case "gitrepository":
 		gr := &promoterv1alpha1.GitRepository{}
 		err := ws.Get(c, client.ObjectKey{Namespace: namespace, Name: name}, gr)
@@ -362,6 +371,15 @@ func (ws *WebServer) httpList(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusOK, csl.Items)
+
+	case "argocdcommitstatus":
+		acsl := &promoterv1alpha1.ArgoCDCommitStatusList{}
+		err := ws.List(c, acsl, listOptions)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, err.Error())
+			return
+		}
+		c.JSON(http.StatusOK, acsl.Items)
 
 	case "gitrepository":
 		grl := &promoterv1alpha1.GitRepositoryList{}
