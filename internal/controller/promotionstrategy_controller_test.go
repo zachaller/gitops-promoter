@@ -2502,24 +2502,60 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				// Validate that the History field is properly updated for the development environment
 				// Since the development environment PR was merged, it should have history entries
 				g.Expect(len(promotionStrategy.Status.Environments)).To(BeNumerically(">=", 1))
-				
+
 				// The development environment should have history after PR is merged
 				g.Expect(promotionStrategy.Status.Environments[0].History).To(Not(BeNil()))
 				g.Expect(len(promotionStrategy.Status.Environments[0].History)).To(BeNumerically(">", 0))
-				
+
 				// The first history entry should contain information about the merged promotion
 				firstHistoryEntry := promotionStrategy.Status.Environments[0].History[0]
+
+				// Validate active hydrated commit details
 				g.Expect(firstHistoryEntry.Active.Hydrated.Sha).To(Not(BeEmpty()))
-				g.Expect(firstHistoryEntry.Active.Hydrated.Author).To(Not(BeEmpty()))
-				
-				// The history entry should have commit time information
+				g.Expect(firstHistoryEntry.Active.Hydrated.Author).To(Equal("testuser <testmail@test.com>"))
 				g.Expect(firstHistoryEntry.Active.Hydrated.CommitTime.Time).To(Not(BeZero()))
-				
-				// Log that history was successfully validated
-				GinkgoLogr.Info("History validation successful", 
+
+				// Validate commit message content - should contain the hydrated commit pattern
+				g.Expect(firstHistoryEntry.Active.Hydrated.Subject).To(ContainSubstring("added pending commit from dry sha"))
+				g.Expect(firstHistoryEntry.Active.Hydrated.Subject).To(ContainSubstring(drySha))
+				g.Expect(firstHistoryEntry.Active.Hydrated.Subject).To(ContainSubstring("from environment development"))
+
+				// Validate repository URL is populated with expected format
+				expectedRepoURL := fmt.Sprintf("http://localhost:%s/%s/%s", gitServerPort, name, name)
+				g.Expect(firstHistoryEntry.Active.Hydrated.RepoURL).To(Equal(expectedRepoURL))
+
+				// Validate proposed commit details
+				g.Expect(firstHistoryEntry.Proposed.Hydrated.Sha).To(Equal(drySha))
+				g.Expect(firstHistoryEntry.Proposed.Hydrated.Author).To(Equal("testuser <testmail@test.com>"))
+				g.Expect(firstHistoryEntry.Proposed.Hydrated.Subject).To(Equal("added fake manifests commit with timestamp"))
+				g.Expect(firstHistoryEntry.Proposed.Hydrated.RepoURL).To(Equal(expectedRepoURL))
+				g.Expect(firstHistoryEntry.Proposed.Hydrated.CommitTime.Time).To(Not(BeZero()))
+
+				// Validate references are populated with upstream commit information
+				g.Expect(len(firstHistoryEntry.Active.Hydrated.References)).To(BeNumerically(">", 0))
+				firstReference := firstHistoryEntry.Active.Hydrated.References[0]
+				g.Expect(firstReference.Commit.Author).To(Equal("upstream <upstream@example.com>"))
+				g.Expect(firstReference.Commit.Subject).To(Equal("This is a fix for an upstream issue"))
+				g.Expect(firstReference.Commit.Body).To(Equal("This is a body of the commit"))
+				g.Expect(firstReference.Commit.Sha).To(Equal("c4c862564afe56abf8cc8ac683eee3dc8bf96108"))
+				g.Expect(firstReference.Commit.RepoURL).To(Equal("https://github.com/upstream/repo"))
+
+				// Validate pull request information is present
+				g.Expect(firstHistoryEntry.PullRequest).To(Not(BeNil()))
+				g.Expect(firstHistoryEntry.PullRequest.State).To(Equal(promoterv1alpha1.PullRequestMerged))
+				g.Expect(firstHistoryEntry.PullRequest.ID).To(Not(BeEmpty()))
+				g.Expect(firstHistoryEntry.PullRequest.Url).To(Not(BeEmpty()))
+
+				// Log detailed history validation results
+				GinkgoLogr.Info("History validation successful with detailed checks",
 					"historyEntries", len(promotionStrategy.Status.Environments[0].History),
-					"firstEntrySha", firstHistoryEntry.Active.Hydrated.Sha,
-					"firstEntryAuthor", firstHistoryEntry.Active.Hydrated.Author,
+					"activeSha", firstHistoryEntry.Active.Hydrated.Sha,
+					"activeAuthor", firstHistoryEntry.Active.Hydrated.Author,
+					"activeSubject", firstHistoryEntry.Active.Hydrated.Subject,
+					"proposedSha", firstHistoryEntry.Proposed.Hydrated.Sha,
+					"proposedSubject", firstHistoryEntry.Proposed.Hydrated.Subject,
+					"upstreamReferences", len(firstHistoryEntry.Active.Hydrated.References),
+					"pullRequestState", firstHistoryEntry.PullRequest.State,
 				)
 			}, constants.EventuallyTimeout).Should(Succeed())
 
