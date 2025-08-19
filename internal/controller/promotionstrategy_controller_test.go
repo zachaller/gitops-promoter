@@ -2249,7 +2249,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 	})
 
 	Context("When reconciling a resource with a proposed commit status we should have history", func() {
-		FIt("should successfully reconcile the resource", func() {
+		It("should successfully reconcile the resource", func() {
 			// Skip("Skipping test because of flakiness")
 			By("Creating the resource")
 			name, scmSecret, scmProvider, gitRepo, proposedCommitStatusDevelopment, proposedCommitStatusStaging, promotionStrategy := promotionStrategyResource(ctx, "promotion-strategy-with-proposed-commit-status", "default")
@@ -2498,6 +2498,29 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				g.Expect(promotionStrategy.Status.Environments[1].Active.Hydrated.Author).To(Equal("testuser"))
 				g.Expect(promotionStrategy.Status.Environments[1].Active.Hydrated.Subject).To(ContainSubstring("initial commit"))
 				g.Expect(promotionStrategy.Status.Environments[1].Active.Hydrated.Body).To(Equal(""))
+
+				// Validate that the History field is properly updated for the development environment
+				// Since the development environment PR was merged, it should have history entries
+				g.Expect(len(promotionStrategy.Status.Environments)).To(BeNumerically(">=", 1))
+				
+				// The development environment should have history after PR is merged
+				g.Expect(promotionStrategy.Status.Environments[0].History).To(Not(BeNil()))
+				g.Expect(len(promotionStrategy.Status.Environments[0].History)).To(BeNumerically(">", 0))
+				
+				// The first history entry should contain information about the merged promotion
+				firstHistoryEntry := promotionStrategy.Status.Environments[0].History[0]
+				g.Expect(firstHistoryEntry.Active.Hydrated.Sha).To(Not(BeEmpty()))
+				g.Expect(firstHistoryEntry.Active.Hydrated.Author).To(Not(BeEmpty()))
+				
+				// The history entry should have commit time information
+				g.Expect(firstHistoryEntry.Active.Hydrated.CommitTime.Time).To(Not(BeZero()))
+				
+				// Log that history was successfully validated
+				GinkgoLogr.Info("History validation successful", 
+					"historyEntries", len(promotionStrategy.Status.Environments[0].History),
+					"firstEntrySha", firstHistoryEntry.Active.Hydrated.Sha,
+					"firstEntryAuthor", firstHistoryEntry.Active.Hydrated.Author,
+				)
 			}, constants.EventuallyTimeout).Should(Succeed())
 
 			Expect(k8sClient.Delete(ctx, promotionStrategy)).To(Succeed())
