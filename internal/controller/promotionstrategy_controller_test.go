@@ -2276,6 +2276,28 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				promoterv1alpha1.CommitStatusLabel: "no-deployments-allowed",
 			}
 
+			// Create a production commit status for testing
+			proposedCommitStatusProduction := &promoterv1alpha1.CommitStatus{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "production-" + name,
+					Namespace: "default",
+				},
+				Spec: promoterv1alpha1.CommitStatusSpec{
+					RepositoryReference: promoterv1alpha1.ObjectReference{
+						Name: name,
+					},
+					Sha:         "",
+					Name:        "no-deployments-allowed",
+					Description: "",
+					Phase:       promoterv1alpha1.CommitPhasePending,
+					Url:         "",
+				},
+			}
+			proposedCommitStatusProduction.Labels = map[string]string{
+				promoterv1alpha1.CommitStatusLabel: "no-deployments-allowed",
+			}
+
 			By("Adding a pending commit")
 			gitPath, err := os.MkdirTemp("", "*")
 			Expect(err).NotTo(HaveOccurred())
@@ -2286,6 +2308,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 			Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
 			Expect(k8sClient.Create(ctx, proposedCommitStatusDevelopment)).To(Succeed())
 			Expect(k8sClient.Create(ctx, proposedCommitStatusStaging)).To(Succeed())
+			Expect(k8sClient.Create(ctx, proposedCommitStatusProduction)).To(Succeed())
 			Expect(k8sClient.Create(ctx, promotionStrategy)).To(Succeed())
 
 			// We should now get PRs created for the ProposedCommits
@@ -2556,6 +2579,248 @@ var _ = Describe("PromotionStrategy Controller", func() {
 					"proposedSubject", firstHistoryEntry.Proposed.Hydrated.Subject,
 					"upstreamReferences", len(firstHistoryEntry.Active.Hydrated.References),
 					"pullRequestState", firstHistoryEntry.PullRequest.State,
+				)
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Updating the commit status for the staging environment to success")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      proposedCommitStatusStaging.Name,
+					Namespace: proposedCommitStatusStaging.Namespace,
+				}, proposedCommitStatusStaging)
+				g.Expect(err).To(Succeed())
+
+				_, err = runGitCmd(gitPath, "fetch")
+				Expect(err).NotTo(HaveOccurred())
+				sha, err := runGitCmd(gitPath, "rev-parse", "origin/"+ctpStaging.Spec.ProposedBranch)
+				Expect(err).NotTo(HaveOccurred())
+				sha = strings.TrimSpace(sha)
+
+				// Check that the proposed commit has the correct sha, aka it has reconciled at least once since adding new commits
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(promotionStrategy.Name, promotionStrategy.Spec.Environments[1].Branch)),
+					Namespace: typeNamespacedName.Namespace,
+				}, &ctpStaging)
+				g.Expect(err).To(Succeed())
+				g.Expect(ctpStaging.Status.Proposed.Hydrated.Sha).To(Equal(sha))
+
+				g.Expect(sha).To(Not(Equal("")))
+				proposedCommitStatusStaging.Spec.Sha = sha
+				proposedCommitStatusStaging.Spec.Phase = promoterv1alpha1.CommitPhaseSuccess
+				err = k8sClient.Update(ctx, proposedCommitStatusStaging)
+				GinkgoLogr.Info("Updated commit status for staging to sha: " + sha)
+				g.Expect(err).To(Succeed())
+
+				g.Expect(len(ctpStaging.Status.Proposed.CommitStatuses)).To(Not(BeZero()))
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("By checking that the staging pull request has been merged and that production pull request is still open")
+			Eventually(func(g Gomega) {
+				prName := utils.KubeSafeUniqueName(ctx, utils.GetPullRequestName(gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name, ctpStaging.Spec.ProposedBranch, ctpStaging.Spec.ActiveBranch))
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      prName,
+					Namespace: typeNamespacedName.Namespace,
+				}, &pullRequestStaging)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(promotionStrategy.Name, promotionStrategy.Spec.Environments[1].Branch)),
+					Namespace: typeNamespacedName.Namespace,
+				}, &ctpStaging)
+				g.Expect(err).To(Succeed())
+				g.Expect(ctpStaging.Status.PullRequest).To(BeNil())
+
+				prName = utils.KubeSafeUniqueName(ctx, utils.GetPullRequestName(gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name, ctpProd.Spec.ProposedBranch, ctpProd.Spec.ActiveBranch))
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      prName,
+					Namespace: typeNamespacedName.Namespace,
+				}, &pullRequestProd)
+				g.Expect(err).To(Succeed())
+
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(promotionStrategy.Name, promotionStrategy.Spec.Environments[2].Branch)),
+					Namespace: typeNamespacedName.Namespace,
+				}, &ctpProd)
+				g.Expect(err).To(Succeed())
+				g.Expect(ctpProd.Status.PullRequest).To(Not(BeNil()))
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Validating the second history entry for the staging environment")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      promotionStrategy.Name,
+					Namespace: promotionStrategy.Namespace,
+				}, promotionStrategy)
+				g.Expect(err).To(Succeed())
+
+				// Validate that the staging environment now has history after PR is merged
+				g.Expect(promotionStrategy.Status.Environments[1].History).To(Not(BeNil()))
+				g.Expect(len(promotionStrategy.Status.Environments[1].History)).To(BeNumerically(">", 0))
+
+				// The staging environment should have history entry about the merged promotion
+				stagingHistoryEntry := promotionStrategy.Status.Environments[1].History[0]
+
+				// Validate active hydrated commit details for staging
+				g.Expect(stagingHistoryEntry.Active.Hydrated.Sha).To(Not(BeEmpty()))
+				g.Expect(stagingHistoryEntry.Active.Hydrated.Author).To(Equal("testuser <testmail@test.com>"))
+				g.Expect(stagingHistoryEntry.Active.Hydrated.CommitTime.Time).To(Not(BeZero()))
+
+				// Validate commit message content for staging - should contain the hydrated commit pattern
+				g.Expect(stagingHistoryEntry.Active.Hydrated.Subject).To(ContainSubstring("added pending commit from dry sha"))
+				g.Expect(stagingHistoryEntry.Active.Hydrated.Subject).To(ContainSubstring(drySha))
+				g.Expect(stagingHistoryEntry.Active.Hydrated.Subject).To(ContainSubstring("from environment staging"))
+
+				// Validate repository URL is populated with expected format
+				expectedRepoURL := fmt.Sprintf("http://localhost:%s/%s/%s", gitServerPort, name, name)
+				g.Expect(stagingHistoryEntry.Active.Hydrated.RepoURL).To(Equal(expectedRepoURL))
+
+				// Validate proposed commit details for staging
+				g.Expect(stagingHistoryEntry.Proposed.Hydrated.Sha).To(Equal(drySha))
+				g.Expect(stagingHistoryEntry.Proposed.Hydrated.Author).To(Equal("testuser <testmail@test.com>"))
+				g.Expect(stagingHistoryEntry.Proposed.Hydrated.Subject).To(Equal("added fake manifests commit with timestamp"))
+				g.Expect(stagingHistoryEntry.Proposed.Hydrated.RepoURL).To(Equal(expectedRepoURL))
+				g.Expect(stagingHistoryEntry.Proposed.Hydrated.CommitTime.Time).To(Not(BeZero()))
+
+				// Validate references are populated with upstream commit information for staging
+				g.Expect(len(stagingHistoryEntry.Active.Hydrated.References)).To(BeNumerically(">", 0))
+				stagingReference := stagingHistoryEntry.Active.Hydrated.References[0]
+				g.Expect(stagingReference.Commit.Author).To(Equal("upstream <upstream@example.com>"))
+				g.Expect(stagingReference.Commit.Subject).To(Equal("This is a fix for an upstream issue"))
+				g.Expect(stagingReference.Commit.Body).To(Equal("This is a body of the commit"))
+				g.Expect(stagingReference.Commit.Sha).To(Equal("c4c862564afe56abf8cc8ac683eee3dc8bf96108"))
+				g.Expect(stagingReference.Commit.RepoURL).To(Equal("https://github.com/upstream/repo"))
+
+				// Validate pull request information is present for staging
+				g.Expect(stagingHistoryEntry.PullRequest).To(Not(BeNil()))
+				g.Expect(stagingHistoryEntry.PullRequest.State).To(Equal(promoterv1alpha1.PullRequestMerged))
+				g.Expect(stagingHistoryEntry.PullRequest.ID).To(Not(BeEmpty()))
+				g.Expect(stagingHistoryEntry.PullRequest.Url).To(Not(BeEmpty()))
+
+				// Log detailed staging history validation results
+				GinkgoLogr.Info("Staging history validation successful with detailed checks",
+					"historyEntries", len(promotionStrategy.Status.Environments[1].History),
+					"activeSha", stagingHistoryEntry.Active.Hydrated.Sha,
+					"activeAuthor", stagingHistoryEntry.Active.Hydrated.Author,
+					"activeSubject", stagingHistoryEntry.Active.Hydrated.Subject,
+					"proposedSha", stagingHistoryEntry.Proposed.Hydrated.Sha,
+					"proposedSubject", stagingHistoryEntry.Proposed.Hydrated.Subject,
+					"upstreamReferences", len(stagingHistoryEntry.Active.Hydrated.References),
+					"pullRequestState", stagingHistoryEntry.PullRequest.State,
+				)
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Updating the commit status for the production environment to success")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      proposedCommitStatusProduction.Name,
+					Namespace: proposedCommitStatusProduction.Namespace,
+				}, proposedCommitStatusProduction)
+				g.Expect(err).To(Succeed())
+
+				_, err = runGitCmd(gitPath, "fetch")
+				Expect(err).NotTo(HaveOccurred())
+				sha, err := runGitCmd(gitPath, "rev-parse", "origin/"+ctpProd.Spec.ProposedBranch)
+				Expect(err).NotTo(HaveOccurred())
+				sha = strings.TrimSpace(sha)
+
+				// Check that the proposed commit has the correct sha, aka it has reconciled at least once since adding new commits
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(promotionStrategy.Name, promotionStrategy.Spec.Environments[2].Branch)),
+					Namespace: typeNamespacedName.Namespace,
+				}, &ctpProd)
+				g.Expect(err).To(Succeed())
+				g.Expect(ctpProd.Status.Proposed.Hydrated.Sha).To(Equal(sha))
+
+				g.Expect(sha).To(Not(Equal("")))
+				proposedCommitStatusProduction.Spec.Sha = sha
+				proposedCommitStatusProduction.Spec.Phase = promoterv1alpha1.CommitPhaseSuccess
+				err = k8sClient.Update(ctx, proposedCommitStatusProduction)
+				GinkgoLogr.Info("Updated commit status for production to sha: " + sha)
+				g.Expect(err).To(Succeed())
+
+				g.Expect(len(ctpProd.Status.Proposed.CommitStatuses)).To(Not(BeZero()))
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("By checking that the production pull request has been merged")
+			Eventually(func(g Gomega) {
+				prName := utils.KubeSafeUniqueName(ctx, utils.GetPullRequestName(gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name, ctpProd.Spec.ProposedBranch, ctpProd.Spec.ActiveBranch))
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      prName,
+					Namespace: typeNamespacedName.Namespace,
+				}, &pullRequestProd)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(promotionStrategy.Name, promotionStrategy.Spec.Environments[2].Branch)),
+					Namespace: typeNamespacedName.Namespace,
+				}, &ctpProd)
+				g.Expect(err).To(Succeed())
+				g.Expect(ctpProd.Status.PullRequest).To(BeNil())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Validating the third history entry for the production environment")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      promotionStrategy.Name,
+					Namespace: promotionStrategy.Namespace,
+				}, promotionStrategy)
+				g.Expect(err).To(Succeed())
+
+				// Validate that the production environment now has history after PR is merged
+				g.Expect(promotionStrategy.Status.Environments[2].History).To(Not(BeNil()))
+				g.Expect(len(promotionStrategy.Status.Environments[2].History)).To(BeNumerically(">", 0))
+
+				// The production environment should have history entry about the merged promotion
+				productionHistoryEntry := promotionStrategy.Status.Environments[2].History[0]
+
+				// Validate active hydrated commit details for production
+				g.Expect(productionHistoryEntry.Active.Hydrated.Sha).To(Not(BeEmpty()))
+				g.Expect(productionHistoryEntry.Active.Hydrated.Author).To(Equal("testuser <testmail@test.com>"))
+				g.Expect(productionHistoryEntry.Active.Hydrated.CommitTime.Time).To(Not(BeZero()))
+
+				// Validate commit message content for production - should contain the hydrated commit pattern
+				g.Expect(productionHistoryEntry.Active.Hydrated.Subject).To(ContainSubstring("added pending commit from dry sha"))
+				g.Expect(productionHistoryEntry.Active.Hydrated.Subject).To(ContainSubstring(drySha))
+				g.Expect(productionHistoryEntry.Active.Hydrated.Subject).To(ContainSubstring("from environment production"))
+
+				// Validate repository URL is populated with expected format
+				expectedRepoURL := fmt.Sprintf("http://localhost:%s/%s/%s", gitServerPort, name, name)
+				g.Expect(productionHistoryEntry.Active.Hydrated.RepoURL).To(Equal(expectedRepoURL))
+
+				// Validate proposed commit details for production
+				g.Expect(productionHistoryEntry.Proposed.Hydrated.Sha).To(Equal(drySha))
+				g.Expect(productionHistoryEntry.Proposed.Hydrated.Author).To(Equal("testuser <testmail@test.com>"))
+				g.Expect(productionHistoryEntry.Proposed.Hydrated.Subject).To(Equal("added fake manifests commit with timestamp"))
+				g.Expect(productionHistoryEntry.Proposed.Hydrated.RepoURL).To(Equal(expectedRepoURL))
+				g.Expect(productionHistoryEntry.Proposed.Hydrated.CommitTime.Time).To(Not(BeZero()))
+
+				// Validate references are populated with upstream commit information for production
+				g.Expect(len(productionHistoryEntry.Active.Hydrated.References)).To(BeNumerically(">", 0))
+				productionReference := productionHistoryEntry.Active.Hydrated.References[0]
+				g.Expect(productionReference.Commit.Author).To(Equal("upstream <upstream@example.com>"))
+				g.Expect(productionReference.Commit.Subject).To(Equal("This is a fix for an upstream issue"))
+				g.Expect(productionReference.Commit.Body).To(Equal("This is a body of the commit"))
+				g.Expect(productionReference.Commit.Sha).To(Equal("c4c862564afe56abf8cc8ac683eee3dc8bf96108"))
+				g.Expect(productionReference.Commit.RepoURL).To(Equal("https://github.com/upstream/repo"))
+
+				// Validate pull request information is present for production
+				g.Expect(productionHistoryEntry.PullRequest).To(Not(BeNil()))
+				g.Expect(productionHistoryEntry.PullRequest.State).To(Equal(promoterv1alpha1.PullRequestMerged))
+				g.Expect(productionHistoryEntry.PullRequest.ID).To(Not(BeEmpty()))
+				g.Expect(productionHistoryEntry.PullRequest.Url).To(Not(BeEmpty()))
+
+				// Log detailed production history validation results
+				GinkgoLogr.Info("Production history validation successful with detailed checks",
+					"historyEntries", len(promotionStrategy.Status.Environments[2].History),
+					"activeSha", productionHistoryEntry.Active.Hydrated.Sha,
+					"activeAuthor", productionHistoryEntry.Active.Hydrated.Author,
+					"activeSubject", productionHistoryEntry.Active.Hydrated.Subject,
+					"proposedSha", productionHistoryEntry.Proposed.Hydrated.Sha,
+					"proposedSubject", productionHistoryEntry.Proposed.Hydrated.Subject,
+					"upstreamReferences", len(productionHistoryEntry.Active.Hydrated.References),
+					"pullRequestState", productionHistoryEntry.PullRequest.State,
 				)
 			}, constants.EventuallyTimeout).Should(Succeed())
 
