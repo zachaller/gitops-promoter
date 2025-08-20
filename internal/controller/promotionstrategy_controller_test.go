@@ -2604,29 +2604,29 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				// Development environment (index 0) - Check core active fields
 				devEnv := promotionStrategy.Status.Environments[0]
 				g.Expect(devEnv.Branch).To(Equal("environment/development"))
-				
+
 				// Active dry state - core fields
 				g.Expect(devEnv.Active.Dry.Sha).To(Not(BeEmpty()), "Dev active dry SHA should not be empty")
 				g.Expect(devEnv.Active.Dry.Author).To(Not(BeEmpty()), "Dev active dry author should not be empty")
 				g.Expect(devEnv.Active.Dry.Subject).To(Not(BeEmpty()), "Dev active dry subject should not be empty")
 				g.Expect(devEnv.Active.Dry.CommitTime).To(Not(BeZero()), "Dev active dry commit time should not be zero")
-				
+
 				// Active hydrated state - core fields
 				g.Expect(devEnv.Active.Hydrated.Sha).To(Not(BeEmpty()), "Dev active hydrated SHA should not be empty")
-				g.Expect(devEnv.Active.Hydrated.Author).To(Not(BeEmpty()), "Dev active hydrated author should not be empty") 
+				g.Expect(devEnv.Active.Hydrated.Author).To(Not(BeEmpty()), "Dev active hydrated author should not be empty")
 				g.Expect(devEnv.Active.Hydrated.Subject).To(Not(BeEmpty()), "Dev active hydrated subject should not be empty")
 				g.Expect(devEnv.Active.Hydrated.CommitTime).To(Not(BeZero()), "Dev active hydrated commit time should not be zero")
 
-				// Staging environment (index 1) - Check core active fields  
+				// Staging environment (index 1) - Check core active fields
 				stagingEnv := promotionStrategy.Status.Environments[1]
 				g.Expect(stagingEnv.Branch).To(Equal("environment/staging"))
-				
+
 				// Active dry state - core fields
 				g.Expect(stagingEnv.Active.Dry.Sha).To(Not(BeEmpty()), "Staging active dry SHA should not be empty")
 				g.Expect(stagingEnv.Active.Dry.Author).To(Not(BeEmpty()), "Staging active dry author should not be empty")
 				g.Expect(stagingEnv.Active.Dry.Subject).To(Not(BeEmpty()), "Staging active dry subject should not be empty")
 				g.Expect(stagingEnv.Active.Dry.CommitTime).To(Not(BeZero()), "Staging active dry commit time should not be zero")
-				
+
 				// Active hydrated state - core fields
 				g.Expect(stagingEnv.Active.Hydrated.Sha).To(Not(BeEmpty()), "Staging active hydrated SHA should not be empty")
 				g.Expect(stagingEnv.Active.Hydrated.Author).To(Not(BeEmpty()), "Staging active hydrated author should not be empty")
@@ -2645,7 +2645,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 
 				// The key test is that history functionality exists and is being populated
 				// We should have some history entries after the no-op commit triggers reconciliation
-				GinkgoLogr.Info("Checking history functionality", 
+				GinkgoLogr.Info("Checking history functionality",
 					"devHistoryCount", len(devEnv.History),
 					"stagingHistoryCount", len(stagingEnv.History))
 

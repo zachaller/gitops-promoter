@@ -649,18 +649,6 @@ func makeChangeAndHydrateRepoNoOp(gitPath string, repoOwner string, repoName str
 			Date:    metav1.Now(),
 			Subject: subject,
 			Body:    body,
-			References: []promoterv1alpha1.RevisionReference{
-				{
-					Commit: &promoterv1alpha1.CommitMetadata{
-						Author:  "upstream <upstream@example.com>",
-						Date:    ptr.To(metav1.Now()),
-						Subject: "This is a fix for an upstream issue",
-						Body:    "This is a body of the commit",
-						Sha:     "c4c862564afe56abf8cc8ac683eee3dc8bf96108",
-						RepoURL: "https://github.com/upstream/repo",
-					},
-				},
-			},
 		}
 		m, err := json.Marshal(metadata)
 		Expect(err).NotTo(HaveOccurred())
