@@ -1928,7 +1928,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 					argoCDAppDev.Status.Sync.Status = argocd.SyncStatusCodeSynced
 					argoCDAppDev.Status.Health.Status = argocd.HealthStatusHealthy
 					argoCDAppDev.Status.Sync.Revision = ctpDev.Status.Active.Hydrated.Sha
-					lastTransitionTime := metav1.Now()
+					lastTransitionTime := metav1.NewTime(time.Now().Add(-lastTransitionTimeThreshold - time.Second))
 					argoCDAppDev.Status.Health.LastTransitionTime = &lastTransitionTime
 					err = k8sClient.Update(ctx, &argoCDAppDev)
 					Expect(err).To(Succeed())
@@ -1952,7 +1952,8 @@ var _ = Describe("PromotionStrategy Controller", func() {
 
 			By("Updating the staging Argo CD application to synced and health we should close production PR")
 
-			lastTransitionTime := metav1.Now()
+			// Set lastTransitionTime to be at least 5 seconds in the past to satisfy the health threshold
+			lastTransitionTime := metav1.NewTime(time.Now().Add(-lastTransitionTimeThreshold - time.Second))
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name:      utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(promotionStrategy.Name, promotionStrategy.Spec.Environments[1].Branch)),
@@ -1967,7 +1968,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 					argoCDAppStaging.Status.Sync.Status = argocd.SyncStatusCodeSynced
 					argoCDAppStaging.Status.Health.Status = argocd.HealthStatusHealthy
 					argoCDAppStaging.Status.Sync.Revision = ctpStaging.Status.Active.Hydrated.Sha
-					lastTransitionTime = metav1.Now()
+					// Keep the same lastTransitionTime to ensure it meets the threshold
 					argoCDAppStaging.Status.Health.LastTransitionTime = &lastTransitionTime
 					err = k8sClient.Update(ctx, &argoCDAppStaging)
 					Expect(err).To(Succeed())
@@ -1990,7 +1991,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 			Expect(k8sClient.Delete(ctx, &argoCDAppProduction)).To(Succeed())
 		})
 
-		FIt("should successfully reconcile the resource across clusters", Label("multicluster"), func() {
+		It("should successfully reconcile the resource across clusters", Label("multicluster"), func() {
 			By("Creating the resource")
 			plainName := "mc-promo-strategy-with-active-commit-status-argocdcommitstatus"
 			name, scmSecret, scmProvider, gitRepo, _, _, promotionStrategy := promotionStrategyResource(ctx, plainName, "default")
@@ -2147,7 +2148,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 					argoCDAppDev.Status.Sync.Status = argocd.SyncStatusCodeSynced
 					argoCDAppDev.Status.Health.Status = argocd.HealthStatusHealthy
 					argoCDAppDev.Status.Sync.Revision = ctpDev.Status.Active.Hydrated.Sha
-					lastTransitionTime := metav1.Now()
+					lastTransitionTime := metav1.NewTime(time.Now().Add(-lastTransitionTimeThreshold - time.Second))
 					argoCDAppDev.Status.Health.LastTransitionTime = &lastTransitionTime
 					err = k8sClientDev.Update(ctx, &argoCDAppDev)
 					Expect(err).To(Succeed())
@@ -2171,7 +2172,8 @@ var _ = Describe("PromotionStrategy Controller", func() {
 
 			By("Updating the staging Argo CD application to synced and health we should close production PR")
 
-			lastTransitionTime := metav1.Now()
+			// Set lastTransitionTime to be at least 5 seconds in the past to satisfy the health threshold
+			lastTransitionTime := metav1.NewTime(time.Now().Add(-lastTransitionTimeThreshold - time.Second))
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name:      utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(promotionStrategy.Name, promotionStrategy.Spec.Environments[1].Branch)),
@@ -2186,7 +2188,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 					argoCDAppStaging.Status.Sync.Status = argocd.SyncStatusCodeSynced
 					argoCDAppStaging.Status.Health.Status = argocd.HealthStatusHealthy
 					argoCDAppStaging.Status.Sync.Revision = ctpStaging.Status.Active.Hydrated.Sha
-					lastTransitionTime = metav1.Now()
+					// Keep the same lastTransitionTime to ensure it meets the threshold
 					argoCDAppStaging.Status.Health.LastTransitionTime = &lastTransitionTime
 					err = k8sClientStaging.Update(ctx, &argoCDAppStaging)
 					Expect(err).To(Succeed())
