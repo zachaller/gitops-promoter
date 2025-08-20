@@ -2249,7 +2249,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 	})
 
 	Context("When reconciling a resource with a proposed commit status we should have history", func() {
-		FIt("should successfully reconcile the resource", func() {
+		It("should successfully reconcile the resource", func() {
 			// Skip("Skipping test because of flakiness")
 			By("Creating the resource")
 			name, scmSecret, scmProvider, gitRepo, proposedCommitStatusDevelopment, proposedCommitStatusStaging, promotionStrategy := promotionStrategyResource(ctx, "promotion-strategy-with-proposed-commit-status", "default")
@@ -2582,7 +2582,112 @@ var _ = Describe("PromotionStrategy Controller", func() {
 
 			}, constants.EventuallyTimeout).Should(Succeed())
 
-			// TODO: make a no op commit then check the field of status.active and status.history
+			By("Verifying that status.active and status.history are properly populated after promotion")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      promotionStrategy.Name,
+					Namespace: promotionStrategy.Namespace,
+				}, promotionStrategy)
+				g.Expect(err).To(Succeed())
+
+				// Verify that the active status has been updated for all environments
+				for i, env := range promotionStrategy.Status.Environments {
+					// Each environment should have active status populated
+					g.Expect(env.Active.Dry.Sha).To(Equal(drySha), "Environment %d should have active dry SHA equal to the promoted commit", i)
+					g.Expect(env.Active.Dry.Author).To(Equal("testuser <testmail@test.com>"), "Environment %d should have correct author", i)
+					g.Expect(env.Active.Dry.Subject).To(Equal("added fake manifests commit with timestamp"), "Environment %d should have correct subject", i)
+
+					// Verify hydrated commit info is populated
+					g.Expect(env.Active.Hydrated.Sha).To(Not(BeEmpty()), "Environment %d should have hydrated SHA", i)
+					g.Expect(env.Active.Hydrated.Author).To(Equal("testuser"), "Environment %d should have correct hydrated author", i)
+
+					// Verify commit references are properly populated
+					g.Expect(env.Active.Dry.References).To(HaveLen(1), "Environment %d should have one reference", i)
+					g.Expect(env.Active.Dry.References[0].Commit.Subject).To(Equal("This is a fix for an upstream issue"), "Environment %d should have correct reference subject", i)
+					g.Expect(env.Active.Dry.References[0].Commit.Sha).To(Equal("c4c862564afe56abf8cc8ac683eee3dc8bf96108"), "Environment %d should have correct reference SHA", i)
+				}
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Making a small additional commit to test history tracking")
+			gitPathNoOp, err := os.MkdirTemp("", "*")
+			Expect(err).NotTo(HaveOccurred())
+			defer func() {
+				err := os.RemoveAll(gitPathNoOp)
+				if err != nil {
+					GinkgoLogr.Info("failed to remove temp dir: " + err.Error())
+				}
+			}()
+
+			// Make a second commit to test history tracking
+			dryShaSecond, _ := makeChangeAndHydrateRepo(gitPathNoOp, name, name, "second commit for history testing", "second hydrated commit for history testing")
+
+			// Simulate webhook to trigger reconciliation for the second commit
+			simulateWebhook(ctx, k8sClient, &ctpDev)
+			simulateWebhook(ctx, k8sClient, &ctpStaging)
+			simulateWebhook(ctx, k8sClient, &ctpProd)
+
+			// Update commit status for development to trigger promotion of the second commit
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      proposedCommitStatusDevelopment.Name,
+					Namespace: proposedCommitStatusDevelopment.Namespace,
+				}, proposedCommitStatusDevelopment)
+				g.Expect(err).To(Succeed())
+
+				// Check that the CTP has picked up the new commit
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(promotionStrategy.Name, promotionStrategy.Spec.Environments[0].Branch)),
+					Namespace: typeNamespacedName.Namespace,
+				}, &ctpDev)
+				g.Expect(err).To(Succeed())
+				g.Expect(ctpDev.Status.Proposed.Dry.Sha).To(Equal(dryShaSecond))
+
+				_, err = runGitCmd(gitPathNoOp, "fetch")
+				Expect(err).NotTo(HaveOccurred())
+				sha, err := runGitCmd(gitPathNoOp, "rev-parse", "origin/"+ctpDev.Spec.ProposedBranch)
+				Expect(err).NotTo(HaveOccurred())
+				sha = strings.TrimSpace(sha)
+
+				g.Expect(sha).To(Not(Equal("")))
+				proposedCommitStatusDevelopment.Spec.Sha = sha
+				proposedCommitStatusDevelopment.Spec.Phase = promoterv1alpha1.CommitPhaseSuccess
+				err = k8sClient.Update(ctx, proposedCommitStatusDevelopment)
+				g.Expect(err).To(Succeed())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Verifying that history is populated after the second promotion")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      promotionStrategy.Name,
+					Namespace: promotionStrategy.Namespace,
+				}, promotionStrategy)
+				g.Expect(err).To(Succeed())
+
+				// After the second promotion, we should have history for the development environment
+				g.Expect(len(promotionStrategy.Status.Environments[0].History)).To(BeNumerically(">=", 1), "Development environment should have history after second promotion")
+
+				if len(promotionStrategy.Status.Environments[0].History) > 0 {
+					latestHistory := promotionStrategy.Status.Environments[0].History[len(promotionStrategy.Status.Environments[0].History)-1]
+
+					// The history should contain the previous active state (from the first commit)
+					g.Expect(latestHistory.Active.Dry.Sha).To(Equal(drySha), "History should contain the previous active dry SHA")
+					g.Expect(latestHistory.Active.Dry.Author).To(Equal("testuser <testmail@test.com>"), "History should contain correct author")
+					g.Expect(latestHistory.Active.Dry.Subject).To(Equal("added fake manifests commit with timestamp"), "History should contain correct subject")
+					g.Expect(latestHistory.Active.Hydrated.Author).To(Equal("testuser"), "History should contain correct hydrated author")
+
+					// Verify the history contains the proposed commit status information
+					g.Expect(len(latestHistory.Proposed.CommitStatuses)).To(BeNumerically(">=", 1), "History should contain commit statuses")
+					g.Expect(latestHistory.Proposed.CommitStatuses[0].Key).To(Equal("no-deployments-allowed"), "History should contain correct commit status key")
+					g.Expect(latestHistory.Proposed.CommitStatuses[0].Phase).To(Equal(string(promoterv1alpha1.CommitPhaseSuccess)), "History should contain correct commit status phase")
+
+					// Verify PullRequest information is captured in history
+					g.Expect(latestHistory.PullRequest).To(Not(BeNil()), "History should contain pull request information")
+					g.Expect(latestHistory.PullRequest.State).To(Equal(promoterv1alpha1.PullRequestMerged), "History should show PR was merged")
+				}
+
+				// Verify that the active status now reflects the second commit
+				g.Expect(promotionStrategy.Status.Environments[0].Active.Dry.Sha).To(Equal(dryShaSecond), "Active status should reflect the second commit")
+			}, constants.EventuallyTimeout).Should(Succeed())
 
 			Expect(k8sClient.Delete(ctx, promotionStrategy)).To(Succeed())
 		})
