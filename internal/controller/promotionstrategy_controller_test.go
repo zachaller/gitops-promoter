@@ -2662,17 +2662,18 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				for i, historyEntry := range devEnv.History {
 					g.Expect(historyEntry.Active).ToNot(BeNil(), fmt.Sprintf("Dev history[%d] should have active state", i))
 					g.Expect(historyEntry.Proposed).ToNot(BeNil(), fmt.Sprintf("Dev history[%d] should have proposed state", i))
-					
+
 					// Validate Active state fields in history
 					g.Expect(historyEntry.Active.Dry.Sha).To(Not(BeEmpty()), fmt.Sprintf("Dev history[%d] active dry SHA should not be empty", i))
 					g.Expect(historyEntry.Active.Dry.Author).To(Equal("testuser <testmail@test.com>"), fmt.Sprintf("Dev history[%d] active dry author should match expected value", i))
-					g.Expect(historyEntry.Active.Dry.CommitTime).To(Not(BeZero()), fmt.Sprintf("Dev history[%d] active dry commit time should not be zero", i))
-					
+					// Validate that commit time is a recent timestamp (within last 10 minutes)
+					g.Expect(historyEntry.Active.Dry.CommitTime.Time).To(BeTemporally("~", time.Now(), 10*time.Minute), fmt.Sprintf("Dev history[%d] active dry commit time should be recent", i))
+
 					g.Expect(historyEntry.Active.Hydrated.Sha).To(Not(BeEmpty()), fmt.Sprintf("Dev history[%d] active hydrated SHA should not be empty", i))
 					g.Expect(historyEntry.Active.Hydrated.Author).To(Equal("testuser"), fmt.Sprintf("Dev history[%d] active hydrated author should match expected value", i))
 					g.Expect(historyEntry.Active.Hydrated.Subject).To(ContainSubstring("Promote"), fmt.Sprintf("Dev history[%d] active hydrated subject should contain 'Promote'", i))
 					g.Expect(historyEntry.Active.Hydrated.CommitTime).To(Not(BeZero()), fmt.Sprintf("Dev history[%d] active hydrated commit time should not be zero", i))
-					
+
 					// Validate Proposed state fields in history
 					g.Expect(historyEntry.Proposed.Hydrated.Sha).To(Not(BeEmpty()), fmt.Sprintf("Dev history[%d] proposed hydrated SHA should not be empty", i))
 					g.Expect(historyEntry.Proposed.Hydrated.Author).To(Equal("testuser"), fmt.Sprintf("Dev history[%d] proposed hydrated author should match expected value", i))
@@ -2682,17 +2683,17 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				for i, historyEntry := range stagingEnv.History {
 					g.Expect(historyEntry.Active).ToNot(BeNil(), fmt.Sprintf("Staging history[%d] should have active state", i))
 					g.Expect(historyEntry.Proposed).ToNot(BeNil(), fmt.Sprintf("Staging history[%d] should have proposed state", i))
-					
+
 					// Validate Active state fields in history
 					g.Expect(historyEntry.Active.Dry.Sha).To(Not(BeEmpty()), fmt.Sprintf("Staging history[%d] active dry SHA should not be empty", i))
 					g.Expect(historyEntry.Active.Dry.Author).To(Equal("testuser <testmail@test.com>"), fmt.Sprintf("Staging history[%d] active dry author should match expected value", i))
 					g.Expect(historyEntry.Active.Dry.CommitTime).To(Not(BeZero()), fmt.Sprintf("Staging history[%d] active dry commit time should not be zero", i))
-					
+
 					g.Expect(historyEntry.Active.Hydrated.Sha).To(Not(BeEmpty()), fmt.Sprintf("Staging history[%d] active hydrated SHA should not be empty", i))
 					g.Expect(historyEntry.Active.Hydrated.Author).To(Equal("testuser"), fmt.Sprintf("Staging history[%d] active hydrated author should match expected value", i))
 					g.Expect(historyEntry.Active.Hydrated.Subject).To(ContainSubstring("Promote"), fmt.Sprintf("Staging history[%d] active hydrated subject should contain 'Promote'", i))
 					g.Expect(historyEntry.Active.Hydrated.CommitTime).To(Not(BeZero()), fmt.Sprintf("Staging history[%d] active hydrated commit time should not be zero", i))
-					
+
 					// Validate Proposed state fields in history
 					g.Expect(historyEntry.Proposed.Hydrated.Sha).To(Not(BeEmpty()), fmt.Sprintf("Staging history[%d] proposed hydrated SHA should not be empty", i))
 					g.Expect(historyEntry.Proposed.Hydrated.Author).To(Equal("testuser"), fmt.Sprintf("Staging history[%d] proposed hydrated author should match expected value", i))
