@@ -588,6 +588,108 @@ func makeChangeAndHydrateRepo(gitPath string, repoOwner string, repoName string,
 	return sha, shortSha
 }
 
+func makeChangeAndHydrateRepoNoOp(gitPath string, repoOwner string, repoName string, dryCommitMessage string, hydratedCommitMessage string) (string, string) {
+	repoURL := fmt.Sprintf("http://localhost:%s/%s/%s", gitServerPort, repoOwner, repoName)
+	_, err := runGitCmd(gitPath, "clone", "--verbose", "--progress", "--filter=blob:none", repoURL, ".")
+	Expect(err).NotTo(HaveOccurred())
+
+	_, err = runGitCmd(gitPath, "config", "user.name", "testuser")
+	Expect(err).NotTo(HaveOccurred())
+	_, err = runGitCmd(gitPath, "config", "user.email", "testmail@test.com")
+	Expect(err).NotTo(HaveOccurred())
+	_, err = runGitCmd(gitPath, "config", "pull.rebase", "false")
+	Expect(err).NotTo(HaveOccurred())
+
+	for _, environment := range []string{"environment/development", "environment/staging", "environment/production", "environment/development-next", "environment/staging-next", "environment/production-next"} {
+		_, err = runGitCmd(gitPath, "checkout", "-B", environment, "origin/"+environment)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(gitPath, "pull")
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	defaultBranch, err := runGitCmd(gitPath, "rev-parse", "--abbrev-ref", "origin/HEAD")
+	Expect(err).NotTo(HaveOccurred())
+	defaultBranch, _ = strings.CutPrefix(strings.TrimSpace(defaultBranch), "origin/")
+
+	_, err = runGitCmd(gitPath, "checkout", defaultBranch)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Make a no-op commit (empty commit)
+	if dryCommitMessage == "" {
+		dryCommitMessage = "no-op commit for testing history functionality"
+	}
+	_, err = runGitCmd(gitPath, "commit", "--allow-empty", "-m", dryCommitMessage)
+	Expect(err).NotTo(HaveOccurred())
+	_, err = runGitCmd(gitPath, "push", "-u", "origin", defaultBranch)
+	Expect(err).NotTo(HaveOccurred())
+
+	sha, err := runGitCmd(gitPath, "rev-parse", defaultBranch)
+	Expect(err).NotTo(HaveOccurred())
+	sha = strings.TrimSpace(sha)
+	shortSha, err := runGitCmd(gitPath, "rev-parse", "--short=7", defaultBranch)
+	Expect(err).NotTo(HaveOccurred())
+	shortSha = strings.TrimSpace(shortSha)
+
+	for _, environment := range []string{"environment/development-next", "environment/staging-next", "environment/production-next"} {
+		_, err = runGitCmd(gitPath, "checkout", "-B", environment, "origin/"+environment)
+		Expect(err).NotTo(HaveOccurred())
+
+		var subject string
+		var body string
+		parts := strings.SplitN(dryCommitMessage, "\n\n", 2)
+		subject = parts[0]
+		if len(parts) > 1 {
+			body = parts[1]
+		}
+
+		metadata := git.HydratorMetadata{
+			RepoURL: repoURL,
+			DrySha:  sha,
+			Author:  "testuser <testmail@test.com>",
+			Date:    metav1.Now(),
+			Subject: subject,
+			Body:    body,
+			References: []promoterv1alpha1.RevisionReference{
+				{
+					Commit: &promoterv1alpha1.CommitMetadata{
+						Author:  "upstream <upstream@example.com>",
+						Date:    ptr.To(metav1.Now()),
+						Subject: "This is a fix for an upstream issue",
+						Body:    "This is a body of the commit",
+						Sha:     "c4c862564afe56abf8cc8ac683eee3dc8bf96108",
+						RepoURL: "https://github.com/upstream/repo",
+					},
+				},
+			},
+		}
+		m, err := json.Marshal(metadata)
+		Expect(err).NotTo(HaveOccurred())
+
+		f, err := os.Create(path.Join(gitPath, "hydrator.metadata"))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = f.Write(m)
+		Expect(err).NotTo(HaveOccurred())
+		err = f.Close()
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(gitPath, "add", "hydrator.metadata")
+		Expect(err).NotTo(HaveOccurred())
+
+		if hydratedCommitMessage == "" {
+			_, err = runGitCmd(gitPath, "commit", "-m", "added no-op commit from dry sha, "+sha+" from environment "+strings.TrimRight(environment, "-next"))
+		} else {
+			_, err = runGitCmd(gitPath, "commit", "-m", hydratedCommitMessage)
+		}
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(gitPath, "push", "-u", "origin", environment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Sleep one seconds to differentiate the commits to prevent same hash
+		time.Sleep(1 * time.Second)
+	}
+
+	return sha, shortSha
+}
+
 func runGitCmd(directory string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	var stdoutBuf bytes.Buffer
