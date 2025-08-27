@@ -26,21 +26,26 @@ import (
 )
 
 const (
-	prometheusOperatorVersion = "v0.68.0"
-	prometheusOperatorURL     = "https://github.com/prometheus-operator/prometheus-operator/" +
+	// PrometheusOperatorVersion defines the version of the Prometheus operator to install
+	PrometheusOperatorVersion = "v0.68.0"
+	// PrometheusOperatorURL is the URL template for downloading the Prometheus operator bundle
+	PrometheusOperatorURL = "https://github.com/prometheus-operator/prometheus-operator/" +
 		"releases/download/%s/bundle.yaml"
 
-	certmanagerVersion = "v1.5.3"
-	certmanagerURLTmpl = "https://github.com/jetstack/cert-manager/releases/download/%s/cert-manager.yaml"
+	// CertManagerVersion defines the version of cert-manager to install
+	CertManagerVersion = "v1.5.3"
+	// CertManagerURLTemplate is the URL template for downloading cert-manager
+	CertManagerURLTemplate = "https://github.com/jetstack/cert-manager/releases/download/%s/cert-manager.yaml"
 )
 
+// warnError writes a warning message to GinkgoWriter for non-critical errors
 func warnError(err error) {
 	fmt.Fprintf(ginkgov2.GinkgoWriter, "warning: %v\n", err) //nolint:errcheck
 }
 
-// InstallPrometheusOperator installs the prometheus Operator to be used to export the enabled metrics.
+// InstallPrometheusOperator installs the Prometheus Operator to be used to export the enabled metrics.
 func InstallPrometheusOperator() error {
-	url := fmt.Sprintf(prometheusOperatorURL, prometheusOperatorVersion)
+	url := fmt.Sprintf(PrometheusOperatorURL, PrometheusOperatorVersion)
 	cmd := exec.Command("kubectl", "create", "-f", url)
 	_, err := Run(cmd)
 	return err
@@ -48,8 +53,8 @@ func InstallPrometheusOperator() error {
 
 // Run executes the provided command within this context
 func Run(cmd *exec.Cmd) ([]byte, error) {
-	dir, _ := GetProjectDir()
-	cmd.Dir = dir
+	projectDir, _ := GetProjectDir()
+	cmd.Dir = projectDir
 
 	if err := os.Chdir(cmd.Dir); err != nil {
 		fmt.Fprintf(ginkgov2.GinkgoWriter, "chdir dir: %s\n", err) //nolint:errcheck
@@ -67,27 +72,27 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 	return output, nil
 }
 
-// UninstallPrometheusOperator uninstalls the prometheus
+// UninstallPrometheusOperator uninstalls the Prometheus operator
 func UninstallPrometheusOperator() {
-	url := fmt.Sprintf(prometheusOperatorURL, prometheusOperatorVersion)
+	url := fmt.Sprintf(PrometheusOperatorURL, PrometheusOperatorVersion)
 	cmd := exec.Command("kubectl", "delete", "-f", url)
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
 }
 
-// UninstallCertManager uninstalls the cert manager
+// UninstallCertManager uninstalls the cert-manager
 func UninstallCertManager() {
-	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
+	url := fmt.Sprintf(CertManagerURLTemplate, CertManagerVersion)
 	cmd := exec.Command("kubectl", "delete", "-f", url)
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
 }
 
-// InstallCertManager installs the cert manager bundle.
+// InstallCertManager installs the cert-manager bundle.
 func InstallCertManager() error {
-	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
+	url := fmt.Sprintf(CertManagerURLTemplate, CertManagerVersion)
 	cmd := exec.Command("kubectl", "apply", "-f", url)
 	if _, err := Run(cmd); err != nil {
 		return err
@@ -106,11 +111,11 @@ func InstallCertManager() error {
 
 // LoadImageToKindClusterWithName loads a local docker image to the kind cluster
 func LoadImageToKindClusterWithName(name string) error {
-	cluster := "kind"
-	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
-		cluster = v
+	clusterName := "kind"
+	if value, ok := os.LookupEnv("KIND_CLUSTER"); ok {
+		clusterName = value
 	}
-	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
+	kindOptions := []string{"load", "docker-image", name, "--name", clusterName}
 	cmd := exec.Command("kind", kindOptions...)
 	_, err := Run(cmd)
 	return err
@@ -119,23 +124,23 @@ func LoadImageToKindClusterWithName(name string) error {
 // GetNonEmptyLines converts given command output string into individual objects
 // according to line breakers, and ignores the empty elements in it.
 func GetNonEmptyLines(output string) []string {
-	var res []string
+	var result []string
 	elements := strings.Split(output, "\n")
 	for _, element := range elements {
 		if element != "" {
-			res = append(res, element)
+			result = append(result, element)
 		}
 	}
 
-	return res
+	return result
 }
 
-// GetProjectDir will return the directory where the project is
+// GetProjectDir returns the directory where the project is located
 func GetProjectDir() (string, error) {
-	wd, err := os.Getwd()
+	workingDir, err := os.Getwd()
 	if err != nil {
-		return wd, fmt.Errorf("failed to get current working directory: %w", err)
+		return workingDir, fmt.Errorf("failed to get current working directory: %w", err)
 	}
-	wd = strings.ReplaceAll(wd, "/test/e2e", "")
-	return wd, nil
+	workingDir = strings.ReplaceAll(workingDir, "/test/e2e", "")
+	return workingDir, nil
 }

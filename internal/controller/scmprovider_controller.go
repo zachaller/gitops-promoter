@@ -45,17 +45,17 @@ type ScmProviderReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the ScmProvider object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
+// For ScmProvider objects, this controller currently performs no operations
+// as ScmProviders are primarily used as configuration references.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.2/pkg/reconcile
 func (r *ScmProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("ScmProvider reconciliation requested", "namespace", req.Namespace, "name", req.Name)
 
-	// TODO(user): your logic here
+	// ScmProviders are currently used as configuration references and do not require
+	// active reconciliation logic. They are validated at creation time through webhooks.
 
 	return ctrl.Result{}, nil
 }

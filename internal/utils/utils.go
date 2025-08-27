@@ -22,6 +22,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	// MaxKubernetesNameLength is the maximum length for Kubernetes resource names
+	MaxKubernetesNameLength = 255
+	// MaxKubernetesLabelLength is the maximum length for Kubernetes labels
+	MaxKubernetesLabelLength = 63
+)
+
+// alphanumericRegex matches all non-alphanumeric characters for sanitization
+var alphanumericRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
+
 // GetScmProviderFromGitRepository retrieves the ScmProvider from the GitRepository reference.
 func GetScmProviderFromGitRepository(ctx context.Context, k8sClient client.Client, repositoryRef *promoterv1alpha1.GitRepository, obj metav1.Object) (promoterv1alpha1.GenericScmProvider, error) {
 	logger := log.FromContext(ctx)
@@ -120,25 +130,24 @@ func GetScmProviderAndSecretFromRepositoryReference(ctx context.Context, k8sClie
 }
 
 // TruncateString truncates a string to a specified length. If the length is less than or equal to 0, it returns an
-// empty string.
+// empty string. This function preserves UTF-8 character boundaries.
 func TruncateString(str string, length int) string {
 	if length <= 0 {
 		return ""
 	}
-	truncated := ""
-	count := 0
-	for _, char := range str {
-		truncated += string(char)
-		count++
-		if count >= length {
-			break
-		}
+	if len(str) <= length {
+		return str
 	}
-	return truncated
+	
+	runes := []rune(str)
+	if len(runes) <= length {
+		return str
+	}
+	return string(runes[:length])
 }
 
-// TruncateStringFromBeginning truncates from front of string. For example, if the string is "abcdefg" and length is 3,
-// it will return "efg".
+// TruncateStringFromBeginning truncates from the front of a string, keeping the end portion.
+// For example, if the string is "abcdefg" and length is 3, it will return "efg".
 func TruncateStringFromBeginning(str string, length int) string {
 	if length <= 0 {
 		return ""
@@ -149,12 +158,10 @@ func TruncateStringFromBeginning(str string, length int) string {
 	return str[len(str)-length:]
 }
 
-var m1 = regexp.MustCompile("[^a-zA-Z0-9]+")
-
-// GetPullRequestName returns a name for the pull request based on the repository owner, repository name, proposed branch, and active branch.
-// This combination should make the PR name unique.
-func GetPullRequestName(repoOwner, repoName, pcProposedBranch, pcActiveBranch string) string {
-	return fmt.Sprintf("%s-%s-%s-%s", repoOwner, repoName, pcProposedBranch, pcActiveBranch)
+// GetPullRequestName returns a name for the pull request based on the repository owner, repository name, 
+// proposed branch, and active branch. This combination should make the PR name unique.
+func GetPullRequestName(repoOwner, repoName, proposedBranch, activeBranch string) string {
+	return fmt.Sprintf("%s-%s-%s-%s", repoOwner, repoName, proposedBranch, activeBranch)
 }
 
 // GetChangeTransferPolicyName returns a name for the ChangeTransferPolicy based on the promotion strategy name and environment branch.
@@ -162,34 +169,36 @@ func GetChangeTransferPolicyName(promotionStrategyName, environmentBranch string
 	return fmt.Sprintf("%s-%s", promotionStrategyName, environmentBranch)
 }
 
-// KubeSafeUniqueName Creates a safe name by replacing all non-alphanumeric characters with a hyphen and truncating to a max of 255 characters, then appending a hash of the name.
+// KubeSafeUniqueName creates a safe name by replacing all non-alphanumeric characters with a hyphen 
+// and truncating to a maximum of 255 characters, then appending a hash of the name for uniqueness.
 func KubeSafeUniqueName(ctx context.Context, name string) string {
-	name = m1.ReplaceAllString(name, "-")
+	name = alphanumericRegex.ReplaceAllString(name, "-")
 	name = strings.ToLower(name)
 
-	h := fnv.New32a()
-	_, err := h.Write([]byte(name))
+	hasher := fnv.New32a()
+	_, err := hasher.Write([]byte(name))
 	if err != nil {
 		log.FromContext(ctx).Error(err, "Failed to write to hash")
 	}
-	hash := strconv.FormatUint(uint64(h.Sum32()), 16)
+	hash := strconv.FormatUint(uint64(hasher.Sum32()), 16)
 
-	if name[len(name)-1] == '-' {
+	if len(name) > 0 && name[len(name)-1] == '-' {
 		name = name[:len(name)-1]
 	}
 	name = name + "-" + hash
-	return TruncateString(name, 255-len(hash)-1)
+	return TruncateString(name, MaxKubernetesNameLength-len(hash)-1)
 }
 
-// KubeSafeLabel Creates a safe label buy truncating from the beginning of 'name' to a max of 63 characters, if the name starts with a hyphen it will be removed.
-// We truncate from beginning so that we can keep the unique hash at the end of the name.
+// KubeSafeLabel creates a safe label by truncating from the beginning of 'name' to a maximum of 63 characters.
+// If the name starts with a hyphen it will be removed. We truncate from beginning so that we can keep 
+// the unique hash at the end of the name.
 func KubeSafeLabel(name string) string {
 	if name == "" {
 		return ""
 	}
-	name = m1.ReplaceAllString(name, "-")
-	name = TruncateStringFromBeginning(name, 63)
-	if name[0] == '-' {
+	name = alphanumericRegex.ReplaceAllString(name, "-")
+	name = TruncateStringFromBeginning(name, MaxKubernetesLabelLength)
+	if len(name) > 0 && name[0] == '-' {
 		name = name[1:]
 	}
 	return name
