@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/argoproj-labs/gitops-promoter/internal/settings"
@@ -179,6 +178,7 @@ func (r *PullRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
+// getPullRequestProvider creates and returns the appropriate SCM provider based on the repository configuration
 func (r *PullRequestReconciler) getPullRequestProvider(ctx context.Context, pr promoterv1alpha1.PullRequest) (scms.PullRequestProvider, error) {
 	scmProvider, secret, err := utils.GetScmProviderAndSecretFromRepositoryReference(ctx, r.Client, r.SettingsMgr.GetControllerNamespace(), pr.Spec.RepositoryReference, &pr)
 	if err != nil {
@@ -199,11 +199,15 @@ func (r *PullRequestReconciler) getPullRequestProvider(ctx context.Context, pr p
 	}
 }
 
-func (r *PullRequestReconciler) handleFinalizer(ctx context.Context, pr *promoterv1alpha1.PullRequest, provider scms.PullRequestProvider) (bool, error) {
-	finalizer := "pullrequest.promoter.argoporoj.io/finalizer"
+const (
+	// PullRequestFinalizer is the finalizer used for PullRequest resources
+	PullRequestFinalizer = "pullrequest.promoter.argoproj.io/finalizer"
+)
 
+// handleFinalizer manages the finalizer for PullRequest resources to ensure proper cleanup
+func (r *PullRequestReconciler) handleFinalizer(ctx context.Context, pr *promoterv1alpha1.PullRequest, provider scms.PullRequestProvider) (bool, error) {
 	if pr.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(pr, finalizer) {
+		if controllerutil.ContainsFinalizer(pr, PullRequestFinalizer) {
 			// Not being deleted and already has finalizer, nothing to do.
 			return false, nil
 		}
@@ -213,7 +217,7 @@ func (r *PullRequestReconciler) handleFinalizer(ctx context.Context, pr *promote
 			if err := r.Get(ctx, client.ObjectKeyFromObject(pr), pr); err != nil {
 				return err //nolint:wrapcheck
 			}
-			if controllerutil.AddFinalizer(pr, finalizer) {
+			if controllerutil.AddFinalizer(pr, PullRequestFinalizer) {
 				return r.Update(ctx, pr)
 			}
 			return nil
@@ -221,7 +225,7 @@ func (r *PullRequestReconciler) handleFinalizer(ctx context.Context, pr *promote
 	}
 
 	// If we're here, the object is being deleted
-	if !controllerutil.ContainsFinalizer(pr, finalizer) {
+	if !controllerutil.ContainsFinalizer(pr, PullRequestFinalizer) {
 		// Finalizer already removed, nothing to do.
 		return false, nil
 	}
@@ -229,31 +233,33 @@ func (r *PullRequestReconciler) handleFinalizer(ctx context.Context, pr *promote
 	if err := r.closePullRequest(ctx, pr, provider); err != nil {
 		return false, fmt.Errorf("failed to close pull request: %w", err)
 	}
-	controllerutil.RemoveFinalizer(pr, finalizer)
+	controllerutil.RemoveFinalizer(pr, PullRequestFinalizer)
 	if err := r.Update(ctx, pr); err != nil {
 		return true, fmt.Errorf("failed to remove finalizer: %w", err)
 	}
 	return true, nil
 }
 
+// createPullRequest creates a new pull request on the SCM provider
 func (r *PullRequestReconciler) createPullRequest(ctx context.Context, pr *promoterv1alpha1.PullRequest, provider scms.PullRequestProvider) error {
-	id, err := provider.Create(ctx, pr.Spec.Title, pr.Spec.SourceBranch, pr.Spec.TargetBranch, pr.Spec.Description, *pr)
+	pullRequestID, err := provider.Create(ctx, pr.Spec.Title, pr.Spec.SourceBranch, pr.Spec.TargetBranch, pr.Spec.Description, *pr)
 	if err != nil {
 		return fmt.Errorf("failed to create pull request: %w", err)
 	}
 	pr.Status.State = promoterv1alpha1.PullRequestOpen
 	pr.Status.PRCreationTime = metav1.Now()
-	pr.Status.ID = id
+	pr.Status.ID = pullRequestID
 
-	url, err := provider.GetUrl(ctx, *pr)
+	pullRequestURL, err := provider.GetUrl(ctx, *pr)
 	if err != nil {
 		return fmt.Errorf("failed to get pull request URL: %w", err)
 	}
-	pr.Status.Url = url
+	pr.Status.Url = pullRequestURL
 
 	return nil
 }
 
+// updatePullRequest updates an existing pull request on the SCM provider
 func (r *PullRequestReconciler) updatePullRequest(ctx context.Context, pr promoterv1alpha1.PullRequest, provider scms.PullRequestProvider) error {
 	if err := provider.Update(ctx, pr.Spec.Title, pr.Spec.Description, pr); err != nil {
 		return fmt.Errorf("failed to update pull request: %w", err)
@@ -262,6 +268,7 @@ func (r *PullRequestReconciler) updatePullRequest(ctx context.Context, pr promot
 	return nil
 }
 
+// mergePullRequest merges a pull request on the SCM provider
 func (r *PullRequestReconciler) mergePullRequest(ctx context.Context, pr *promoterv1alpha1.PullRequest, provider scms.PullRequestProvider) error {
 	if err := provider.Merge(ctx, pr.Spec.MergeCommitMessage, *pr); err != nil {
 		return fmt.Errorf("failed to merge pull request: %w", err)
@@ -270,23 +277,7 @@ func (r *PullRequestReconciler) mergePullRequest(ctx context.Context, pr *promot
 	return nil
 }
 
-type trailers map[string]string
-
-func (t trailers) String() string {
-	keys := make([]string, 0, len(t))
-
-	for k := range t {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	var result string
-	for _, k := range keys {
-		result += fmt.Sprintf("%s: %s\n", k, t[k])
-	}
-	return result
-}
-
+// closePullRequest closes a pull request on the SCM provider
 func (r *PullRequestReconciler) closePullRequest(ctx context.Context, pr *promoterv1alpha1.PullRequest, provider scms.PullRequestProvider) error {
 	if pr.Status.State == promoterv1alpha1.PullRequestMerged {
 		return nil

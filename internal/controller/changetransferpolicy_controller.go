@@ -732,7 +732,7 @@ func (r *ChangeTransferPolicyReconciler) creatOrUpdatePullRequest(ctx context.Co
 		return nil
 	}
 
-	commitTrailers := trailers{}
+	commitTrailers := make(utils.TrailerMap)
 	commitTrailers["PullRequest-ID"] = pr.Status.ID
 	commitTrailers["PullRequest-SourceBranch"] = pr.Spec.SourceBranch
 	commitTrailers["PullRequest-TargetBranch"] = pr.Spec.TargetBranch

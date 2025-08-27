@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -294,6 +295,7 @@ func HandleReconciliationResult(
 	}
 }
 
+// updateReadyCondition updates the Ready condition for the given object
 func updateReadyCondition(ctx context.Context, obj StatusConditionUpdater, client client.Client, conditions *[]metav1.Condition, status metav1.ConditionStatus, reason, message string) error {
 	condition := metav1.Condition{
 		Type:               string(promoterConditions.Ready),
@@ -309,4 +311,23 @@ func updateReadyCondition(ctx context.Context, obj StatusConditionUpdater, clien
 		}
 	}
 	return nil
+}
+
+// TrailerMap represents a map of commit message trailers
+type TrailerMap map[string]string
+
+// String formats the trailer map as a string suitable for commit messages
+func (t TrailerMap) String() string {
+	keys := make([]string, 0, len(t))
+
+	for key := range t {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	var result string
+	for _, key := range keys {
+		result += fmt.Sprintf("%s: %s\n", key, t[key])
+	}
+	return result
 }
