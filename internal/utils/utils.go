@@ -139,7 +139,7 @@ func TruncateString(str string, length int) string {
 	if len(str) <= length {
 		return str
 	}
-	
+
 	runes := []rune(str)
 	if len(runes) <= length {
 		return str
@@ -159,7 +159,7 @@ func TruncateStringFromBeginning(str string, length int) string {
 	return str[len(str)-length:]
 }
 
-// GetPullRequestName returns a name for the pull request based on the repository owner, repository name, 
+// GetPullRequestName returns a name for the pull request based on the repository owner, repository name,
 // proposed branch, and active branch. This combination should make the PR name unique.
 func GetPullRequestName(repoOwner, repoName, proposedBranch, activeBranch string) string {
 	return fmt.Sprintf("%s-%s-%s-%s", repoOwner, repoName, proposedBranch, activeBranch)
@@ -170,7 +170,7 @@ func GetChangeTransferPolicyName(promotionStrategyName, environmentBranch string
 	return fmt.Sprintf("%s-%s", promotionStrategyName, environmentBranch)
 }
 
-// KubeSafeUniqueName creates a safe name by replacing all non-alphanumeric characters with a hyphen 
+// KubeSafeUniqueName creates a safe name by replacing all non-alphanumeric characters with a hyphen
 // and truncating to a maximum of 255 characters, then appending a hash of the name for uniqueness.
 func KubeSafeUniqueName(ctx context.Context, name string) string {
 	name = alphanumericRegex.ReplaceAllString(name, "-")
@@ -191,7 +191,7 @@ func KubeSafeUniqueName(ctx context.Context, name string) string {
 }
 
 // KubeSafeLabel creates a safe label by truncating from the beginning of 'name' to a maximum of 63 characters.
-// If the name starts with a hyphen it will be removed. We truncate from beginning so that we can keep 
+// If the name starts with a hyphen it will be removed. We truncate from beginning so that we can keep
 // the unique hash at the end of the name.
 func KubeSafeLabel(name string) string {
 	if name == "" {
