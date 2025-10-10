@@ -71,8 +71,6 @@ type PullRequestStatus struct {
 	State PullRequestState `json:"state,omitempty"`
 	// PRCreationTime the time the PR was created
 	PRCreationTime metav1.Time `json:"prCreationTime,omitempty"`
-	// PRMergedTime is the time when the pull request was merged.
-	PRMergedTime metav1.Time `json:"prMergedTime,omitempty"`
 	// Url is the URL of the pull request.
 	Url string `json:"url,omitempty"`
 

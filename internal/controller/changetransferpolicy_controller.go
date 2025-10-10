@@ -294,16 +294,6 @@ func (r *ChangeTransferPolicyReconciler) populatePullRequestMetadata(ctx context
 	} else {
 		logger.V(4).Info("No " + constants.TrailerPullRequestCreationTime + " found in trailers")
 	}
-
-	if timeStr := activeTrailers[constants.TrailerPullRequestMergedTime]; timeStr != "" {
-		if mergedTime, err := time.Parse(time.RFC3339, timeStr); err != nil {
-			logger.V(4).Info("failed to parse "+constants.TrailerPullRequestMergedTime, "time", timeStr, "err", err)
-		} else {
-			h.PullRequest.PRMergedTime = metav1.NewTime(mergedTime)
-		}
-	} else {
-		logger.V(4).Info("No " + constants.TrailerPullRequestMergedTime + " found in trailers")
-	}
 }
 
 // populateCommitStatuses populates the commit statuses for a history entry
@@ -384,7 +374,6 @@ func removeKnownTrailers(input string) string {
 		constants.TrailerPullRequestSourceBranch,
 		constants.TrailerPullRequestTargetBranch,
 		constants.TrailerPullRequestCreationTime,
-		constants.TrailerPullRequestMergedTime,
 		constants.TrailerPullRequestUrl,
 		constants.TrailerCommitStatusActivePrefix,
 		constants.TrailerCommitStatusProposedPrefix,
@@ -708,7 +697,6 @@ func (r *ChangeTransferPolicyReconciler) setPullRequestState(ctx context.Context
 	ctp.Status.PullRequest.ID = pr.Items[0].Status.ID
 	ctp.Status.PullRequest.State = pr.Items[0].Status.State
 	ctp.Status.PullRequest.PRCreationTime = pr.Items[0].Status.PRCreationTime
-	ctp.Status.PullRequest.PRMergedTime = pr.Items[0].Status.PRMergedTime
 	ctp.Status.PullRequest.Url = pr.Items[0].Status.Url
 
 	return nil
@@ -815,9 +803,6 @@ func (r *ChangeTransferPolicyReconciler) creatOrUpdatePullRequest(ctx context.Co
 		commitTrailers[constants.TrailerPullRequestSourceBranch] = pr.Spec.SourceBranch
 		commitTrailers[constants.TrailerPullRequestTargetBranch] = pr.Spec.TargetBranch
 		commitTrailers[constants.TrailerPullRequestCreationTime] = pr.Status.PRCreationTime.Format(time.RFC3339)
-		if !pr.Status.PRMergedTime.IsZero() {
-			commitTrailers[constants.TrailerPullRequestMergedTime] = pr.Status.PRMergedTime.Format(time.RFC3339)
-		}
 		commitTrailers[constants.TrailerPullRequestUrl] = pr.Status.Url
 
 		for _, status := range ctp.Status.Active.CommitStatuses {

@@ -741,11 +741,6 @@ spec:
                                   request was created.
                                 format: date-time
                                 type: string
-                              prMergedTime:
-                                description: PRMergedTime is the time when the pull
-                                  request was merged.
-                                format: date-time
-                                type: string
                               state:
                                 description: State is the state of the pull request.
                                 enum:
@@ -961,11 +956,6 @@ spec:
                         prCreationTime:
                           description: PRCreationTime is the time when the pull request
                             was created.
-                          format: date-time
-                          type: string
-                        prMergedTime:
-                          description: PRMergedTime is the time when the pull request
-                            was merged.
                           format: date-time
                           type: string
                         state:

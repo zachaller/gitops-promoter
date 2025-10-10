@@ -292,7 +292,6 @@ func (r *PullRequestReconciler) mergePullRequest(ctx context.Context, pr *promot
 		return fmt.Errorf("failed to merge pull request: %w", err)
 	}
 	pr.Status.State = promoterv1alpha1.PullRequestMerged
-	pr.Status.PRMergedTime = metav1.Now()
 	return nil
 }
 

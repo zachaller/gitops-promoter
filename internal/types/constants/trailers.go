@@ -10,8 +10,6 @@ const (
 	TrailerPullRequestCreationTime = "Pull-request-creation-time"
 	// TrailerPullRequestID is the trailer key used to store the pull request ID.
 	TrailerPullRequestID = "Pull-request-id"
-	// TrailerPullRequestMergedTime is the trailer key used to store the merged time of the pull request.
-	TrailerPullRequestMergedTime = "Pull-request-merged-time"
 	// TrailerPullRequestSourceBranch is the trailer key used to store the source branch of the pull request.
 	TrailerPullRequestSourceBranch = "Pull-request-source-branch"
 	// TrailerPullRequestTargetBranch is the trailer key used to store the target branch of the pull request.
