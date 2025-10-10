@@ -265,9 +265,11 @@ func runController(
 	}).SetupWithManager(processSignalsCtx, localManager); err != nil {
 		panic("unable to create ClusterScmProvider controller")
 	}
-	if err := (&controller.TimedCommitStatusReconciler{
-		Client: localManager.GetClient(),
-		Scheme: localManager.GetScheme(),
+	if err = (&controller.TimedCommitStatusReconciler{
+		Client:      localManager.GetClient(),
+		Scheme:      localManager.GetScheme(),
+		Recorder:    localManager.GetEventRecorderFor("TimedCommitStatus"),
+		SettingsMgr: settingsMgr,
 	}).SetupWithManager(processSignalsCtx, localManager); err != nil {
 		panic("unable to create TimedCommitStatus controller")
 	}
