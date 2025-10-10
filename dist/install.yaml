@@ -4264,10 +4264,36 @@ spec:
           spec:
             description: spec defines the desired state of TimedCommitStatus
             properties:
-              foo:
-                description: foo is an example field of TimedCommitStatus. Edit timedcommitstatus_types.go
-                  to remove/update
-                type: string
+              environment:
+                items:
+                  properties:
+                    branch:
+                      description: Branch is the name of the branch/environment you
+                        want to gate for the configured duration.
+                      type: string
+                    duration:
+                      description: |-
+                        Duration is the time duration to wait before considering the commit status as failed.
+                        The duration should be in a format accepted by Go's time.ParseDuration function, e.g., "5m", "1h30m".
+                      type: string
+                  required:
+                  - branch
+                  - duration
+                  type: object
+                type: array
+              promotionStrategyRef:
+                description: PromotionStrategyRef is a reference to the promotion
+                  strategy that this timed commit status applies to.
+                properties:
+                  name:
+                    description: Name is the name of the object to refer to.
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - environment
+            - promotionStrategyRef
             type: object
           status:
             description: status defines the observed state of TimedCommitStatus

@@ -30,9 +30,22 @@ type TimedCommitStatusSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// foo is an example field of TimedCommitStatus. Edit timedcommitstatus_types.go to remove/update
-	// +optional
-	Foo *string `json:"foo,omitempty"`
+	// PromotionStrategyRef is a reference to the promotion strategy that this timed commit status applies to.
+	// +required
+	PromotionStrategyRef ObjectReference `json:"promotionStrategyRef"`
+
+	// +required
+	Environment []EnvironmentTimeCommitStatus `json:"environment"`
+}
+
+type EnvironmentTimeCommitStatus struct {
+	// Branch is the name of the branch/environment you want to gate for the configured duration.
+	// +required
+	Branch string `json:"branch"`
+	// Duration is the time duration to wait before considering the commit status as failed.
+	// The duration should be in a format accepted by Go's time.ParseDuration function, e.g., "5m", "1h30m".
+	// +required
+	Duration metav1.Duration `json:"duration"`
 }
 
 // TimedCommitStatusStatus defines the observed state of TimedCommitStatus.
@@ -85,6 +98,11 @@ type TimedCommitStatusList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TimedCommitStatus `json:"items"`
+}
+
+// GetConditions returns the conditions of the TimedCommitStatus.
+func (tcs *TimedCommitStatus) GetConditions() *[]metav1.Condition {
+	return &tcs.Status.Conditions
 }
 
 func init() {
