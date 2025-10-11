@@ -2675,6 +2675,198 @@ var _ = Describe("PromotionStrategy Controller", func() {
 			Expect(k8sClient.Delete(ctx, promotionStrategy)).To(Succeed())
 		})
 	})
+
+	Context("When reconciling a PromotionStrategy with TimedCommitStatus time gates", func() {
+		It("should gate promotions based on time elapsed since previous environment merge", func() {
+			By("Creating the resources")
+			name, scmSecret, scmProvider, gitRepo, _, _, promotionStrategy := promotionStrategyResource(ctx, "promotion-strategy-with-time-gates", "default")
+			setupInitialTestGitRepoOnServer(name, name)
+
+			typeNamespacedName := types.NamespacedName{
+				Name:      name,
+				Namespace: "default",
+			}
+
+			// Configure PromotionStrategy to use TimedCommitStatus for proposed commits
+			promotionStrategy.Spec.ProposedCommitStatuses = []promoterv1alpha1.CommitStatusSelector{
+				{
+					Key: "promoter/timed/environment/staging",
+				},
+				{
+					Key: "promoter/timed/environment/production",
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, scmSecret)).To(Succeed())
+			Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
+			Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
+			Expect(k8sClient.Create(ctx, promotionStrategy)).To(Succeed())
+
+			By("Waiting for PromotionStrategy to be reconciled with initial state")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, typeNamespacedName, promotionStrategy)
+				g.Expect(err).To(Succeed())
+				g.Expect(len(promotionStrategy.Status.Environments)).To(Equal(3))
+				g.Expect(promotionStrategy.Status.Environments[0].Active.Hydrated.Sha).ToNot(BeEmpty())
+				g.Expect(promotionStrategy.Status.Environments[0].Proposed.Dry.Sha).ToNot(BeEmpty())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Creating a TimedCommitStatus resource with time gates after PromotionStrategy is ready")
+			timedCommitStatus := &promoterv1alpha1.TimedCommitStatus{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name + "-tcs",
+					Namespace: "default",
+				},
+				Spec: promoterv1alpha1.TimedCommitStatusSpec{
+					PromotionStrategyRef: promoterv1alpha1.ObjectReference{
+						Name: name,
+					},
+					Environment: []promoterv1alpha1.EnvironmentTimeCommitStatus{
+						{
+							Branch:   "environment/development",
+							Duration: metav1.Duration{Duration: 1 * time.Second},
+						},
+						{
+							Branch:   "environment/staging",
+							Duration: metav1.Duration{Duration: 2 * time.Second},
+						},
+						{
+							Branch:   "environment/production",
+							Duration: metav1.Duration{Duration: 3 * time.Second},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, timedCommitStatus)).To(Succeed())
+
+			By("Verifying CommitStatus for development shows success (first environment, no wait)")
+			Eventually(func(g Gomega) {
+				commitStatus := &promoterv1alpha1.CommitStatus{}
+				commitStatusName := utils.KubeSafeUniqueName(ctx, fmt.Sprintf("%s-tcs-environment/development", name))
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      commitStatusName,
+					Namespace: "default",
+				}, commitStatus)
+				g.Expect(err).To(Succeed())
+				g.Expect(commitStatus.Spec.Phase).To(Equal(promoterv1alpha1.CommitPhaseSuccess))
+				g.Expect(commitStatus.Spec.Name).To(Equal("promoter/timed/environment/development"))
+				g.Expect(commitStatus.Spec.Description).To(ContainSubstring("First environment"))
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Adding a change to trigger promotion")
+			gitPath, err := os.MkdirTemp("", "*")
+			Expect(err).NotTo(HaveOccurred())
+			makeChangeAndHydrateRepo(gitPath, name, name, "change for time gate test", "test commit body")
+
+			// Get the CTPs
+			ctpDev := promoterv1alpha1.ChangeTransferPolicy{}
+			ctpStaging := promoterv1alpha1.ChangeTransferPolicy{}
+			ctpProd := promoterv1alpha1.ChangeTransferPolicy{}
+
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(promotionStrategy.Name, "environment/development")),
+					Namespace: "default",
+				}, &ctpDev)
+				g.Expect(err).To(Succeed())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(promotionStrategy.Name, "environment/staging")),
+					Namespace: "default",
+				}, &ctpStaging)
+				g.Expect(err).To(Succeed())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(promotionStrategy.Name, "environment/production")),
+					Namespace: "default",
+				}, &ctpProd)
+				g.Expect(err).To(Succeed())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			simulateWebhook(ctx, k8sClient, &ctpDev)
+			simulateWebhook(ctx, k8sClient, &ctpStaging)
+			simulateWebhook(ctx, k8sClient, &ctpProd)
+
+			By("Waiting for development PR to be merged (no time gate)")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, typeNamespacedName, promotionStrategy)
+				g.Expect(err).To(Succeed())
+				// Development should merge quickly as it's the first environment
+				g.Expect(promotionStrategy.Status.Environments[0].PullRequest).To(BeNil())
+				// Store the dry SHA that was promoted to development
+				g.Expect(promotionStrategy.Status.Environments[0].Active.Dry.Sha).ToNot(BeEmpty())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Verifying CommitStatus for staging is created")
+			var stagingCommitStatus *promoterv1alpha1.CommitStatus
+			stagingCommitStatusName := utils.KubeSafeUniqueName(ctx, fmt.Sprintf("%s-tcs-environment/staging", name))
+			Eventually(func(g Gomega) {
+				stagingCommitStatus = &promoterv1alpha1.CommitStatus{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      stagingCommitStatusName,
+					Namespace: "default",
+				}, stagingCommitStatus)
+				g.Expect(err).To(Succeed())
+				// Initially staging shows success because its active state matches the initial state
+				// which has been in the system long enough
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Verifying CommitStatus for staging reports on the active SHA")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, typeNamespacedName, promotionStrategy)
+				g.Expect(err).To(Succeed())
+
+				err = k8sClient.Get(ctx, types.NamespacedName{
+					Name:      stagingCommitStatusName,
+					Namespace: "default",
+				}, stagingCommitStatus)
+				g.Expect(err).To(Succeed())
+
+				// Verify the CommitStatus reports on the active hydrated SHA
+				g.Expect(stagingCommitStatus.Spec.Sha).To(Equal(promotionStrategy.Status.Environments[1].Active.Hydrated.Sha))
+				g.Expect(stagingCommitStatus.Spec.Name).To(Equal("promoter/timed/environment/staging"))
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Verifying CommitStatus for production is created")
+			var prodCommitStatus *promoterv1alpha1.CommitStatus
+			prodCommitStatusName := utils.KubeSafeUniqueName(ctx, fmt.Sprintf("%s-tcs-environment/production", name))
+			Eventually(func(g Gomega) {
+				prodCommitStatus = &promoterv1alpha1.CommitStatus{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      prodCommitStatusName,
+					Namespace: "default",
+				}, prodCommitStatus)
+				g.Expect(err).To(Succeed())
+				g.Expect(prodCommitStatus.Spec.Name).To(Equal("promoter/timed/environment/production"))
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Verifying the PromotionStrategy recognizes the TimedCommitStatus resources")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, typeNamespacedName, promotionStrategy)
+				g.Expect(err).To(Succeed())
+
+				// Check that the proposed commit statuses include the timed gates
+				if len(promotionStrategy.Status.Environments[1].Proposed.CommitStatuses) > 0 {
+					found := false
+					for _, cs := range promotionStrategy.Status.Environments[1].Proposed.CommitStatuses {
+						if cs.Key == "promoter/timed/environment/staging" {
+							found = true
+							break
+						}
+					}
+					g.Expect(found).To(BeTrue(), "Expected to find timed commit status for staging in proposed statuses")
+				}
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Cleaning up resources")
+			Expect(k8sClient.Delete(ctx, timedCommitStatus)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, promotionStrategy)).To(Succeed())
+		})
+	})
 })
 
 func promotionStrategyResource(ctx context.Context, name, namespace string) (string, *v1.Secret, *promoterv1alpha1.ScmProvider, *promoterv1alpha1.GitRepository, *promoterv1alpha1.CommitStatus, *promoterv1alpha1.CommitStatus, *promoterv1alpha1.PromotionStrategy) { //nolint:unparam

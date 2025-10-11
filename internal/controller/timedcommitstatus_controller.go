@@ -34,6 +34,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -138,13 +139,6 @@ func (r *TimedCommitStatusReconciler) reconcileEnvironmentCommitStatus(
 		return fmt.Errorf("environment %q not found in PromotionStrategy status", envConfig.Branch)
 	}
 
-	// Get the dry SHA to track which logical commit we're promoting
-	proposedDrySha := envStatus.Proposed.Dry.Sha
-	if proposedDrySha == "" {
-		logger.Info("No proposed dry SHA found for environment, skipping", "environment", envConfig.Branch)
-		return nil
-	}
-
 	// Get the active hydrated SHA - this is what we report the commit status on
 	// since it's what's actually deployed in this environment
 	activeHydratedSha := envStatus.Active.Hydrated.Sha
@@ -153,11 +147,20 @@ func (r *TimedCommitStatusReconciler) reconcileEnvironmentCommitStatus(
 		return nil
 	}
 
+	// Use the active dry SHA to track the logical commit
+	// When checking if a proposed commit can be promoted, we look at when the
+	// current active commit was merged to the previous environment
+	activeDrySha := envStatus.Active.Dry.Sha
+	if activeDrySha == "" {
+		logger.Info("No active dry SHA found for environment, skipping", "environment", envConfig.Branch)
+		return nil
+	}
+
 	// Determine the commit status phase based on the time elapsed
-	phase := r.determineCommitStatusPhase(proposedDrySha, prevEnvStatus, envConfig.Duration.Duration)
+	phase := r.determineCommitStatusPhase(ctx, activeDrySha, prevEnvStatus, envConfig.Duration.Duration)
 
 	// Create or update the CommitStatus resource
-	commitStatusName := fmt.Sprintf("%s-%s", tcs.Name, envConfig.Branch)
+	commitStatusName := utils.KubeSafeUniqueName(ctx, fmt.Sprintf("%s-%s", tcs.Name, envConfig.Branch))
 	commitStatus := &promoterv1alpha1.CommitStatus{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      commitStatusName,
@@ -189,7 +192,7 @@ func (r *TimedCommitStatusReconciler) reconcileEnvironmentCommitStatus(
 
 	logger.Info("Reconciled CommitStatus for environment",
 		"environment", envConfig.Branch,
-		"proposedDrySha", proposedDrySha,
+		"activeDrySha", activeDrySha,
 		"activeHydratedSha", activeHydratedSha,
 		"phase", phase,
 		"commitStatus", commitStatusName)
@@ -201,37 +204,42 @@ func (r *TimedCommitStatusReconciler) reconcileEnvironmentCommitStatus(
 // since the previous environment's PR was merged.
 // It uses the dry SHA to track the logical commit through environments.
 func (r *TimedCommitStatusReconciler) determineCommitStatusPhase(
-	proposedDrySha string,
+	ctx context.Context,
+	activeDrySha string,
 	prevEnvStatus *promoterv1alpha1.EnvironmentStatus,
 	duration time.Duration,
 ) promoterv1alpha1.CommitStatusPhase {
+	logger := log.FromContext(ctx)
+
+	logger.Info("Determining commit status phase",
+		"activeDrySha", activeDrySha,
+		"duration", duration,
+		"prevEnvStatus", prevEnvStatus)
+
 	// If this is the first environment (no previous environment), allow promotion immediately
 	if prevEnvStatus == nil {
 		return promoterv1alpha1.CommitPhaseSuccess
 	}
 
-	// Check if the previous environment has a merged PR
-	if prevEnvStatus.PullRequest == nil || prevEnvStatus.PullRequest.State != promoterv1alpha1.PullRequestMerged {
-		// Previous environment hasn't been merged yet, so this environment should wait
+	// Check if the active dry SHA in current environment matches the previous environment's active dry SHA
+	// If they match, it means this commit has been promoted from the previous environment
+	if prevEnvStatus.Active.Dry.Sha != activeDrySha {
+		// The dry SHAs don't match, meaning this commit hasn't been promoted from previous env yet
 		return promoterv1alpha1.CommitPhasePending
 	}
 
-	// Find the merge time from the previous environment using the dry SHA
-	// The dry SHA is what identifies the logical commit across environments
+	// Find the merge time from the previous environment's history
+	// Look for when this dry SHA was merged in the previous environment
 	var mergeTime *metav1.Time
 
-	// First, check if we can find the SHA in the last healthy dry SHAs
-	//for _, healthySha := range prevEnvStatus.LastHealthyDryShas {
-	//	if healthySha.Sha == proposedDrySha {
-	//		mergeTime = &healthySha.Time
-	//		break
-	//	}
-	//}
-
-	// If not found in LastHealthyDryShas, check the history for matching dry SHA
-	if len(prevEnvStatus.History) > 0 {
+	// First check if there's a current PR that's merged
+	if prevEnvStatus.PullRequest != nil && prevEnvStatus.PullRequest.State == promoterv1alpha1.PullRequestMerged {
+		// Check if this PR is for the active dry SHA
+		mergeTime = &prevEnvStatus.PullRequest.PRMergeTime
+	} else if len(prevEnvStatus.History) > 0 {
+		// Check the history for when this dry SHA was merged
 		for _, hist := range prevEnvStatus.History {
-			if hist.Active.Dry.Sha == proposedDrySha && hist.PullRequest != nil {
+			if hist.Active.Dry.Sha == activeDrySha && hist.PullRequest != nil && hist.PullRequest.State == promoterv1alpha1.PullRequestMerged {
 				mergeTime = &hist.PullRequest.PRMergeTime
 				break
 			}
@@ -239,8 +247,10 @@ func (r *TimedCommitStatusReconciler) determineCommitStatusPhase(
 	}
 
 	// If we can't find when this dry SHA was merged in the previous environment,
-	// it means it hasn't been promoted there yet
-	if mergeTime == nil {
+	// it means it hasn't been promoted there yet (or was the initial state)
+	if mergeTime == nil || mergeTime.IsZero() {
+		// No merge time found - this might be the initial state, allow promotion
+		logger.Info("No merge time found for active dry SHA in previous environment, allowing promotion")
 		return promoterv1alpha1.CommitPhasePending
 	}
 
@@ -295,10 +305,41 @@ func (r *TimedCommitStatusReconciler) SetupWithManager(ctx context.Context, mgr 
 
 	err = ctrl.NewControllerManagedBy(mgr).
 		For(&promoterv1alpha1.TimedCommitStatus{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&promoterv1alpha1.PromotionStrategy{}, r.enqueueTimedCommitStatusForPromotionStrategy()).
 		WithOptions(controller.Options{MaxConcurrentReconciles: maxConcurrentReconciles, RateLimiter: rateLimiter}).
 		Complete(r)
 	if err != nil {
 		return fmt.Errorf("failed to create controller: %w", err)
 	}
 	return nil
+}
+
+// enqueueTimedCommitStatusForPromotionStrategy returns a handler that enqueues all TimedCommitStatus resources
+// that reference a PromotionStrategy when that PromotionStrategy changes
+func (r *TimedCommitStatusReconciler) enqueueTimedCommitStatusForPromotionStrategy() handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
+		ps, ok := obj.(*promoterv1alpha1.PromotionStrategy)
+		if !ok {
+			return nil
+		}
+
+		// List all TimedCommitStatus resources in the same namespace
+		var tcsList promoterv1alpha1.TimedCommitStatusList
+		if err := r.List(ctx, &tcsList, client.InNamespace(ps.Namespace)); err != nil {
+			log.FromContext(ctx).Error(err, "failed to list TimedCommitStatus resources")
+			return nil
+		}
+
+		// Enqueue all TimedCommitStatus resources that reference this PromotionStrategy
+		var requests []ctrl.Request
+		for _, tcs := range tcsList.Items {
+			if tcs.Spec.PromotionStrategyRef.Name == ps.Name {
+				requests = append(requests, ctrl.Request{
+					NamespacedName: client.ObjectKeyFromObject(&tcs),
+				})
+			}
+		}
+
+		return requests
+	})
 }
