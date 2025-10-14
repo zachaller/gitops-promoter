@@ -178,14 +178,13 @@ func (r *TimedCommitStatusReconciler) reconcileEnvironmentCommitStatus(
 		commitStatus.Spec = promoterv1alpha1.CommitStatusSpec{
 			RepositoryReference: ps.Spec.RepositoryReference,
 			Sha:                 activeHydratedSha,
-			Name:                fmt.Sprintf("promoter/timed/%s", envConfig.Branch),
+			Name:                "timed/" + envConfig.Branch,
 			Description:         r.getCommitStatusDescription(phase, envConfig.Duration.Duration, prevEnvStatus),
 			Phase:               phase,
 		}
 
 		return nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to create or update CommitStatus for environment %q: %w", envConfig.Branch, err)
 	}
