@@ -409,6 +409,23 @@ var _ = BeforeSuite(func() {
 		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
 	}()
 
+	// Wait for manager caches to sync before running tests
+	// This ensures all informers have completed their initial LIST operations
+	// and are ready to serve queries from their local caches.
+	// We wait for both the local manager and the multicluster manager caches
+	// to ensure complete synchronization across all clusters.
+	By("waiting for manager caches to sync")
+
+	// Wait for local manager cache (k8sManager)
+	Eventually(func() bool {
+		return k8sManager.GetCache().WaitForCacheSync(ctx)
+	}, constants.EventuallyTimeout, 10*time.Millisecond).Should(BeTrue(), "local manager cache should sync")
+
+	// Wait for multicluster manager cache (includes provider clusters)
+	Eventually(func() bool {
+		return multiClusterManager.GetLocalManager().GetCache().WaitForCacheSync(ctx)
+	}, constants.EventuallyTimeout, 10*time.Millisecond).Should(BeTrue(), "multicluster manager cache should sync")
+
 	Eventually(kubeconfigProvider.ListClusters, constants.EventuallyTimeout).Should(HaveLen(2))
 })
 
