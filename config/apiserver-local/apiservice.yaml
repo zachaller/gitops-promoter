@@ -1,0 +1,16 @@
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1alpha1.aggregated.promoter.argoproj.io
+spec:
+  # IMPORTANT: Must be true for local development since we use self-signed certs
+  insecureSkipTLSVerify: true
+  group: aggregated.promoter.argoproj.io
+  groupPriorityMinimum: 1000
+  versionPriority: 15
+  service:
+    name: promoter-aggregated-apiserver
+    namespace: promoter-system
+    port: 8443
+  version: v1alpha1
+

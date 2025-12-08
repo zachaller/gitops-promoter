@@ -1,0 +1,14 @@
+# Service without a selector - we'll manually manage the Endpoints
+apiVersion: v1
+kind: Service
+metadata:
+  name: promoter-aggregated-apiserver
+  namespace: promoter-system
+spec:
+  # No selector - Endpoints are managed manually
+  ports:
+  - port: 8443
+    targetPort: 8443
+    protocol: TCP
+    name: https
+

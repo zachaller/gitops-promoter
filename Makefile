@@ -71,7 +71,44 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./api/..." paths="./internal/controller/..." paths="./internal/apiserver/apis/..."
+
+.PHONY: generate-apiserver
+generate-apiserver: controller-gen ## Generate deepcopy functions for the aggregated API server types.
+	@echo "Generating deepcopy functions for aggregated API types..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./internal/apiserver/apis/..."
+	@echo "Formatting generated code..."
+	go fmt ./internal/apiserver/...
+
+.PHONY: generate-apiserver-codegen
+generate-apiserver-codegen: ## Generate all code for the aggregated API server using k8s.io/code-generator (deepcopy, openapi).
+	@echo "Running code-generator for aggregated API server..."
+	./hack/update-codegen.sh
+	@echo "Formatting generated code..."
+	go fmt ./internal/apiserver/...
+
+.PHONY: update-api-violations
+update-api-violations: ## Update the API violations exceptions list (run when adding new types).
+	@echo "Updating API violations exceptions list..."
+	UPDATE_API_KNOWN_VIOLATIONS=true ./hack/update-codegen.sh
+	@echo "Formatting generated code..."
+	go fmt ./internal/apiserver/...
+
+.PHONY: verify-apiserver-codegen
+verify-apiserver-codegen: ## Verify that code-generator output is up to date.
+	./hack/verify-codegen.sh
+
+.PHONY: generate-all
+generate-all: generate generate-apiserver ## Generate all code (CRDs + aggregated API server).
+
+.PHONY: verify-generate
+verify-generate: generate-all ## Verify that generated code is up to date.
+	@if [ -n "$$(git status --porcelain ./internal/apiserver)" ]; then \
+		echo "Generated files are out of date. Please run 'make generate-all' and commit the changes."; \
+		git diff ./internal/apiserver; \
+		exit 1; \
+	fi
+	@echo "Generated files are up to date."
 
 .PHONY: mockery-gen
 mockery-gen:
@@ -151,6 +188,37 @@ run: manifests generate fmt vet ## Run a controller from your host.
 .PHONY: run-dashboard
 run-dashboard: build-dashboard ## Run dashboard from your host.
 	go run ./cmd/main.go dashboard
+
+.PHONY: run-apiserver
+run-apiserver: generate-apiserver fmt vet ## Run the aggregated API server from your host.
+	go run ./cmd/main.go apiserver \
+		--secure-port=8443 \
+		--kubeconfig=$(HOME)/.kube/config \
+		--authentication-kubeconfig=$(HOME)/.kube/config \
+		--authorization-kubeconfig=$(HOME)/.kube/config \
+		--authentication-skip-lookup \
+		--authorization-always-allow-paths="/apis,/apis/*,/healthz,/readyz,/livez"
+
+# Get the host IP for local apiserver development
+# For Docker Desktop on Mac, use host.docker.internal which resolves inside containers
+# For Kind, we need the host's actual IP
+HOST_IP ?= $(shell if [ -n "$$(docker network inspect kind 2>/dev/null)" ]; then \
+	ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $$1}'; \
+else \
+	echo "host.docker.internal"; \
+fi)
+
+.PHONY: setup-apiserver-local
+setup-apiserver-local: kustomize ## Setup cluster to route to locally running apiserver. Run 'make run-apiserver' in another terminal first.
+	@echo "Using HOST_IP=$(HOST_IP)"
+	@echo "Make sure 'make run-apiserver' is running in another terminal!"
+	$(KUSTOMIZE) build config/apiserver-local | sed "s/HOST_IP_PLACEHOLDER/$(HOST_IP)/g" | $(KUBECTL) apply -f -
+	@echo ""
+	@echo "APIService registered. Test with: kubectl get promotionstatuses -A"
+
+.PHONY: teardown-apiserver-local
+teardown-apiserver-local: kustomize ## Remove the local apiserver routing from cluster.
+	$(KUSTOMIZE) build config/apiserver-local | sed "s/HOST_IP_PLACEHOLDER/127.0.0.1/g" | $(KUBECTL) delete --ignore-not-found=true -f -
 
 .PHONY: lint-dashboard
 lint-dashboard: ## Run dashboard type-check, lint and audit checks
@@ -232,6 +300,15 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+
+.PHONY: deploy-apiserver
+deploy-apiserver: kustomize ## Deploy the aggregated API server to the K8s cluster.
+	cd config/apiserver && $(KUSTOMIZE) edit set image quay.io/argoprojlabs/gitops-promoter=${IMG}
+	$(KUSTOMIZE) build config/apiserver | $(KUBECTL) apply -f -
+
+.PHONY: undeploy-apiserver
+undeploy-apiserver: kustomize ## Undeploy the aggregated API server from the K8s cluster.
+	$(KUSTOMIZE) build config/apiserver | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Dependencies
 

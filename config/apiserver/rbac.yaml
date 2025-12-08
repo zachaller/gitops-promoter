@@ -1,0 +1,82 @@
+# ClusterRole for the aggregated API server to read promoter resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: promoter-aggregated-apiserver
+rules:
+# Read access to all promoter resources for aggregation
+- apiGroups:
+  - promoter.argoproj.io
+  resources:
+  - promotionstrategies
+  - commitstatuses
+  - pullrequests
+  - changetransferpolicies
+  - argocdcommitstatuses
+  - timedcommitstatuses
+  - gitrepositories
+  - scmproviders
+  - clusterscmproviders
+  verbs:
+  - get
+  - list
+  - watch
+# Required for delegated authentication
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+# Required for delegated authorization
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+# ClusterRoleBinding for the aggregated API server
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: promoter-aggregated-apiserver
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: promoter-aggregated-apiserver
+subjects:
+- kind: ServiceAccount
+  name: promoter-aggregated-apiserver
+  namespace: promoter-system
+---
+# RoleBinding for auth-delegator in kube-system
+# This allows the aggregated API server to use delegated authentication
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: promoter-aggregated-apiserver:system:auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: promoter-aggregated-apiserver
+  namespace: promoter-system
+---
+# RoleBinding for reading the extension-apiserver-authentication ConfigMap
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: promoter-aggregated-apiserver-auth-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: promoter-aggregated-apiserver
+  namespace: promoter-system
+

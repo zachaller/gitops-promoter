@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: promoter-aggregated-apiserver
+  namespace: promoter-system
+  labels:
+    app: promoter-aggregated-apiserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: promoter-aggregated-apiserver
+  template:
+    metadata:
+      labels:
+        app: promoter-aggregated-apiserver
+    spec:
+      serviceAccountName: promoter-aggregated-apiserver
+      containers:
+      - name: apiserver
+        image: quay.io/argoprojlabs/gitops-promoter:latest
+        imagePullPolicy: IfNotPresent
+        args:
+        - apiserver
+        - --secure-port=8443
+        # The aggregated API server uses in-cluster config automatically
+        # when running inside the cluster with a ServiceAccount
+        ports:
+        - containerPort: 8443
+          name: https
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 5

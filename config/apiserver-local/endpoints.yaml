@@ -1,0 +1,19 @@
+# Endpoints pointing to your local machine
+# The IP address needs to be updated to your machine's IP that's reachable from the cluster
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: promoter-aggregated-apiserver
+  namespace: promoter-system
+subsets:
+- addresses:
+  # IMPORTANT: Replace with your machine's IP address
+  # For Docker Desktop: use host.docker.internal or 192.168.65.2
+  # For Kind: use your machine's LAN IP (e.g., 192.168.1.x)
+  # For Minikube: use $(minikube ssh "route -n | grep ^0.0.0.0 | awk '{print \$2}'")
+  - ip: "HOST_IP_PLACEHOLDER"
+  ports:
+  - port: 8443
+    protocol: TCP
+    name: https
+

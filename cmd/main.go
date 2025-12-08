@@ -29,9 +29,12 @@ import (
 	"go.uber.org/zap/zapcore"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 
+	"github.com/argoproj-labs/gitops-promoter/internal/apiserver/options"
 	"github.com/argoproj-labs/gitops-promoter/internal/controller"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 	"github.com/argoproj-labs/gitops-promoter/internal/webserver"
+
+	genericapiserver "k8s.io/apiserver/pkg/server"
 
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -389,6 +392,15 @@ func newDashboardCommand(clientConfig clientcmd.ClientConfig) *cobra.Command {
 	return cmd
 }
 
+func newAPIServerCommand() *cobra.Command {
+	ctx := genericapiserver.SetupSignalContext()
+	opts := options.NewPromoterServerOptions(os.Stdout, os.Stderr)
+	cmd := options.NewCommandStartPromoterServer(ctx, opts)
+	cmd.Use = "apiserver"
+	cmd.Short = "Launch the promoter aggregated API server"
+	return cmd
+}
+
 func newCommand() *cobra.Command {
 	var clientConfig clientcmd.ClientConfig
 
@@ -417,6 +429,7 @@ func newCommand() *cobra.Command {
 	clientConfig = addKubectlFlags(cmd.PersistentFlags())
 	cmd.AddCommand(newControllerCommand(clientConfig))
 	cmd.AddCommand(newDashboardCommand(clientConfig))
+	cmd.AddCommand(newAPIServerCommand())
 	return cmd
 }
 
