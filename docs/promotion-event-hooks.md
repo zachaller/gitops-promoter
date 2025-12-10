@@ -86,7 +86,9 @@ triggerExpr: |
 Your expression has access to:
 
 - `promotionStrategy`: The full PromotionStrategy resource
-- `status`: The current PromotionEventHook status (including `triggerData` from previous evaluations)
+- `status`: The current PromotionEventHook status, including:
+  - `status.TriggerData`: Custom data from the previous `triggerExpr` evaluation
+  - `status.WebhookResponseData`: Data from the previous `webhookResponseExpr` evaluation (if a webhook was executed)
 
 ### Common Patterns
 
