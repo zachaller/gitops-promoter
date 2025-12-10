@@ -66,8 +66,8 @@ func (r *ResourceExecutor) Execute(ctx context.Context, hook *promoterv1alpha1.P
 
 	// Build template context
 	templateCtx := PromotionEventHookTemplateContext{
-		PromotionStrategy: ps,
-		Data:              data,
+		PromotionStrategy:   ps,
+		WebhookResponseData: data,
 	}
 
 	// Render template

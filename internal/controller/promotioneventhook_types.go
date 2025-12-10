@@ -22,6 +22,7 @@ package controller
 type PromotionEventHookTemplateContext struct {
 	// PromotionStrategy is the PromotionStrategy being watched.
 	PromotionStrategy any `json:"PromotionStrategy"`
-	// Data is the result of resourceDataExpr evaluation (if present).
-	Data any `json:"Data"`
+	// WebhookResponseData is the result of webhookResponseExpr evaluation (if present),
+	// stored in status.webhookResponseData and available for templating.
+	WebhookResponseData any `json:"WebhookResponseData"`
 }

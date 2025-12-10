@@ -413,10 +413,9 @@ data:
 
 		It("should use webhook response data in resource template via webhookResponseExpr", func() {
 			webhookCallCount := 0
-			var testServer *httptest.Server
 
 			// Setup mock webhook server that returns JSON data
-			testServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				webhookCallCount++
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
@@ -456,9 +455,9 @@ metadata:
   name: %s
   namespace: default
 data:
-  deploymentId: "{{ .Data.deploymentId }}"
-  status: "{{ .Data.status }}"
-  region: "{{ .Data.region }}"
+  deploymentId: "{{ .WebhookResponseData.deploymentId }}"
+  status: "{{ .WebhookResponseData.status }}"
+  region: "{{ .WebhookResponseData.region }}"
   strategy: "{{ .PromotionStrategy.Name }}"
 `, configMapName),
 						},

@@ -64,7 +64,7 @@ spec:
         Content-Type: application/json
       body: |
         {
-          "text": "🚀 Production deployment complete! SHA: {{ .Data.sha }}"
+          "text": "🚀 Production deployment complete! SHA: {{ .WebhookResponseData.sha }}"
         }
 ```
 
@@ -173,7 +173,7 @@ action:
 Webhook URLs, headers, and bodies support Go templates with access to:
 
 - `.PromotionStrategy`: The PromotionStrategy resource
-- `.Data`: Data from `status.webhookResponseData` (if `webhookResponseExpr` was evaluated)
+- `.WebhookResponseData`: Data from `status.webhookResponseData` (empty when rendering webhook request, populated for resource templates after webhook execution)
 
 Available template functions include all [Sprig functions](http://masterminds.github.io/sprig/) (except `env`, `expandenv`, `getHostByName`), plus:
 
@@ -301,7 +301,7 @@ action:
       apiVersion: batch/v1
       kind: Job
       metadata:
-        name: integration-test-{{ .Data.sha | trunc 8 }}
+        name: integration-test-{{ .WebhookResponseData.sha | trunc 8 }}
         namespace: default
       spec:
         template:
@@ -321,8 +321,8 @@ action:
 
 After a webhook executes successfully, you can use `webhookResponseExpr` to extract and transform data from the webhook response. This data is stored in `status.webhookResponseData` and becomes available to:
 
-1. **Future `triggerExpr` evaluations** - via `status.webhookResponseData`
-2. **Resource templates** - via `.Data` context
+1. **Future `triggerExpr` evaluations** - via `status.WebhookResponseData`
+2. **Resource templates** - via `.WebhookResponseData` context
 
 ```yaml
 spec:
@@ -391,8 +391,8 @@ spec:
           name: deployment-tracking
           namespace: default
         data:
-          deployment_id: "{{ .Data.deploymentId }}"
-          status: "{{ .Data.status }}"
+          deployment_id: "{{ .WebhookResponseData.deploymentId }}"
+          status: "{{ .WebhookResponseData.status }}"
 ```
 
 ## Retry Policy
@@ -498,7 +498,7 @@ spec:
               "type": "section",
               "text": {
                 "type": "mrkdwn",
-                    "text": "*Application:* {{ .PromotionStrategy.metadata.name }}\n*SHA:* `{{ .Data.sha }}`\n*Environment:* {{ .Data.env }}"
+                    "text": "*Application:* {{ .PromotionStrategy.metadata.name }}\n*SHA:* `{{ .WebhookResponseData.sha }}`\n*Environment:* {{ .WebhookResponseData.env }}"
               }
             }
           ]
@@ -548,7 +548,7 @@ spec:
         apiVersion: batch/v1
         kind: Job
         metadata:
-          name: integration-test-{{ .Data.sha | trunc 8 }}
+          name: integration-test-{{ .WebhookResponseData.sha | trunc 8 }}
           namespace: {{ .PromotionStrategy.metadata.namespace }}
         spec:
           ttlSecondsAfterFinished: 3600
@@ -561,7 +561,7 @@ spec:
                 - name: TEST_ENVIRONMENT
                   value: "{{ (index .PromotionStrategy.Status.Environments 0).Branch }}"
                 - name: GIT_SHA
-                  value: "{{ .Data.sha }}"
+                  value: "{{ .WebhookResponseData.sha }}"
                 - name: APP_URL
                   value: "https://{{ (index .PromotionStrategy.Status.Environments 0).Branch }}.example.com"
               restartPolicy: Never
@@ -626,7 +626,7 @@ spec:
                   "content": [
                     {
                       "type": "text",
-                      "text": "Application: {{ .PromotionStrategy.metadata.name }}\nSHA: {{ .Data.sha }}\nTime: {{ .Data.timestamp }}"
+                      "text": "Application: {{ .PromotionStrategy.metadata.name }}\nSHA: {{ .WebhookResponseData.sha }}\nTime: {{ .WebhookResponseData.timestamp }}"
                     }
                   ]
                 }
@@ -646,8 +646,8 @@ spec:
           name: {{ .PromotionStrategy.metadata.name }}-jira
           namespace: {{ .PromotionStrategy.metadata.namespace }}
         data:
-          jira_ticket: "{{ .Data.ticketKey }}"
-          jira_url: "{{ .Data.ticketUrl }}"
+          jira_ticket: "{{ .WebhookResponseData.ticketKey }}"
+          jira_url: "{{ .WebhookResponseData.ticketUrl }}"
 ---
 apiVersion: v1
 kind: Secret
@@ -693,13 +693,13 @@ spec:
           "routing_key": "secret://pagerduty-key/integration-key",
           "event_action": "trigger",
           "payload": {
-            "summary": "Promotion failed for {{ .PromotionStrategy.metadata.name }} in {{ .Data.environment }}",
+            "summary": "Promotion failed for {{ .PromotionStrategy.metadata.name }} in {{ .WebhookResponseData.environment }}",
             "severity": "error",
             "source": "gitops-promoter",
             "custom_details": {
               "application": "{{ .PromotionStrategy.metadata.name }}",
-              "environment": "{{ .Data.environment }}",
-              "failure_message": "{{ .Data.failureMessage }}"
+              "environment": "{{ .WebhookResponseData.environment }}",
+              "failure_message": "{{ .WebhookResponseData.failureMessage }}"
             }
           }
         }
