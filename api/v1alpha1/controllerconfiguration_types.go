@@ -59,6 +59,11 @@ type ControllerConfigurationSpec struct {
 	// including WorkQueue settings that control reconciliation behavior.
 	// +required
 	TimedCommitStatus TimedCommitStatusConfiguration `json:"timedCommitStatus"`
+
+	// PromotionEventHook contains the configuration for the PromotionEventHook controller,
+	// including WorkQueue settings that control reconciliation behavior.
+	// +optional
+	PromotionEventHook *PromotionEventHookConfiguration `json:"promotionEventHook,omitempty"`
 }
 
 // PromotionStrategyConfiguration defines the configuration for the PromotionStrategy controller.
@@ -135,6 +140,17 @@ type ArgoCDCommitStatusConfiguration struct {
 // requests, including requeue intervals, concurrency limits, and rate limiting behavior.
 type TimedCommitStatusConfiguration struct {
 	// WorkQueue contains the work queue configuration for the TimedCommitStatus controller.
+	// This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.
+	// +required
+	WorkQueue WorkQueue `json:"workQueue"`
+}
+
+// PromotionEventHookConfiguration defines the configuration for the PromotionEventHook controller.
+//
+// This configuration controls how the PromotionEventHook controller processes reconciliation
+// requests, including requeue intervals, concurrency limits, and rate limiting behavior.
+type PromotionEventHookConfiguration struct {
+	// WorkQueue contains the work queue configuration for the PromotionEventHook controller.
 	// This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.
 	// +required
 	WorkQueue WorkQueue `json:"workQueue"`

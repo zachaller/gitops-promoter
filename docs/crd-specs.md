@@ -94,6 +94,19 @@ duration before being promoted.
 {!internal/controller/testdata/TimedCommitStatus.yaml!}
 ```
 
+### PromotionEventHook
+
+A PromotionEventHook enables automation based on PromotionStrategy state. It evaluates expressions against a
+PromotionStrategy and triggers webhooks or creates/updates Kubernetes resources when conditions are met.
+
+Common use cases include opening tickets, sending notifications, creating test jobs, or updating configuration
+based on promotion state. See the [Promotion Event Hooks](promotion-event-hooks.md) page for comprehensive
+documentation and examples.
+
+```yaml
+{!config/samples/promoter_v1alpha1_promotioneventhook.yaml!}
+```
+
 ### ControllerConfiguration
 
 A ControllerConfiguration is used to configure the behavior of the promoter.

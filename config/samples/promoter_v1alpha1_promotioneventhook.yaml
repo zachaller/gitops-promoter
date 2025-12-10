@@ -1,0 +1,175 @@
+# Example 1: Simple Webhook Notification
+# This hook sends a Slack notification when a new commit is proposed for staging
+---
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: PromotionEventHook
+metadata:
+  name: slack-notify-staging
+  namespace: default
+spec:
+  promotionStrategyRef:
+    name: my-app
+  
+  # Fire when there's a new proposed SHA that differs from the last notified SHA
+  triggerExpr: |
+    {
+      trigger: len(promotionStrategy.status.environments) > 0 &&
+                  promotionStrategy.status.environments[0].proposed.dry.sha != "" &&
+                  promotionStrategy.status.environments[0].proposed.dry.sha != status.triggerData["notifiedSha"],
+      notifiedSha: promotionStrategy.status.environments[0].proposed.dry.sha
+    }
+  
+  action:
+    webhook:
+      url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+      method: POST
+      headers:
+        Content-Type: application/json
+      body: |
+        {
+          "text": "🚀 New promotion ready for staging: {{ trunc 7 .PromotionStrategy.Status.Environments.0.Proposed.Dry.Sha }}"
+        }
+      timeout: 30s
+---
+# Example 2: Webhook with Bearer Token Authentication
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-token
+  namespace: default
+type: Opaque
+stringData:
+  token: "your-api-token-here"
+---
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: PromotionEventHook
+metadata:
+  name: api-notify
+  namespace: default
+spec:
+  promotionStrategyRef:
+    name: my-app
+  
+  triggerExpr: |
+    {
+      trigger: len(promotionStrategy.status.environments) > 0 &&
+                  promotionStrategy.status.environments[0].proposed.dry.sha != ""
+    }
+  
+  action:
+    webhook:
+      url: "https://api.example.com/deployments"
+      method: POST
+      auth:
+        bearer:
+          secretRef:
+            name: api-token
+      headers:
+        Content-Type: application/json
+      body: |
+        {
+          "environment": "{{ index .PromotionStrategy.Spec.Environments 0 | .Branch }}",
+          "sha": "{{ .PromotionStrategy.Status.Environments.0.Proposed.Dry.Sha }}"
+        }
+---
+# Example 3: Webhook with Basic Auth + Resource Creation
+# This hook fetches config from an API and creates a ConfigMap
+apiVersion: v1
+kind: Secret
+metadata:
+  name: config-api-auth
+  namespace: default
+type: Opaque
+stringData:
+  username: config-reader
+  password: supersecret123
+---
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: PromotionEventHook
+metadata:
+  name: fetch-and-create-config
+  namespace: default
+spec:
+  promotionStrategyRef:
+    name: my-app
+  
+  triggerExpr: |
+    {
+      trigger: len(promotionStrategy.status.environments) > 0 &&
+                  promotionStrategy.status.environments[0].proposed.dry.sha != "" &&
+                  promotionStrategy.status.environments[0].proposed.dry.sha != status.triggerData["configSha"],
+      configSha: promotionStrategy.status.environments[0].proposed.dry.sha
+    }
+  
+  webhookResponseExpr: |
+    {
+      sha: promotionStrategy.status.environments[0].proposed.dry.sha,
+      config: webhookResponse.data
+    }
+  
+  action:
+    webhook:
+      url: "https://config-api.example.com/configs/{{ (index .PromotionStrategy.Status.Environments 0).Proposed.Dry.Sha }}"
+      method: GET
+      auth:
+        basic:
+          secretRef:
+            name: config-api-auth
+      headers:
+        Accept: application/json
+      timeout: 15s
+      continueOnFailure: false
+    
+    resource:
+      template: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: app-config-{{ trunc 7 .Data.sha }}
+          namespace: default
+        data:
+          sha: "{{ .Data.sha }}"
+          config.json: '{{ toJson .Data.config }}'
+  
+  retryPolicy:
+    strategy: exponential
+    maxAttempts: 5
+    initialDelay: 10s
+    maxDelay: 5m
+---
+# Example 4: Resource-Only Hook (no webhook)
+# Creates a ConfigMap tracking the current promotion state
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: PromotionEventHook
+metadata:
+  name: track-promotion-state
+  namespace: default
+spec:
+  promotionStrategyRef:
+    name: my-app
+  
+  triggerExpr: |
+    {
+      trigger: len(promotionStrategy.status.environments) > 0 &&
+                  promotionStrategy.status.environments[0].proposed.dry.sha != status.triggerData["trackedSha"],
+      trackedSha: promotionStrategy.status.environments[0].proposed.dry.sha
+    }
+  
+  action:
+    resource:
+      template: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: promotion-state-{{ .PromotionStrategy.Name }}
+          namespace: default
+          labels:
+            app.kubernetes.io/managed-by: gitops-promoter
+        data:
+          strategy: "{{ .PromotionStrategy.metadata.name }}"
+          proposed-sha: "{{ (index .PromotionStrategy.Status.Environments 0).Proposed.Dry.Sha }}"
+          active-sha: "{{ (index .PromotionStrategy.Status.Environments 0).Active.Dry.Sha }}"
+      
+      setOwnerReference: true
+
+

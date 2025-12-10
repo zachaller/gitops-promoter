@@ -31,6 +31,7 @@ nav:
   - Custom Hydrator: custom-hydrator.md
   - CRD Specs: crd-specs.md
   - Gating Promotions: gating-promotions.md
+  - Promotion Event Hooks: promotion-event-hooks.md
   - CommitStatus Controllers:
       - Argo CD: commit-status-controllers/argocd.md
       - Timed: commit-status-controllers/timed.md

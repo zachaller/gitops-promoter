@@ -12,6 +12,7 @@ GitOps Promoter facilitates environment promotion for config managed via GitOps.
 * Robust promotion gating system
 * Complete integration with git and SCM tooling
 * No fragile automated changes to user-facing files
+* Event-driven automation with PromotionEventHooks
 
 The main ideas behind the project are explained in ["Space Age GitOps: The Rise of the Humble Pull Request"](https://www.youtube.com/watch?v=p5EPKY3vM-E).
 

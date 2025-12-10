@@ -1,0 +1,480 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: promotioneventhooks.promoter.argoproj.io
+spec:
+  group: promoter.argoproj.io
+  names:
+    kind: PromotionEventHook
+    listKind: PromotionEventHookList
+    plural: promotioneventhooks
+    singular: promotioneventhook
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.promotionStrategyRef.name
+      name: Strategy
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.lastTriggerTime
+      name: Last Trigger
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          PromotionEventHook is the Schema for the promotioneventhooks API.
+          It watches PromotionStrategy resources and fires webhooks and/or creates K8s resources
+          based on expr expression evaluation.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of PromotionEventHook
+            properties:
+              action:
+                description: Action defines the actions to execute when the trigger
+                  fires.
+                properties:
+                  resource:
+                    description: Resource defines a Kubernetes resource to create
+                      or update.
+                    properties:
+                      setOwnerReference:
+                        default: false
+                        description: |-
+                          SetOwnerReference determines whether to set the PromotionEventHook as owner of the created resource.
+                          When true, the resource will be deleted when the PromotionEventHook is deleted.
+                        type: boolean
+                      template:
+                        description: |-
+                          Template is a Go template that renders to a Kubernetes resource YAML.
+                          The template context includes .Data (from webhookResponseExpr if available) and .PromotionStrategy.
+                        type: string
+                    required:
+                    - template
+                    type: object
+                  webhook:
+                    description: Webhook defines an HTTP request to execute.
+                    properties:
+                      auth:
+                        description: Auth defines authentication configuration for
+                          the webhook.
+                        properties:
+                          basic:
+                            description: Basic configures HTTP Basic Authentication.
+                            properties:
+                              password:
+                                description: 'Password for basic auth. Can use secret
+                                  ref: ${secret:name:key}'
+                                type: string
+                              secretRef:
+                                description: SecretRef references a secret containing
+                                  username and password.
+                                properties:
+                                  name:
+                                    description: Name is the name of the secret.
+                                    type: string
+                                  passwordKey:
+                                    default: password
+                                    description: PasswordKey is the key in the secret
+                                      containing the password.
+                                    type: string
+                                  usernameKey:
+                                    default: username
+                                    description: UsernameKey is the key in the secret
+                                      containing the username.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              username:
+                                description: 'Username for basic auth. Can use secret
+                                  ref: ${secret:name:key}'
+                                type: string
+                            type: object
+                          bearer:
+                            description: Bearer configures Bearer token authentication.
+                            properties:
+                              secretRef:
+                                description: SecretRef references a secret containing
+                                  the token.
+                                properties:
+                                  key:
+                                    default: token
+                                    description: Key is the key in the secret containing
+                                      the token.
+                                    type: string
+                                  name:
+                                    description: Name is the name of the secret.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              token:
+                                description: 'Token is the bearer token value. Can
+                                  use secret ref: ${secret:name:key}'
+                                type: string
+                            type: object
+                          oauth2:
+                            description: OAuth2 configures OAuth2 client credentials
+                              flow.
+                            properties:
+                              clientID:
+                                description: 'ClientID is the OAuth2 client ID. Can
+                                  use secret ref: ${secret:name:key}'
+                                type: string
+                              clientSecret:
+                                description: 'ClientSecret is the OAuth2 client secret.
+                                  Can use secret ref: ${secret:name:key}'
+                                type: string
+                              scopes:
+                                description: Scopes are optional OAuth2 scopes to
+                                  request.
+                                items:
+                                  type: string
+                                type: array
+                              secretRef:
+                                description: SecretRef references a secret containing
+                                  client credentials.
+                                properties:
+                                  clientIDKey:
+                                    default: clientID
+                                    description: ClientIDKey is the key in the secret
+                                      containing the client ID.
+                                    type: string
+                                  clientSecretKey:
+                                    default: clientSecret
+                                    description: ClientSecretKey is the key in the
+                                      secret containing the client secret.
+                                    type: string
+                                  name:
+                                    description: Name is the name of the secret.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              tokenURL:
+                                description: TokenURL is the OAuth2 token endpoint.
+                                type: string
+                            required:
+                            - tokenURL
+                            type: object
+                          tls:
+                            description: TLS configures TLS client certificate authentication.
+                            properties:
+                              secretRef:
+                                description: SecretRef references a secret containing
+                                  TLS certificates.
+                                properties:
+                                  caKey:
+                                    default: ca.crt
+                                    description: CAKey is the key in the secret containing
+                                      the CA certificate.
+                                    type: string
+                                  certKey:
+                                    default: tls.crt
+                                    description: CertKey is the key in the secret
+                                      containing the client certificate.
+                                    type: string
+                                  keyKey:
+                                    default: tls.key
+                                    description: KeyKey is the key in the secret containing
+                                      the private key.
+                                    type: string
+                                  name:
+                                    description: Name is the name of the secret.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                            required:
+                            - secretRef
+                            type: object
+                        type: object
+                        x-kubernetes-validations:
+                        - message: only one auth type can be specified
+                          rule: '[has(self.basic), has(self.bearer), has(self.oauth2),
+                            has(self.tls)].filter(x, x).size() <= 1'
+                      body:
+                        description: Body is the request body. Supports Go template
+                          syntax and secret references.
+                        type: string
+                      continueOnFailure:
+                        default: false
+                        description: ContinueOnFailure determines whether to continue
+                          to resource action even if webhook fails.
+                        type: boolean
+                      headers:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Headers are HTTP headers to include. Values support Go template syntax and secret references.
+                          Secret references use the format: ${secret:secret-name:key}
+                        type: object
+                      method:
+                        default: POST
+                        description: Method is the HTTP method to use.
+                        enum:
+                        - GET
+                        - POST
+                        - PUT
+                        - PATCH
+                        - DELETE
+                        type: string
+                      timeout:
+                        default: 30s
+                        description: Timeout is the request timeout.
+                        type: string
+                      url:
+                        description: URL is the URL to call. Supports Go template
+                          syntax with .PromotionStrategy context.
+                        type: string
+                    required:
+                    - url
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: at least one of webhook or resource must be specified
+                  rule: has(self.webhook) || has(self.resource)
+              promotionStrategyRef:
+                description: PromotionStrategyRef is a reference to the PromotionStrategy
+                  to watch.
+                properties:
+                  name:
+                    description: Name is the name of the object to refer to.
+                    type: string
+                required:
+                - name
+                type: object
+              retryPolicy:
+                description: RetryPolicy defines how to handle retries on failure.
+                properties:
+                  initialDelay:
+                    default: 5s
+                    description: InitialDelay is the initial delay before the first
+                      retry.
+                    type: string
+                  maxAttempts:
+                    default: 3
+                    description: MaxAttempts is the maximum number of retry attempts.
+                    minimum: 1
+                    type: integer
+                  maxDelay:
+                    default: 5m
+                    description: MaxDelay is the maximum delay between retries (for
+                      exponential strategy).
+                    type: string
+                  strategy:
+                    default: exponential
+                    description: Strategy defines the retry strategy.
+                    enum:
+                    - none
+                    - fixed
+                    - exponential
+                    type: string
+                type: object
+              triggerExpr:
+                description: |-
+                  TriggerExpr is a Go expr expression that returns a map with `trigger` (bool) and custom data.
+                  The expression has access to `promotionStrategy` and `status` (including triggerData, webhookResponseData).
+                  Example: `{trigger: sha != "" && sha != status.triggerData["lastSha"], lastSha: sha}`
+                type: string
+              webhookResponseExpr:
+                description: |-
+                  WebhookResponseExpr is a Go expr expression that transforms the webhook response data.
+                  The expression has access to `promotionStrategy` and `webhookResponse`.
+                  The result is stored in status.webhookResponseData and made available to templates and future triggerExpr evaluations.
+                  This is only evaluated if a webhook action is present and executes successfully.
+                type: string
+            required:
+            - action
+            - promotionStrategyRef
+            - triggerExpr
+            type: object
+          status:
+            description: status defines the observed state of PromotionEventHook
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the object's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastEvaluationTime:
+                description: LastEvaluationTime is when triggerExpr was last evaluated.
+                format: date-time
+                type: string
+              lastTriggerTime:
+                description: LastTriggerTime is when the trigger last fired and actions
+                  were executed.
+                format: date-time
+                type: string
+              resourceStatus:
+                description: ResourceStatus contains the status of the last resource
+                  action.
+                properties:
+                  attempts:
+                    description: Attempts is the number of attempts made.
+                    type: integer
+                  error:
+                    description: Error contains the error message if the last attempt
+                      failed.
+                    type: string
+                  lastAttemptTime:
+                    description: LastAttemptTime is when the last attempt was made.
+                    format: date-time
+                    type: string
+                  resourceRef:
+                    description: ResourceRef contains a reference to the created/updated
+                      resource.
+                    properties:
+                      apiVersion:
+                        description: APIVersion is the API version of the resource.
+                        type: string
+                      kind:
+                        description: Kind is the kind of the resource.
+                        type: string
+                      name:
+                        description: Name is the name of the resource.
+                        type: string
+                      namespace:
+                        description: Namespace is the namespace of the resource.
+                        type: string
+                    required:
+                    - apiVersion
+                    - kind
+                    - name
+                    - namespace
+                    type: object
+                  success:
+                    description: Success indicates whether the last resource action
+                      succeeded.
+                    type: boolean
+                required:
+                - attempts
+                - success
+                type: object
+              triggerData:
+                additionalProperties:
+                  type: string
+                description: TriggerData contains custom data from triggerExpr (excluding
+                  trigger boolean).
+                type: object
+              webhookResponseData:
+                additionalProperties:
+                  type: string
+                description: |-
+                  WebhookResponseData contains the result of webhookResponseExpr evaluation.
+                  This data is available to future triggerExpr evaluations and to resource templates.
+                type: object
+              webhookStatus:
+                description: WebhookStatus contains the status of the last webhook
+                  action.
+                properties:
+                  attempts:
+                    description: Attempts is the number of attempts made.
+                    type: integer
+                  error:
+                    description: Error contains the error message if the last attempt
+                      failed.
+                    type: string
+                  lastAttemptTime:
+                    description: LastAttemptTime is when the last attempt was made.
+                    format: date-time
+                    type: string
+                  responseCode:
+                    description: ResponseCode is the HTTP response code from the last
+                      attempt.
+                    type: integer
+                  success:
+                    description: Success indicates whether the last webhook attempt
+                      succeeded.
+                    type: boolean
+                required:
+                - attempts
+                - success
+                type: object
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

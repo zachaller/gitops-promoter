@@ -81,3 +81,23 @@ spec:
         bucket:
           qps: 20
           bucket: 50
+
+  # TimedCommitStatus controller manages time-based commit status gates
+  timedCommitStatus:
+    workQueue:
+      requeueDuration: "1m"
+      maxConcurrentReconciles: 3
+      rateLimiter:
+        exponentialFailure:
+          baseDelay: "1s"
+          maxDelay: "1m"
+
+  # PromotionEventHook controller triggers webhooks and creates resources based on promotion events
+  promotionEventHook:
+    workQueue:
+      requeueDuration: "5m"
+      maxConcurrentReconciles: 3
+      rateLimiter:
+        exponentialFailure:
+          baseDelay: "5s"
+          maxDelay: "5m"
