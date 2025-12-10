@@ -48,12 +48,11 @@ spec:
   # Fire when production environment (last in list) has a new SHA
   triggerExpr: |
     {
-      "trigger": len(promotionStrategy.status.environments) > 0 &&
-                    promotionStrategy.status.environments[len(promotionStrategy.status.environments)-1].active.hydrated.sha != "" &&
-                    promotionStrategy.status.environments[len(promotionStrategy.status.environments)-1].branch == "environment/production" &&
-                    status.triggerData["notified"] != "true",
-      "notified": "true",
-      "sha": promotionStrategy.status.environments[len(promotionStrategy.status.environments)-1].active.hydrated.sha
+      "trigger": len(promotionStrategy.Status.Environments) > 0 &&
+                    promotionStrategy.Status.Environments[len(promotionStrategy.Status.Environments)-1].Active.Hydrated.Sha != "" &&
+                    promotionStrategy.Status.Environments[len(promotionStrategy.Status.Environments)-1].Branch == "environment/production" &&
+                    status.TriggerData["lastNotifiedSha"] != promotionStrategy.Status.Environments[len(promotionStrategy.Status.Environments)-1].Active.Hydrated.Sha,
+      "lastNotifiedSha": promotionStrategy.Status.Environments[len(promotionStrategy.Status.Environments)-1].Active.Hydrated.Sha
     }
   
   action:
@@ -64,7 +63,7 @@ spec:
         Content-Type: application/json
       body: |
         {
-          "text": "🚀 Production deployment complete! SHA: {{ .WebhookResponseData.sha }}"
+          "text": "🚀 Production deployment complete! SHA: {{ (index .PromotionStrategy.Status.Environments (sub (len .PromotionStrategy.Status.Environments) 1)).Active.Hydrated.Sha | trunc 8 }}"
         }
 ```
 
@@ -98,10 +97,10 @@ Fire the action once for each unique SHA, useful for notifications:
 ```yaml
 triggerExpr: |
   {
-    "trigger": len(promotionStrategy.status.environments) > 0 &&
-                  promotionStrategy.status.environments[0].active.hydrated.sha != "" &&
-                  status.triggerData["lastSha"] != promotionStrategy.status.environments[0].active.hydrated.sha,
-    "lastSha": promotionStrategy.status.environments[0].active.hydrated.sha  # Store to prevent re-firing
+    "trigger": len(promotionStrategy.Status.Environments) > 0 &&
+                  promotionStrategy.Status.Environments[0].Active.Hydrated.Sha != "" &&
+                  status.TriggerData["lastSha"] != promotionStrategy.Status.Environments[0].Active.Hydrated.Sha,
+    "lastSha": promotionStrategy.Status.Environments[0].Active.Hydrated.Sha  # Store to prevent re-firing
   }
 ```
 
@@ -114,9 +113,9 @@ Fire the action only once when a condition is met, never again:
 ```yaml
 triggerExpr: |
   {
-    "trigger": len(promotionStrategy.status.environments) > 0 &&
-                  promotionStrategy.status.environments[len(promotionStrategy.status.environments)-1].branch == "environment/production" &&
-                  status.triggerData["firedForProduction"] == "",
+    "trigger": len(promotionStrategy.Status.Environments) > 0 &&
+                  promotionStrategy.Status.Environments[len(promotionStrategy.Status.Environments)-1].Branch == "environment/production" &&
+                  status.TriggerData["firedForProduction"] == "",
     "firedForProduction": "true"  # Set once, never fires again for this PromotionStrategy
   }
 ```
@@ -128,10 +127,10 @@ triggerExpr: |
 ```yaml
 triggerExpr: |
   {
-    "trigger": len(promotionStrategy.status.environments) > 2 &&
-                  status.triggerData["lastSha"] != promotionStrategy.status.environments[2].active.hydrated.sha,
-    "lastSha": promotionStrategy.status.environments[2].active.hydrated.sha,
-    "env": promotionStrategy.status.environments[2].branch
+    "trigger": len(promotionStrategy.Status.Environments) > 2 &&
+                  status.TriggerData["lastSha"] != promotionStrategy.Status.Environments[2].Active.Hydrated.Sha,
+    "lastSha": promotionStrategy.Status.Environments[2].Active.Hydrated.Sha,
+    "env": promotionStrategy.Status.Environments[2].Branch
   }
 ```
 
@@ -140,9 +139,9 @@ triggerExpr: |
 ```yaml
 triggerExpr: |
   {
-    "trigger": len(promotionStrategy.status.environments) > 0 &&
-                  promotionStrategy.status.environments[0].lastFailureMessage != "" &&
-                  status.triggerData["notifiedFailure"] != "true",
+    "trigger": len(promotionStrategy.Status.Environments) > 0 &&
+                  promotionStrategy.Status.Environments[0].LastFailureMessage != "" &&
+                  status.TriggerData["notifiedFailure"] != "true",
     "notifiedFailure": "true"
   }
 ```
@@ -348,9 +347,9 @@ Once `webhookResponseData` is set, you can use it in future `triggerExpr` evalua
 spec:
   triggerExpr: |
     {
-      "trigger": status.webhookResponseData["deploymentId"] != "" &&
-                    status.webhookResponseData["status"] == "complete" &&
-                    status.triggerData["notified"] == "",
+      "trigger": status.WebhookResponseData["deploymentId"] != "" &&
+                    status.WebhookResponseData["status"] == "complete" &&
+                    status.TriggerData["notified"] == "",
       "notified": "true"
     }
 ```
@@ -363,8 +362,8 @@ When both webhook and resource actions are specified, they execute sequentially 
 spec:
   triggerExpr: |
     {
-      "trigger": len(promotionStrategy.status.environments) > 0 &&
-                    promotionStrategy.status.environments[len(promotionStrategy.status.environments)-1].branch == "environment/production",
+      "trigger": len(promotionStrategy.Status.Environments) > 0 &&
+                    promotionStrategy.Status.Environments[len(promotionStrategy.Status.Environments)-1].Branch == "environment/production",
       "env": "production"
     }
   
@@ -476,12 +475,10 @@ spec:
   
   triggerExpr: |
     {
-      "trigger": len(promotionStrategy.status.environments) > 0 &&
-                    promotionStrategy.status.environments[len(promotionStrategy.status.environments)-1].branch == "environment/production" &&
-                    status.triggerData["lastProdSha"] != promotionStrategy.status.environments[len(promotionStrategy.status.environments)-1].active.hydrated.sha,
-      "lastProdSha": promotionStrategy.status.environments[len(promotionStrategy.status.environments)-1].active.hydrated.sha,
-      "sha": promotionStrategy.status.environments[len(promotionStrategy.status.environments)-1].active.hydrated.sha,
-      "env": "production"
+      "trigger": len(promotionStrategy.Status.Environments) > 0 &&
+                    promotionStrategy.Status.Environments[len(promotionStrategy.Status.Environments)-1].Branch == "environment/production" &&
+                    status.TriggerData["lastProdSha"] != promotionStrategy.Status.Environments[len(promotionStrategy.Status.Environments)-1].Active.Hydrated.Sha,
+      "lastProdSha": promotionStrategy.Status.Environments[len(promotionStrategy.Status.Environments)-1].Active.Hydrated.Sha
     }
   
   action:
@@ -498,7 +495,7 @@ spec:
               "type": "section",
               "text": {
                 "type": "mrkdwn",
-                    "text": "*Application:* {{ .PromotionStrategy.metadata.name }}\n*SHA:* `{{ .WebhookResponseData.sha }}`\n*Environment:* {{ .WebhookResponseData.env }}"
+                "text": "*Application:* {{ .PromotionStrategy.Name }}\n*SHA:* `{{ (index .PromotionStrategy.Status.Environments (sub (len .PromotionStrategy.Status.Environments) 1)).Active.Hydrated.Sha | trunc 8 }}`\n*Environment:* {{ (index .PromotionStrategy.Status.Environments (sub (len .PromotionStrategy.Status.Environments) 1)).Branch }}"
               }
             }
           ]
@@ -534,11 +531,11 @@ spec:
   
   triggerExpr: |
     {
-      "trigger": len(promotionStrategy.status.environments) > 0 &&
-                    promotionStrategy.status.environments[0].branch == "environment/staging" &&
-                    status.triggerData["lastTestedSha"] != promotionStrategy.status.environments[0].active.hydrated.sha,
-      "lastTestedSha": promotionStrategy.status.environments[0].active.hydrated.sha,
-      "sha": promotionStrategy.status.environments[0].active.hydrated.sha
+      "trigger": len(promotionStrategy.Status.Environments) > 0 &&
+                    promotionStrategy.Status.Environments[0].Branch == "environment/staging" &&
+                    status.TriggerData["lastTestedSha"] != promotionStrategy.Status.Environments[0].Active.Hydrated.Sha,
+      "lastTestedSha": promotionStrategy.Status.Environments[0].Active.Hydrated.Sha,
+      "sha": promotionStrategy.Status.Environments[0].Active.Hydrated.Sha
     }
   
   action:
@@ -549,7 +546,7 @@ spec:
         kind: Job
         metadata:
           name: integration-test-{{ .WebhookResponseData.sha | trunc 8 }}
-          namespace: {{ .PromotionStrategy.metadata.namespace }}
+          namespace: {{ .PromotionStrategy.Namespace }}
         spec:
           ttlSecondsAfterFinished: 3600
           template:
@@ -583,10 +580,10 @@ spec:
   # Fire once when production is reached, by checking if we already have a ticket key
   triggerExpr: |
     {
-      "trigger": len(promotionStrategy.status.environments) > 0 &&
-                    promotionStrategy.status.environments[len(promotionStrategy.status.environments)-1].branch == "environment/production" &&
-                    status.webhookResponseData["ticketKey"] == "",
-      "sha": promotionStrategy.status.environments[len(promotionStrategy.status.environments)-1].active.hydrated.sha,
+      "trigger": len(promotionStrategy.Status.Environments) > 0 &&
+                    promotionStrategy.Status.Environments[len(promotionStrategy.Status.Environments)-1].Branch == "environment/production" &&
+                    status.WebhookResponseData["ticketKey"] == "",
+      "sha": promotionStrategy.Status.Environments[len(promotionStrategy.Status.Environments)-1].Active.Hydrated.Sha,
       "timestamp": now().Format("2006-01-02 15:04:05")
     }
   
@@ -616,7 +613,7 @@ spec:
             "project": {
               "key": "DEPLOY"
             },
-            "summary": "Production Deployment: {{ .PromotionStrategy.metadata.name }}",
+            "summary": "Production Deployment: {{ .PromotionStrategy.Name }}",
             "description": {
               "type": "doc",
               "version": 1,
@@ -626,7 +623,7 @@ spec:
                   "content": [
                     {
                       "type": "text",
-                      "text": "Application: {{ .PromotionStrategy.metadata.name }}\nSHA: {{ .WebhookResponseData.sha }}\nTime: {{ .WebhookResponseData.timestamp }}"
+                      "text": "Application: {{ .PromotionStrategy.Name }}\nSHA: {{ (index .PromotionStrategy.Status.Environments (sub (len .PromotionStrategy.Status.Environments) 1)).Active.Hydrated.Sha }}\nTime: {{ now | date \"2006-01-02 15:04:05\" }}"
                     }
                   ]
                 }
@@ -643,8 +640,8 @@ spec:
         apiVersion: v1
         kind: ConfigMap
         metadata:
-          name: {{ .PromotionStrategy.metadata.name }}-jira
-          namespace: {{ .PromotionStrategy.metadata.namespace }}
+          name: {{ .PromotionStrategy.Name }}-jira
+          namespace: {{ .PromotionStrategy.Namespace }}
         data:
           jira_ticket: "{{ .WebhookResponseData.ticketKey }}"
           jira_url: "{{ .WebhookResponseData.ticketUrl }}"
@@ -674,12 +671,10 @@ spec:
   
   triggerExpr: |
     {
-      "trigger": len(promotionStrategy.status.environments) > 0 &&
-                    promotionStrategy.status.environments[0].lastFailureMessage != "" &&
-                    status.triggerData["alertedFailure"] != "true",
-      "alertedFailure": "true",
-      "failureMessage": promotionStrategy.status.environments[0].lastFailureMessage,
-      "environment": promotionStrategy.status.environments[0].name
+      "trigger": len(promotionStrategy.Status.Environments) > 0 &&
+                    promotionStrategy.Status.Environments[0].LastFailureMessage != "" &&
+                    status.TriggerData["alertedFailure"] != "true",
+      "alertedFailure": "true"
     }
   
   action:
@@ -693,13 +688,13 @@ spec:
           "routing_key": "secret://pagerduty-key/integration-key",
           "event_action": "trigger",
           "payload": {
-            "summary": "Promotion failed for {{ .PromotionStrategy.metadata.name }} in {{ .WebhookResponseData.environment }}",
+            "summary": "Promotion failed for {{ .PromotionStrategy.Name }} in {{ (index .PromotionStrategy.Status.Environments 0).Branch }}",
             "severity": "error",
             "source": "gitops-promoter",
             "custom_details": {
-              "application": "{{ .PromotionStrategy.metadata.name }}",
-              "environment": "{{ .WebhookResponseData.environment }}",
-              "failure_message": "{{ .WebhookResponseData.failureMessage }}"
+              "application": "{{ .PromotionStrategy.Name }}",
+              "environment": "{{ (index .PromotionStrategy.Status.Environments 0).Branch }}",
+              "failure_message": "{{ (index .PromotionStrategy.Status.Environments 0).LastFailureMessage }}"
             }
           }
         }
