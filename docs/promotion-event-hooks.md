@@ -88,7 +88,7 @@ Your expression has access to:
 - `promotionStrategy`: The full PromotionStrategy resource
 - `status`: The current PromotionEventHook status, including:
   - `status.TriggerData`: Custom data from the previous `triggerExpr` evaluation
-  - `status.WebhookResponseData`: Data from the previous `webhookResponseExpr` evaluation (if a webhook was executed)
+  - `status.WebhookResponseData`: Data from the previous webhook `responseExpr` evaluation (if a webhook was executed)
 
 ### Common Patterns
 
@@ -318,24 +318,28 @@ action:
 
 ## Webhook Response Processing
 
-### WebhookResponseExpr
+### Webhook ResponseExpr
 
-After a webhook executes successfully, you can use `webhookResponseExpr` to extract and transform data from the webhook response. This data is stored in `status.webhookResponseData` and becomes available to:
+After a webhook executes successfully, you can use `responseExpr` (under the webhook action) to extract and transform data from the webhook response. This data is stored in `status.webhookResponseData` and becomes available to:
 
 1. **Future `triggerExpr` evaluations** - via `status.WebhookResponseData`
 2. **Resource templates** - via `.WebhookResponseData` context
 
 ```yaml
 spec:
-  webhookResponseExpr: |
-    {
-      "deploymentId": webhookResponse.data.id,
-      "status": webhookResponse.data.status,
-      "timestamp": webhookResponse.data.created_at
-    }
+  action:
+    webhook:
+      url: "https://api.example.com/deploy"
+      method: POST
+      responseExpr: |
+        {
+          "deploymentId": webhookResponse.data.id,
+          "status": webhookResponse.data.status,
+          "timestamp": webhookResponse.data.created_at
+        }
 ```
 
-The `webhookResponseExpr` has access to:
+The `responseExpr` has access to:
 - `promotionStrategy`: The full PromotionStrategy resource
 - `webhookResponse`: Object with `statusCode`, `headers`, `body`, and `data` (parsed JSON)
 
@@ -358,7 +362,7 @@ spec:
 
 ## Combined Webhook and Resource Actions
 
-When both webhook and resource actions are specified, they execute sequentially (webhook first, then resource). Use `webhookResponseExpr` to transform the webhook response, and the result becomes available in `.Data` for resource templates:
+When both webhook and resource actions are specified, they execute sequentially (webhook first, then resource). Use `responseExpr` (under webhook) to transform the webhook response, and the result becomes available in `.WebhookResponseData` for resource templates:
 
 ```yaml
 spec:
@@ -369,12 +373,6 @@ spec:
       "env": "production"
     }
   
-  webhookResponseExpr: |
-    {
-      "deploymentId": webhookResponse.data.id,
-      "status": webhookResponse.data.status
-    }
-  
   action:
     webhook:
       url: "https://api.example.com/create-deployment"
@@ -382,6 +380,11 @@ spec:
       body: |
         {
           "environment": "{{ (index .PromotionStrategy.Status.Environments 0).Branch }}"
+        }
+      responseExpr: |
+        {
+          "deploymentId": webhookResponse.data.id,
+          "status": webhookResponse.data.status
         }
     
     resource:
@@ -457,7 +460,7 @@ status:
 **Key Status Fields:**
 
 - **`triggerData`**: Custom data returned from `triggerExpr` (excluding the `trigger` boolean). Persists across reconciliations and enables fire-once patterns.
-- **`webhookResponseData`**: Transformed webhook response data from `webhookResponseExpr`. Available to future `triggerExpr` evaluations and resource templates via `.Data`.
+- **`webhookResponseData`**: Transformed webhook response data from webhook's `responseExpr`. Available to future `triggerExpr` evaluations and resource templates via `.WebhookResponseData`.
 - **`webhookStatus`**: Tracks webhook execution success/failure, HTTP status code, and retry attempts.
 - **`resourceStatus`**: Tracks resource creation/update success/failure and details about the managed resource.
 
@@ -589,12 +592,6 @@ spec:
       "timestamp": now().Format("2006-01-02 15:04:05")
     }
   
-  webhookResponseExpr: |
-    {
-      "ticketKey": webhookResponse.data.key,
-      "ticketUrl": "https://your-domain.atlassian.net/browse/" + webhookResponse.data.key
-    }
-  
   action:
     webhook:
       url: "https://your-domain.atlassian.net/rest/api/3/issue"
@@ -635,6 +632,11 @@ spec:
               "name": "Task"
             }
           }
+        }
+      responseExpr: |
+        {
+          "ticketKey": webhookResponse.data.key,
+          "ticketUrl": "https://your-domain.atlassian.net/browse/" + webhookResponse.data.key
         }
     
     resource:

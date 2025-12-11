@@ -32,13 +32,6 @@ type PromotionEventHookSpec struct {
 	// +required
 	TriggerExpr string `json:"triggerExpr"`
 
-	// WebhookResponseExpr is a Go expr expression that transforms the webhook response data.
-	// The expression has access to `promotionStrategy` and `webhookResponse`.
-	// The result is stored in status.webhookResponseData and made available to templates and future triggerExpr evaluations.
-	// This is only evaluated if a webhook action is present and executes successfully.
-	// +optional
-	WebhookResponseExpr string `json:"webhookResponseExpr,omitempty"`
-
 	// Action defines the actions to execute when the trigger fires.
 	// +required
 	Action PromotionEventHookAction `json:"action"`
@@ -94,6 +87,12 @@ type WebhookAction struct {
 	// Auth defines authentication configuration for the webhook.
 	// +optional
 	Auth *WebhookAuth `json:"auth,omitempty"`
+
+	// ResponseExpr is a Go expr expression that transforms the webhook response data.
+	// The expression has access to `promotionStrategy` and `webhookResponse`.
+	// The result is stored in status.webhookResponseData and made available to templates and future triggerExpr evaluations.
+	// +optional
+	ResponseExpr string `json:"responseExpr,omitempty"`
 }
 
 // WebhookAuth defines authentication configuration for webhooks.
@@ -243,7 +242,7 @@ type TLSSecretRef struct {
 // ResourceAction defines a Kubernetes resource to create or update.
 type ResourceAction struct {
 	// Template is a Go template that renders to a Kubernetes resource YAML.
-	// The template context includes .Data (from webhookResponseExpr if available) and .PromotionStrategy.
+	// The template context includes .WebhookResponseData (from webhook's responseExpr if available) and .PromotionStrategy.
 	// +required
 	Template string `json:"template"`
 
@@ -299,7 +298,7 @@ type PromotionEventHookStatus struct {
 	// +optional
 	TriggerData map[string]string `json:"triggerData,omitempty"`
 
-	// WebhookResponseData contains the result of webhookResponseExpr evaluation.
+	// WebhookResponseData contains the result of webhook's responseExpr evaluation.
 	// This data is available to future triggerExpr evaluations and to resource templates.
 	// +optional
 	WebhookResponseData map[string]string `json:"webhookResponseData,omitempty"`

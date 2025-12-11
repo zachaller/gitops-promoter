@@ -163,10 +163,10 @@ func (r *PromotionEventHookReconciler) Reconcile(ctx context.Context, req ctrl.R
 		webhookResp, webhookErr = r.executeWebhook(ctx, &peh, &ps)
 		r.updateWebhookStatus(&peh, webhookResp, webhookErr)
 
-		// Evaluate webhookResponseExpr if webhook succeeded and expr is present
-		if webhookErr == nil && webhookResp != nil && peh.Spec.WebhookResponseExpr != "" {
-			if err := r.evaluateWebhookResponseExpr(&peh, &ps, webhookResp); err != nil {
-				logger.Error(err, "failed to evaluate webhookResponseExpr")
+		// Evaluate responseExpr if webhook succeeded and expr is present
+		if webhookErr == nil && webhookResp != nil && peh.Spec.Action.Webhook.ResponseExpr != "" {
+			if err := r.evaluateWebhookResponseExpr(&peh, &ps, webhookResp, peh.Spec.Action.Webhook.ResponseExpr); err != nil {
+				logger.Error(err, "failed to evaluate responseExpr")
 				// This is not a fatal error - continue with resource action
 			}
 		}
@@ -183,13 +183,6 @@ func (r *PromotionEventHookReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return ctrl.Result{}, fmt.Errorf("failed to update status: %w", updateErr)
 			}
 			return r.handleRetry(ctx, &peh), nil
-		}
-	} else if peh.Spec.WebhookResponseExpr != "" {
-		// If no webhook but webhookResponseExpr is present, evaluate it without webhook response
-		// This allows resource-only actions to use webhookResponseExpr for data transformation
-		if err := r.evaluateWebhookResponseExpr(&peh, &ps, nil); err != nil {
-			logger.Error(err, "failed to evaluate webhookResponseExpr")
-			// This is not a fatal error - continue with resource action
 		}
 	}
 
@@ -257,27 +250,27 @@ func (r *PromotionEventHookReconciler) evaluateTriggerExpr(_ context.Context, pe
 	return triggerResult, nil
 }
 
-// evaluateWebhookResponseExpr evaluates the webhookResponseExpr and stores the result in status.
-func (r *PromotionEventHookReconciler) evaluateWebhookResponseExpr(peh *promoterv1alpha1.PromotionEventHook, ps *promoterv1alpha1.PromotionStrategy, webhookResp *utils.WebhookResponse) error {
+// evaluateWebhookResponseExpr evaluates the webhook responseExpr and stores the result in status.
+func (r *PromotionEventHookReconciler) evaluateWebhookResponseExpr(peh *promoterv1alpha1.PromotionEventHook, ps *promoterv1alpha1.PromotionStrategy, webhookResp *utils.WebhookResponse, responseExpr string) error {
 	exprCtx := utils.WebhookResponseContext{
 		PromotionStrategy: ps,
 		WebhookResponse:   webhookResp,
 	}
 
-	result, err := utils.EvaluateAny(peh.Spec.WebhookResponseExpr, exprCtx)
+	result, err := utils.EvaluateAny(responseExpr, exprCtx)
 	if err != nil {
-		return fmt.Errorf("failed to evaluate webhookResponseExpr: %w", err)
+		return fmt.Errorf("failed to evaluate responseExpr: %w", err)
 	}
 
 	// Convert result to map[string]string for storage in status
 	resultMap, ok := result.(map[string]any)
 	if !ok {
-		return fmt.Errorf("webhookResponseExpr must return a map, got %T", result)
+		return fmt.Errorf("responseExpr must return a map, got %T", result)
 	}
 
 	webhookResponseData, err := utils.MapToStringMap(resultMap)
 	if err != nil {
-		return fmt.Errorf("failed to convert webhookResponseExpr result to string map: %w", err)
+		return fmt.Errorf("failed to convert responseExpr result to string map: %w", err)
 	}
 
 	peh.Status.WebhookResponseData = webhookResponseData

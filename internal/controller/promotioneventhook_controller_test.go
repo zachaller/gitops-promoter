@@ -365,8 +365,7 @@ var _ = Describe("PromotionEventHook Controller", Ordered, func() {
 					PromotionStrategyRef: promoterv1alpha1.ObjectReference{
 						Name: name,
 					},
-					TriggerExpr:         `{trigger: true}`,
-					WebhookResponseExpr: `{strategyName: promotionStrategy.Name}`,
+					TriggerExpr: `{trigger: true}`,
 					Action: promoterv1alpha1.PromotionEventHookAction{
 						Resource: &promoterv1alpha1.ResourceAction{
 							Template: fmt.Sprintf(`apiVersion: v1
@@ -436,17 +435,17 @@ data:
 						Name: name,
 					},
 					TriggerExpr: `{trigger: true}`,
-					// Transform webhook response data for use in templates
-					WebhookResponseExpr: `{
-						deploymentId: webhookResponse.data.deploymentId,
-						status: webhookResponse.data.status,
-						region: webhookResponse.data.region
-					}`,
 					Action: promoterv1alpha1.PromotionEventHookAction{
 						Webhook: &promoterv1alpha1.WebhookAction{
 							URL:    testServer.URL,
 							Method: "POST",
 							Body:   `{"app": "{{ .PromotionStrategy.Name }}"}`,
+							// Transform webhook response data for use in templates
+							ResponseExpr: `{
+								deploymentId: webhookResponse.data.deploymentId,
+								status: webhookResponse.data.status,
+								region: webhookResponse.data.region
+							}`,
 						},
 						Resource: &promoterv1alpha1.ResourceAction{
 							Template: fmt.Sprintf(`apiVersion: v1
