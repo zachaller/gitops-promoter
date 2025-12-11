@@ -114,11 +114,8 @@ func ParseTriggerResult(result map[string]any) (TriggerResult, error) {
 	}
 	tr.Trigger = trigger
 
-	// Extract all other fields as triggerData
+	// Extract all fieldsxs as triggerData
 	for key, value := range result {
-		if key == "trigger" {
-			continue
-		}
 		strVal := toStringValue(value)
 		tr.TriggerData[key] = strVal
 	}

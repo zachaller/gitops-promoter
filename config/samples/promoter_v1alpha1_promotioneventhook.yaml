@@ -101,12 +101,6 @@ spec:
       configSha: promotionStrategy.status.environments[0].proposed.dry.sha
     }
   
-  webhookResponseExpr: |
-    {
-      sha: promotionStrategy.status.environments[0].proposed.dry.sha,
-      config: webhookResponse.data
-    }
-  
   action:
     webhook:
       url: "https://config-api.example.com/configs/{{ (index .PromotionStrategy.Status.Environments 0).Proposed.Dry.Sha }}"
@@ -119,17 +113,22 @@ spec:
         Accept: application/json
       timeout: 15s
       continueOnFailure: false
+      responseExpr: |
+        {
+          sha: promotionStrategy.status.environments[0].proposed.dry.sha,
+          config: webhookResponse.data
+        }
     
     resource:
       template: |
         apiVersion: v1
         kind: ConfigMap
         metadata:
-          name: app-config-{{ trunc 7 .Data.sha }}
-          namespace: default
+          name: app-config-{{ trunc 7 .WebhookResponseData.sha }}
+          # namespace defaults to PromotionEventHook's namespace
         data:
-          sha: "{{ .Data.sha }}"
-          config.json: '{{ toJson .Data.config }}'
+          sha: "{{ .WebhookResponseData.sha }}"
+          config.json: '{{ toJson .WebhookResponseData.config }}'
   
   retryPolicy:
     strategy: exponential
@@ -162,7 +161,7 @@ spec:
         kind: ConfigMap
         metadata:
           name: promotion-state-{{ .PromotionStrategy.Name }}
-          namespace: default
+          # namespace defaults to PromotionEventHook's namespace
           labels:
             app.kubernetes.io/managed-by: gitops-promoter
         data:

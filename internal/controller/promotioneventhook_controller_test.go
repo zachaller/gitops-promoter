@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -497,6 +498,57 @@ data:
 				g.Expect(fetchedPEH.Status.WebhookResponseData).To(HaveKeyWithValue("status", "success"))
 				g.Expect(fetchedPEH.Status.WebhookResponseData).To(HaveKeyWithValue("region", "us-west-2"))
 			}, constants.EventuallyTimeout).Should(Succeed())
+		})
+
+		It("should enforce namespace restriction for resources", func() {
+			configMapName := name + "-wrong-namespace"
+
+			// Create PromotionEventHook that tries to create resource in a different namespace
+			peh := &promoterv1alpha1.PromotionEventHook{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name + "-wrong-ns",
+					Namespace: "default", // Hook is in default namespace
+				},
+				Spec: promoterv1alpha1.PromotionEventHookSpec{
+					PromotionStrategyRef: promoterv1alpha1.ObjectReference{
+						Name: name,
+					},
+					TriggerExpr: `{trigger: true}`,
+					Action: promoterv1alpha1.PromotionEventHookAction{
+						Resource: &promoterv1alpha1.ResourceAction{
+							Template: fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: %s
+  namespace: kube-system
+data:
+  test: "data"
+`, configMapName),
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, peh)).To(Succeed())
+
+			// Cleanup
+			defer func() {
+				_ = k8sClient.Delete(ctx, peh)
+			}()
+
+			// Wait for status to show failure due to namespace mismatch
+			Eventually(func(g Gomega) {
+				var fetchedPEH promoterv1alpha1.PromotionEventHook
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(peh), &fetchedPEH)).To(Succeed())
+				g.Expect(fetchedPEH.Status.ResourceStatus).NotTo(BeNil())
+				g.Expect(fetchedPEH.Status.ResourceStatus.Success).To(BeFalse())
+				g.Expect(fetchedPEH.Status.ResourceStatus.Error).To(ContainSubstring("does not match hook namespace"))
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			// Verify ConfigMap was NOT created in kube-system
+			var cm corev1.ConfigMap
+			err := k8sClient.Get(ctx, client.ObjectKey{Namespace: "kube-system", Name: configMapName}, &cm)
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 		})
 	})
 

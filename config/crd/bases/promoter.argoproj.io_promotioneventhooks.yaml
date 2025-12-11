@@ -69,7 +69,9 @@ spec:
                       template:
                         description: |-
                           Template is a Go template that renders to a Kubernetes resource YAML.
-                          The template context includes .Data (from webhookResponseExpr if available) and .PromotionStrategy.
+                          The template context includes .WebhookResponseData (from webhook's responseExpr if available) and .PromotionStrategy.
+                          Resources must be created in the same namespace as the PromotionEventHook.
+                          If namespace is not specified in the template, it defaults to the PromotionEventHook's namespace.
                         type: string
                     required:
                     - template
@@ -242,6 +244,12 @@ spec:
                         - PATCH
                         - DELETE
                         type: string
+                      responseExpr:
+                        description: |-
+                          ResponseExpr is a Go expr expression that transforms the webhook response data.
+                          The expression has access to `promotionStrategy` and `webhookResponse`.
+                          The result is stored in status.webhookResponseData and made available to templates and future triggerExpr evaluations.
+                        type: string
                       timeout:
                         default: 30s
                         description: Timeout is the request timeout.
@@ -299,13 +307,6 @@ spec:
                   TriggerExpr is a Go expr expression that returns a map with `trigger` (bool) and custom data.
                   The expression has access to `promotionStrategy` and `status` (including triggerData, webhookResponseData).
                   Example: `{trigger: sha != "" && sha != status.triggerData["lastSha"], lastSha: sha}`
-                type: string
-              webhookResponseExpr:
-                description: |-
-                  WebhookResponseExpr is a Go expr expression that transforms the webhook response data.
-                  The expression has access to `promotionStrategy` and `webhookResponse`.
-                  The result is stored in status.webhookResponseData and made available to templates and future triggerExpr evaluations.
-                  This is only evaluated if a webhook action is present and executes successfully.
                 type: string
             required:
             - action
@@ -440,7 +441,7 @@ spec:
                 additionalProperties:
                   type: string
                 description: |-
-                  WebhookResponseData contains the result of webhookResponseExpr evaluation.
+                  WebhookResponseData contains the result of webhook's responseExpr evaluation.
                   This data is available to future triggerExpr evaluations and to resource templates.
                 type: object
               webhookStatus:

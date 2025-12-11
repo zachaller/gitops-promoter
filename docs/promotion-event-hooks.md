@@ -79,7 +79,7 @@ triggerExpr: |
   }
 ```
 
-**Important**: Any fields you return (except `trigger`) are stored in `status.triggerData` and persist across reconciliations. This is how you implement fire-once patterns - by checking if a field exists and setting it when the action fires.
+**Important**: All fields you return are stored in `status.triggerData` and persist across reconciliations. This is how you implement fire-once patterns - by checking if a field exists and setting it when the action fires.
 
 ### Available Context
 
@@ -273,6 +273,8 @@ Secret references use the format: `secret://<secret-name>/<key-name>`
 
 Resource actions create or update Kubernetes resources using templated YAML.
 
+**Important**: Resources must be created in the same namespace as the PromotionEventHook. If you specify a different namespace in the template, the action will fail. If no namespace is specified, it defaults to the PromotionEventHook's namespace.
+
 ### Basic Resource
 
 ```yaml
@@ -283,7 +285,7 @@ action:
       kind: ConfigMap
       metadata:
         name: promotion-status
-        namespace: default
+        # namespace defaults to PromotionEventHook's namespace if not specified
       data:
         environment: "{{ (index .PromotionStrategy.Status.Environments 0).Branch }}"
         sha: "{{ (index .PromotionStrategy.Status.Environments 0).Active.Hydrated.Sha }}"
@@ -303,7 +305,7 @@ action:
       kind: Job
       metadata:
         name: integration-test-{{ .WebhookResponseData.sha | trunc 8 }}
-        namespace: default
+        # namespace defaults to PromotionEventHook's namespace
       spec:
         template:
           spec:
@@ -393,7 +395,7 @@ spec:
         kind: ConfigMap
         metadata:
           name: deployment-tracking
-          namespace: default
+          # namespace defaults to PromotionEventHook's namespace
         data:
           deployment_id: "{{ .WebhookResponseData.deploymentId }}"
           status: "{{ .WebhookResponseData.status }}"

@@ -243,6 +243,8 @@ type TLSSecretRef struct {
 type ResourceAction struct {
 	// Template is a Go template that renders to a Kubernetes resource YAML.
 	// The template context includes .WebhookResponseData (from webhook's responseExpr if available) and .PromotionStrategy.
+	// Resources must be created in the same namespace as the PromotionEventHook.
+	// If namespace is not specified in the template, it defaults to the PromotionEventHook's namespace.
 	// +required
 	Template string `json:"template"`
 
