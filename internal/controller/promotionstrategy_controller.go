@@ -369,6 +369,8 @@ func (r *PromotionStrategyReconciler) enqueueOutOfSyncCTPs(ctx context.Context, 
 		return ctp.Status.Proposed.Dry.Sha
 	}
 
+	now := time.Now()
+
 	// Helper to get or create state for a CTP (must be called with lock held)
 	getOrCreateState := func(key client.ObjectKey) *ctpEnqueueState {
 		state := r.enqueueStates[key]
@@ -403,8 +405,6 @@ func (r *PromotionStrategyReconciler) enqueueOutOfSyncCTPs(ctx context.Context, 
 
 	// Trigger reconcile only for CTPs that have a different effective dry SHA.
 	// Rate limiting: Only enqueue if not enqueued recently.
-	now := time.Now()
-
 	for _, ctp := range ctps {
 		effectiveSha := getEffectiveDrySha(ctp)
 		if effectiveSha == targetSha {
@@ -473,6 +473,29 @@ func (r *PromotionStrategyReconciler) enqueueOutOfSyncCTPs(ctx context.Context, 
 
 		if r.EnqueueCTP != nil {
 			r.EnqueueCTP(ctp.Namespace, ctp.Name)
+		}
+	}
+
+	// Clean up stale entries from enqueueStates map to prevent memory leaks.
+	// Uses TTL-based cleanup - entries not accessed recently are removed.
+	r.cleanupStaleEnqueueStates(now)
+}
+
+// cleanupStaleEnqueueStates removes entries from the enqueueStates map that
+// haven't been enqueued within the TTL period. This ensures cleanup only happens
+// for CTPs that are no longer being reconciled (i.e., deleted from Kubernetes),
+// rather than just not in a particular PromotionStrategy's current list.
+func (r *PromotionStrategyReconciler) cleanupStaleEnqueueStates(now time.Time) {
+	// TTL for stale entries - entries not enqueued in this duration are removed.
+	// This should be longer than the rate limit threshold to avoid premature cleanup.
+	const stateTTL = 1 * time.Hour
+
+	r.enqueueStateMutex.Lock()
+	defer r.enqueueStateMutex.Unlock()
+
+	for key, state := range r.enqueueStates {
+		if now.Sub(state.lastEnqueueTime) > stateTTL {
+			delete(r.enqueueStates, key)
 		}
 	}
 }
