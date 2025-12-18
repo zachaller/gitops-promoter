@@ -4391,5 +4391,50 @@ var _ = Describe("PromotionStrategy Bug Tests", func() {
 			Expect(secondCount).To(Equal(2), "only ctp-2 should have enqueued in second call")
 			Expect(lastEnqueuedName).To(Equal("ctp-2"), "ctp-2 should be the last enqueued")
 		})
+
+		It("should clean up stale entries based on TTL", func() {
+			reconciler, enqueuedCTPs, enqueueMutex := makeReconciler()
+
+			ctx := context.Background()
+			ctp1 := makeCTP("ctp-1")
+			ctp2 := makeCTP("ctp-2")
+			ctp3 := makeCTP("ctp-3")
+
+			// First call with all three CTPs
+			reconciler.enqueueOutOfSyncCTPs(ctx, []*promoterv1alpha1.ChangeTransferPolicy{ctp1, ctp2, ctp3})
+			enqueueMutex.Lock()
+			firstCount := len(*enqueuedCTPs)
+			enqueueMutex.Unlock()
+			Expect(firstCount).To(Equal(3), "all three CTPs should enqueue")
+
+			// Verify all three have state entries with recent lastEnqueueTime
+			reconciler.enqueueStateMutex.Lock()
+			Expect(reconciler.enqueueStates).To(HaveLen(3), "should have 3 state entries")
+
+			// Manually set ctp-2 and ctp-3 to have old lastEnqueueTime (simulating deleted CTPs)
+			oldTime := time.Now().Add(-2 * time.Hour) // Older than 1 hour TTL
+			reconciler.enqueueStates[client.ObjectKey{Namespace: "test-ns", Name: "ctp-2"}].lastEnqueueTime = oldTime
+			reconciler.enqueueStates[client.ObjectKey{Namespace: "test-ns", Name: "ctp-3"}].lastEnqueueTime = oldTime
+			reconciler.enqueueStateMutex.Unlock()
+
+			// Wait past the rate limit threshold so ctp-1 will enqueue again
+			time.Sleep(16 * time.Second)
+
+			// Call with ctp-1 only - this updates ctp-1's lastEnqueueTime and triggers cleanup
+			reconciler.enqueueOutOfSyncCTPs(ctx, []*promoterv1alpha1.ChangeTransferPolicy{ctp1})
+
+			// Verify stale entries were cleaned up based on TTL
+			reconciler.enqueueStateMutex.Lock()
+			stateCount := len(reconciler.enqueueStates)
+			_, hasCtp1 := reconciler.enqueueStates[client.ObjectKey{Namespace: "test-ns", Name: "ctp-1"}]
+			_, hasCtp2 := reconciler.enqueueStates[client.ObjectKey{Namespace: "test-ns", Name: "ctp-2"}]
+			_, hasCtp3 := reconciler.enqueueStates[client.ObjectKey{Namespace: "test-ns", Name: "ctp-3"}]
+			reconciler.enqueueStateMutex.Unlock()
+
+			Expect(stateCount).To(Equal(1), "should only have 1 state entry after TTL cleanup")
+			Expect(hasCtp1).To(BeTrue(), "ctp-1 should still have state (recently enqueued)")
+			Expect(hasCtp2).To(BeFalse(), "ctp-2 state should be cleaned up (TTL expired)")
+			Expect(hasCtp3).To(BeFalse(), "ctp-3 state should be cleaned up (TTL expired)")
+		})
 	})
 })
