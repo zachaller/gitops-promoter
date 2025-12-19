@@ -115,6 +115,46 @@ var _ = Describe("PullRequest Controller", func() {
 				g.Expect(err.Error()).To(ContainSubstring("pullrequests.promoter.argoproj.io \"" + name + "\" not found"))
 			}, EventuallyTimeout).Should(Succeed())
 		})
+
+		It("should not close a PR that has been merged (race condition protection)", func() {
+			By("Creating a PullRequest")
+
+			name, scmSecret, scmProvider, gitRepo, pullRequest := pullRequestResources(ctx, "merge-close-race", "default")
+
+			typeNamespacedName := types.NamespacedName{
+				Name:      name,
+				Namespace: "default",
+			}
+
+			pullRequest.Spec.Title = "Test PR"
+			pullRequest.Spec.TargetBranch = "development"
+			pullRequest.Spec.SourceBranch = "development-next"
+			pullRequest.Spec.Description = "Test Description"
+
+			Expect(k8sClient.Create(ctx, scmSecret)).To(Succeed())
+			Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
+			Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
+			Expect(k8sClient.Create(ctx, pullRequest)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				Expect(k8sClient.Get(ctx, typeNamespacedName, pullRequest)).To(Succeed())
+				g.Expect(pullRequest.Status.State).To(Equal(promoterv1alpha1.PullRequestOpen))
+			}, EventuallyTimeout).Should(Succeed())
+
+			By("Merging the PullRequest")
+			Eventually(func(g Gomega) {
+				_ = k8sClient.Get(ctx, typeNamespacedName, pullRequest)
+				pullRequest.Spec.State = "merged"
+				g.Expect(k8sClient.Update(ctx, pullRequest)).To(Succeed())
+			}, EventuallyTimeout).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, typeNamespacedName, pullRequest)
+				// After merge, the PR should be deleted
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring("pullrequests.promoter.argoproj.io \"" + name + "\" not found"))
+			}, EventuallyTimeout).Should(Succeed())
+		})
 	})
 })
 

@@ -326,8 +326,30 @@ func (r *PullRequestReconciler) closePullRequest(ctx context.Context, pr *promot
 		return nil
 	}
 
+	// Before closing, verify the PR is actually open on the provider to avoid race conditions
+	// where a merge operation just completed but the status hasn't been updated yet.
+	// This prevents accidentally closing/abandoning a PR that was just successfully merged,
+	// which can happen with some SCM providers like Azure DevOps.
+	found, err := pullRequestProvider.FindOpen(ctx, pr)
+	if err != nil {
+		return fmt.Errorf("failed to check if pull request is open before closing %q: %w", pr.Status.ID, err)
+	}
+
+	if !found {
+		// PR is not open (either already merged, closed, or doesn't exist)
+		// Don't attempt to close it, but check if it might be merged
+		logger.Info("Pull Request is not open on provider, skipping close operation", "prID", pr.Status.ID)
+		// If the status was previously open and now it's not found as open,
+		// it was likely merged or closed externally
+		if pr.Status.State == promoterv1alpha1.PullRequestOpen {
+			// We'll let the next reconciliation or other logic handle the state sync
+			logger.Info("Pull Request was open but is no longer found as open on provider")
+		}
+		return nil
+	}
+
 	logger.Info("Closing Pull Request")
-	err := pullRequestProvider.Close(ctx, pr)
+	err = pullRequestProvider.Close(ctx, pr)
 	if err != nil {
 		return fmt.Errorf("failed to close pull request %q: %w", pr.Status.ID, err)
 	}
