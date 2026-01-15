@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="rocketGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="flameGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f093fb;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#f5576c;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ffa726;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="windowGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#a8edea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#fed6e3;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="200" cy="200" r="180" fill="#f8f9fa" opacity="0.5"/>
+
+  <!-- Stars -->
+  <circle cx="80" cy="100" r="3" fill="#ffd700"/>
+  <circle cx="320" cy="80" r="2.5" fill="#ffd700"/>
+  <circle cx="100" cy="280" r="2" fill="#ffd700"/>
+  <circle cx="310" cy="260" r="3.5" fill="#ffd700"/>
+  <circle cx="150" cy="50" r="2" fill="#ffd700"/>
+  <circle cx="280" cy="180" r="2.5" fill="#ffd700"/>
+
+  <!-- Environment stages (subtle background) -->
+  <g opacity="0.15">
+    <rect x="50" y="320" width="300" height="8" rx="4" fill="#4caf50"/>
+    <text x="200" y="345" font-family="Arial, sans-serif" font-size="10" fill="#666" text-anchor="middle">DEV</text>
+
+    <rect x="50" y="290" width="300" height="8" rx="4" fill="#2196f3"/>
+    <text x="200" y="315" font-family="Arial, sans-serif" font-size="10" fill="#666" text-anchor="middle">TEST</text>
+
+    <rect x="50" y="260" width="300" height="8" rx="4" fill="#ff9800"/>
+    <text x="200" y="285" font-family="Arial, sans-serif" font-size="10" fill="#666" text-anchor="middle">PROD</text>
+  </g>
+
+  <!-- Rocket flames (exhaust) -->
+  <g>
+    <!-- Outer flame -->
+    <ellipse cx="200" cy="280" rx="35" ry="50" fill="url(#flameGradient)" opacity="0.7">
+      <animate attributeName="ry" values="50;55;50" dur="0.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.7;0.5;0.7" dur="0.5s" repeatCount="indefinite"/>
+    </ellipse>
+    <!-- Inner flame -->
+    <ellipse cx="200" cy="275" rx="20" ry="35" fill="#ffeb3b" opacity="0.9">
+      <animate attributeName="ry" values="35;40;35" dur="0.4s" repeatCount="indefinite"/>
+    </ellipse>
+  </g>
+
+  <!-- Rocket body -->
+  <g id="rocket">
+    <!-- Main body -->
+    <ellipse cx="200" cy="180" rx="50" ry="80" fill="url(#rocketGradient)"/>
+
+    <!-- Rocket nose cone -->
+    <path d="M 200,80 Q 230,120 200,140 Q 170,120 200,80 Z" fill="#764ba2"/>
+
+    <!-- Window -->
+    <circle cx="200" cy="160" r="25" fill="url(#windowGradient)" opacity="0.9"/>
+    <circle cx="200" cy="160" r="20" fill="#e3f2fd"/>
+
+    <!-- Happy face inside window -->
+    <g id="face">
+      <!-- Eyes -->
+      <circle cx="192" cy="155" r="3" fill="#333"/>
+      <circle cx="208" cy="155" r="3" fill="#333"/>
+      <!-- Smile -->
+      <path d="M 190,165 Q 200,172 210,165" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </g>
+
+    <!-- Body details/rivets -->
+    <circle cx="180" cy="200" r="3" fill="#5a67d8" opacity="0.5"/>
+    <circle cx="220" cy="200" r="3" fill="#5a67d8" opacity="0.5"/>
+    <circle cx="180" cy="220" r="3" fill="#5a67d8" opacity="0.5"/>
+    <circle cx="220" cy="220" r="3" fill="#5a67d8" opacity="0.5"/>
+
+    <!-- Side fins -->
+    <path d="M 150,220 L 130,250 L 150,245 Z" fill="#667eea" opacity="0.8"/>
+    <path d="M 250,220 L 270,250 L 250,245 Z" fill="#667eea" opacity="0.8"/>
+
+    <!-- Bottom fins -->
+    <path d="M 165,255 L 150,280 L 170,265 Z" fill="#5a67d8"/>
+    <path d="M 235,255 L 250,280 L 230,265 Z" fill="#5a67d8"/>
+
+    <!-- Git branch symbol on rocket body -->
+    <g transform="translate(200, 205)" opacity="0.7">
+      <circle cx="0" cy="-8" r="3" fill="#fff"/>
+      <circle cx="-6" cy="5" r="3" fill="#fff"/>
+      <circle cx="6" cy="5" r="3" fill="#fff"/>
+      <path d="M 0,-5 L 0,0 M -4,2 L 0,0 L 4,2" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <!-- Upward arrow (promotion indicator) -->
+  <g opacity="0.6">
+    <path d="M 200,30 L 200,60" stroke="#4caf50" stroke-width="4" stroke-linecap="round"/>
+    <path d="M 200,30 L 190,40 M 200,30 L 210,40" stroke="#4caf50" stroke-width="4" stroke-linecap="round" fill="none"/>
+  </g>
+
+  <!-- Title -->
+  <text x="200" y="375" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#333" text-anchor="middle">GitOps Promoter</text>
+</svg>
