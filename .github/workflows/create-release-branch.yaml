@@ -1,0 +1,78 @@
+name: Create Release Branch
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.0'  # Trigger on minor releases (x.y.0)
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  create-branch:
+    runs-on: ubuntu-24.04
+    if: github.repository == 'argoproj-labs/gitops-promoter'
+    name: Create Release Branch
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Extract version info
+        id: extract
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+          # Extract major.minor from tag (e.g., v0.20.0 -> 0.20)
+          VERSION=$(echo "$TAG" | sed -E 's/^v([0-9]+)\.([0-9]+)\.[0-9]+$/\1.\2/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          BRANCH_NAME="release/$VERSION"
+          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+          echo "Creating release branch: $BRANCH_NAME from tag: $TAG"
+
+      - name: Check if branch exists
+        id: check
+        run: |
+          if git ls-remote --exit-code --heads origin ${{ steps.extract.outputs.branch }}; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Branch ${{ steps.extract.outputs.branch }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Branch ${{ steps.extract.outputs.branch }} does not exist"
+          fi
+
+      - name: Create and push release branch
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create branch from the tag
+          git checkout -b ${{ steps.extract.outputs.branch }} ${{ steps.extract.outputs.tag }}
+
+          # Push the branch
+          git push origin ${{ steps.extract.outputs.branch }}
+
+          echo "Successfully created release branch: ${{ steps.extract.outputs.branch }}"
+
+      - name: Create branch protection summary
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          echo "## Release Branch Created :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`${{ steps.extract.outputs.branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Source Tag:** \`${{ steps.extract.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- Cherry-pick bug fixes to this branch for patch releases" >> $GITHUB_STEP_SUMMARY
+          echo "- Use the cherry-pick workflow or manual git commands" >> $GITHUB_STEP_SUMMARY
+          echo "- Trigger patch releases by running bump-docs workflow targeting this branch" >> $GITHUB_STEP_SUMMARY

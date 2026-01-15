@@ -1,0 +1,161 @@
+name: Cherry-pick to Release Branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: 'Commit SHA to cherry-pick (full SHA or short SHA)'
+        required: true
+        type: string
+      target_branch:
+        description: 'Target release branch (e.g., release/0.20)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  cherry-pick:
+    runs-on: ubuntu-24.04
+    if: github.repository == 'argoproj-labs/gitops-promoter'
+    name: Cherry-pick Commit
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.target_branch }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Validate inputs
+        id: validate
+        run: |
+          # Validate target branch exists
+          if ! git ls-remote --exit-code --heads origin ${{ github.event.inputs.target_branch }}; then
+            echo "::error::Target branch ${{ github.event.inputs.target_branch }} does not exist"
+            exit 1
+          fi
+
+          # Validate branch name format
+          if ! echo "${{ github.event.inputs.target_branch }}" | grep -qE '^release/[0-9]+\.[0-9]+$'; then
+            echo "::error::Target branch must be in format 'release/x.y' (e.g., release/0.20)"
+            exit 1
+          fi
+
+          # Get full commit SHA
+          FULL_SHA=$(git rev-parse --verify ${{ github.event.inputs.commit_sha }})
+          echo "full_sha=$FULL_SHA" >> $GITHUB_OUTPUT
+          echo "Using commit: $FULL_SHA"
+
+          # Get commit subject for PR title
+          COMMIT_SUBJECT=$(git log -1 --format=%s $FULL_SHA)
+          echo "commit_subject=$COMMIT_SUBJECT" >> $GITHUB_OUTPUT
+
+      - name: Create cherry-pick branch
+        id: branch
+        run: |
+          SHORT_SHA=$(echo "${{ steps.validate.outputs.full_sha }}" | cut -c1-8)
+          BRANCH_NAME="cherry-pick/${{ github.event.inputs.target_branch }}/$SHORT_SHA"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+          git checkout -b "$BRANCH_NAME"
+          echo "Created branch: $BRANCH_NAME"
+
+      - name: Cherry-pick commit
+        id: cherry-pick
+        run: |
+          echo "Cherry-picking commit ${{ steps.validate.outputs.full_sha }} to ${{ github.event.inputs.target_branch }}"
+
+          if git cherry-pick ${{ steps.validate.outputs.full_sha }}; then
+            echo "success=true" >> $GITHUB_OUTPUT
+            echo "Cherry-pick succeeded"
+          else
+            echo "success=false" >> $GITHUB_OUTPUT
+            echo "conflicts=true" >> $GITHUB_OUTPUT
+
+            # Get conflicted files
+            CONFLICTS=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+            echo "conflicted_files=$CONFLICTS" >> $GITHUB_OUTPUT
+
+            echo "::warning::Cherry-pick has conflicts in files: $CONFLICTS"
+
+            # Abort the cherry-pick
+            git cherry-pick --abort
+            exit 1
+          fi
+
+      - name: Push cherry-pick branch
+        if: steps.cherry-pick.outputs.success == 'true'
+        run: |
+          git push origin ${{ steps.branch.outputs.branch_name }}
+
+      - name: Create Pull Request
+        if: steps.cherry-pick.outputs.success == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ steps.branch.outputs.branch_name }}
+          base: ${{ github.event.inputs.target_branch }}
+          title: "[Cherry-pick] ${{ steps.validate.outputs.commit_subject }}"
+          body: |
+            ## Cherry-pick to Release Branch
+
+            **Original Commit:** ${{ steps.validate.outputs.full_sha }}
+            **Target Branch:** `${{ github.event.inputs.target_branch }}`
+            **Original Commit Message:**
+            ```
+            ${{ steps.validate.outputs.commit_subject }}
+            ```
+
+            ---
+            This PR was automatically created by the cherry-pick workflow.
+
+            ### Review Checklist
+            - [ ] Verify the changes are appropriate for this release branch
+            - [ ] Ensure tests pass
+            - [ ] Confirm no unintended changes were introduced
+          delete-branch: true
+
+      - name: Create conflict summary
+        if: steps.cherry-pick.outputs.conflicts == 'true'
+        run: |
+          echo "## Cherry-pick Failed :x:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The cherry-pick resulted in conflicts and requires manual resolution." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ steps.validate.outputs.full_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Branch:** \`${{ github.event.inputs.target_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Conflicted Files:** ${{ steps.cherry-pick.outputs.conflicted_files }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Manual Cherry-pick Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "git checkout ${{ github.event.inputs.target_branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "git pull" >> $GITHUB_STEP_SUMMARY
+          echo "git checkout -b fix-cherry-pick-${{ steps.validate.outputs.full_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "git cherry-pick ${{ steps.validate.outputs.full_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "# Resolve conflicts manually" >> $GITHUB_STEP_SUMMARY
+          echo "git add ." >> $GITHUB_STEP_SUMMARY
+          echo "git cherry-pick --continue" >> $GITHUB_STEP_SUMMARY
+          echo "git push origin fix-cherry-pick-${{ steps.validate.outputs.full_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create success summary
+        if: steps.cherry-pick.outputs.success == 'true'
+        run: |
+          echo "## Cherry-pick Successful :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ steps.validate.outputs.full_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Branch:** \`${{ github.event.inputs.target_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**PR Branch:** \`${{ steps.branch.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "A pull request has been created for review." >> $GITHUB_STEP_SUMMARY
