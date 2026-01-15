@@ -231,6 +231,13 @@
   color: $argo-color-gray-6;
 }
 
+.commit-sha-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .commit-sha {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
   font-size: 12px;
@@ -264,6 +271,46 @@
   &:focus {
     outline: 2px solid #007bff;
     outline-offset: 1px;
+  }
+}
+
+.copy-sha-button {
+  background: none;
+  border: 1px solid $argo-color-gray-4;
+  color: $argo-color-gray-6;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+
+  &:hover {
+    background-color: $argo-color-gray-2;
+    border-color: $argo-color-gray-5;
+    color: $argo-color-gray-7;
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  &:focus {
+    outline: 2px solid $argo-running;
+    outline-offset: 2px;
+  }
+
+  &.copied {
+    background-color: rgba(24, 190, 148, 0.1);
+    border-color: $argo-success;
+    color: $argo-success;
+
+    &:hover {
+      background-color: rgba(24, 190, 148, 0.15);
+    }
   }
 }
 

@@ -9,9 +9,10 @@ import './Card.scss';
 
 export interface CardProps {
   environments: Environment[];
+  onCopySha?: (sha: string) => void;
 }
 
-const Card: React.FC<CardProps> = ({ environments }) => {
+const Card: React.FC<CardProps> = ({ environments, onCopySha }) => {
   const [historyMode, setHistoryMode] = useState<{ [branch: string]: number }>({});
   const [hoveredIcon, setHoveredIcon] = useState<string | null>(null);
   const [isVerticalLayout, setIsVerticalLayout] = useState<boolean>(true);
@@ -130,6 +131,7 @@ const Card: React.FC<CardProps> = ({ environments }) => {
                     healthSummary={env.activeChecksSummary}
                     prUrl={env.activePrUrl}
                     prNumber={env.activePrNumber?.toString()}
+                    onCopySha={onCopySha}
                   />
 
 
@@ -148,6 +150,7 @@ const Card: React.FC<CardProps> = ({ environments }) => {
                       healthSummary={env.proposedChecksSummary}
                       prUrl={env.prUrl}
                       prNumber={env.prNumber?.toString()}
+                      onCopySha={onCopySha}
                     />
                   )}
                 </div>

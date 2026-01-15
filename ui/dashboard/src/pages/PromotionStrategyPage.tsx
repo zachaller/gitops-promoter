@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { namespaceStore } from '../stores/NamespaceStore'
 import { viewStore } from '../stores/ViewStore';
@@ -7,6 +7,7 @@ import BackButton from '../components/BackButton';
 import HeaderBar from '@lib/components/HeaderBar';
 import PromotionStrategyDetailsView from '../components/PromotionStrategyDetailsView';
 import { LiveManifestView } from '@lib/components/LiveManifestView';
+import { useToast } from '../components/Toast/ToastContext';
 import type { PromotionStrategy } from '@shared/utils/PSData';
 import './PromotionStrategyPage.scss';
 
@@ -30,8 +31,13 @@ const PromotionStrategyPage: React.FC<PromotionStrategyPageProps> = ({ namespace
   const currentNamespace = namespaceStore((s: NamespaceStore) => s.namespace);
   const setNamespace = namespaceStore((s: NamespaceStore) => s.setNamespace);
   const { currentView, setView } = viewStore();
+  const { success } = useToast();
 
   const { items, fetchItems, subscribe, unsubscribe } = PromotionStrategyStore();
+
+  const handleCopySha = useCallback((sha: string) => {
+    success(`Copied ${sha.substring(0, 8)} to clipboard`);
+  }, [success]);
 
   // Find the selected strategy
   const selectedStrategy = items.find(
@@ -107,7 +113,7 @@ const PromotionStrategyPage: React.FC<PromotionStrategyPageProps> = ({ namespace
 
       {currentView === 'cards' ? (
         <div style={{ marginTop: '40px' }}>
-          <PromotionStrategyDetailsView strategy={selectedStrategy} />
+          <PromotionStrategyDetailsView strategy={selectedStrategy} onCopySha={handleCopySha} />
         </div>
       ) : (
         <LiveManifestView strategy={selectedStrategy} />

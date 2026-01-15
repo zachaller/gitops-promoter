@@ -1,0 +1,103 @@
+@use '../../../../components-lib/src/styles/colors' as *;
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 40px;
+  text-align: center;
+  animation: fade-in 0.4s ease-out;
+
+  &__icon {
+    font-size: 64px;
+    color: $argo-color-gray-5;
+    margin-bottom: 24px;
+    opacity: 0.7;
+
+    svg {
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+    }
+  }
+
+  &__title {
+    font-size: 24px;
+    font-weight: 600;
+    color: $argo-color-gray-7;
+    margin-bottom: 12px;
+    font-family: 'Heebo', sans-serif;
+  }
+
+  &__description {
+    font-size: 16px;
+    color: $argo-color-gray-6;
+    line-height: 1.6;
+    max-width: 500px;
+    margin-bottom: 32px;
+    font-family: 'Heebo', sans-serif;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  &__button {
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: 'Heebo', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    background: $argo-running;
+    color: white;
+
+    &:hover {
+      background: darken($argo-running, 10%);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(13, 173, 234, 0.3);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+
+    &:focus {
+      outline: 2px solid $argo-running;
+      outline-offset: 2px;
+    }
+
+    &--secondary {
+      background: white;
+      color: $argo-running;
+      border: 2px solid $argo-running;
+
+      &:hover {
+        background: rgba(13, 173, 234, 0.05);
+        border-color: darken($argo-running, 10%);
+        color: darken($argo-running, 10%);
+        box-shadow: 0 4px 12px rgba(13, 173, 234, 0.2);
+      }
+
+      &:focus {
+        outline: 2px solid $argo-running;
+        outline-offset: 2px;
+      }
+    }
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

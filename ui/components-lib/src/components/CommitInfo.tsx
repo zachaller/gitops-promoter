@@ -1,6 +1,7 @@
 import { GoArchive } from "react-icons/go";
 import { BsBraces } from 'react-icons/bs';
 import { GoGitPullRequest } from 'react-icons/go';
+import { FaCopy, FaCheck } from 'react-icons/fa';
 import { StatusIcon, StatusType } from './StatusIcon';
 import React, { useState, useRef, useCallback } from 'react';
 import TimeAgo from './TimeAgo';
@@ -21,25 +22,28 @@ export interface CommitInfoProps {
   healthSummary?: { successCount: number; totalCount: number; shouldDisplay: boolean };
   prUrl: string | null;
   prNumber?: string;
+  onCopySha?: (sha: string) => void;
 }
 
 // Combined component to display commit information and groups
-const CommitInfo: React.FC<CommitInfoProps> = ({ 
+const CommitInfo: React.FC<CommitInfoProps> = ({
   title,
-  deploymentCommit, 
-  codeCommit, 
-  isActive = false, 
-  status = 'unknown', 
-  className = '', 
-  deploymentCommitUrl, 
-  codeCommitUrl, 
+  deploymentCommit,
+  codeCommit,
+  isActive = false,
+  status = 'unknown',
+  className = '',
+  deploymentCommitUrl,
+  codeCommitUrl,
   checks,
   healthSummary,
-  prUrl, 
-  prNumber
+  prUrl,
+  prNumber,
+  onCopySha
 }) => {
   const [showDeploymentTooltip, setShowDeploymentTooltip] = useState(false);
   const [showCodeTooltip, setShowCodeTooltip] = useState(false);
+  const [copiedSha, setCopiedSha] = useState<string | null>(null);
   const deploymentTimeoutRef = useRef<number | null>(null);
   const codeTimeoutRef = useRef<number | null>(null);
 
@@ -53,21 +57,69 @@ const CommitInfo: React.FC<CommitInfoProps> = ({
     return 'commit-code';
   };
 
+  const handleCopySha = useCallback(async (sha: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      await navigator.clipboard.writeText(sha);
+      setCopiedSha(sha);
+      if (onCopySha) {
+        onCopySha(sha);
+      }
+      setTimeout(() => setCopiedSha(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy SHA:', err);
+    }
+  }, [onCopySha]);
+
   const renderSha = (commit: any, commitUrl?: string) => {
     const sha = commit.sha?.substring(0, 8) || 'N/A';
+    const fullSha = commit.sha || '';
+    const isCopied = copiedSha === fullSha;
+
     if (commitUrl && commit.sha) {
       return (
-        <a 
-          href={commitUrl} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="commit-sha-link"
-          title={`View commit ${sha}`}
-        >
-          {sha}
-        </a>
+        <div className="commit-sha-wrapper">
+          <a
+            href={commitUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="commit-sha-link"
+            title={`View commit ${sha}`}
+          >
+            {sha}
+          </a>
+          {fullSha && (
+            <button
+              className={`copy-sha-button ${isCopied ? 'copied' : ''}`}
+              onClick={(e) => handleCopySha(fullSha, e)}
+              title={isCopied ? 'Copied!' : 'Copy full SHA'}
+              aria-label={isCopied ? 'Copied!' : 'Copy full SHA'}
+            >
+              {isCopied ? <FaCheck /> : <FaCopy />}
+            </button>
+          )}
+        </div>
       );
     }
+
+    if (fullSha) {
+      return (
+        <div className="commit-sha-wrapper">
+          <span className="commit-sha">{sha}</span>
+          <button
+            className={`copy-sha-button ${isCopied ? 'copied' : ''}`}
+            onClick={(e) => handleCopySha(fullSha, e)}
+            title={isCopied ? 'Copied!' : 'Copy full SHA'}
+            aria-label={isCopied ? 'Copied!' : 'Copy full SHA'}
+          >
+            {isCopied ? <FaCheck /> : <FaCopy />}
+          </button>
+        </div>
+      );
+    }
+
     return <span className="commit-sha">{sha}</span>;
   };
 

@@ -1,0 +1,70 @@
+@use '../../../../components-lib/src/styles/colors' as *;
+
+.skeleton-tile {
+  pointer-events: none;
+  border-left-color: $argo-color-gray-4 !important;
+
+  &:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+    border-left-color: $argo-color-gray-4 !important;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    $argo-color-gray-2 0%,
+    $argo-color-gray-1 50%,
+    $argo-color-gray-2 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+  border-radius: 4px;
+
+  &-icon {
+    width: 32px;
+    height: 32px;
+    margin-right: 8px;
+  }
+
+  &-title {
+    height: 20px;
+    width: 60%;
+  }
+
+  &-label {
+    height: 14px;
+    width: 100px;
+  }
+
+  &-text {
+    height: 14px;
+    width: 70%;
+  }
+
+  &-status-icon {
+    height: 18px;
+    width: 18px;
+    border-radius: 50%;
+  }
+
+  &-env-text {
+    height: 14px;
+    width: 80%;
+  }
+
+  &-env-icon {
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+  }
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

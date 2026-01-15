@@ -1,0 +1,243 @@
+@use '../../../../components-lib/src/styles/colors' as *;
+
+.search-filter {
+  margin-bottom: 24px;
+
+  &__main {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  &__search-box {
+    flex: 1;
+    position: relative;
+    max-width: 500px;
+  }
+
+  &__search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: $argo-color-gray-5;
+    font-size: 16px;
+    pointer-events: none;
+  }
+
+  &__input {
+    width: 100%;
+    padding: 12px 40px 12px 44px;
+    border: 2px solid $argo-color-gray-4;
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: 'Heebo', sans-serif;
+    transition: all 0.2s ease;
+    background: white;
+
+    &:focus {
+      outline: none;
+      border-color: $argo-running;
+      box-shadow: 0 0 0 3px rgba(13, 173, 234, 0.1);
+    }
+
+    &::placeholder {
+      color: $argo-color-gray-5;
+    }
+  }
+
+  &__clear-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: $argo-color-gray-5;
+    cursor: pointer;
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: $argo-color-gray-2;
+      color: $argo-color-gray-7;
+    }
+  }
+
+  &__filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border: 2px solid $argo-color-gray-4;
+    border-radius: 8px;
+    background: white;
+    color: $argo-color-gray-7;
+    font-size: 15px;
+    font-weight: 500;
+    font-family: 'Heebo', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+
+    &:hover {
+      border-color: $argo-color-gray-5;
+      background: $argo-color-gray-1;
+    }
+
+    &.active {
+      border-color: $argo-running;
+      background: rgba(13, 173, 234, 0.05);
+      color: $argo-running;
+    }
+
+    &:focus {
+      outline: 2px solid $argo-running;
+      outline-offset: 2px;
+    }
+  }
+
+  &__filter-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    background: $argo-failed;
+    border-radius: 50%;
+    border: 2px solid white;
+  }
+
+  &__clear-all {
+    padding: 12px 20px;
+    border: 2px solid $argo-color-gray-4;
+    border-radius: 8px;
+    background: white;
+    color: $argo-color-gray-7;
+    font-size: 15px;
+    font-weight: 500;
+    font-family: 'Heebo', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      border-color: $argo-failed;
+      background: rgba(233, 109, 118, 0.05);
+      color: $argo-failed;
+    }
+
+    &:focus {
+      outline: 2px solid $argo-failed;
+      outline-offset: 2px;
+    }
+  }
+
+  &__filters {
+    margin-top: 16px;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    border: 2px solid $argo-color-gray-4;
+    animation: filter-slide-down 0.2s ease-out;
+  }
+
+  &__filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  &__filter-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: $argo-color-gray-7;
+    font-family: 'Heebo', sans-serif;
+  }
+
+  &__status-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  &__status-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: 2px solid $argo-color-gray-4;
+    border-radius: 20px;
+    background: white;
+    color: $argo-color-gray-7;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: 'Heebo', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: $argo-color-gray-1;
+      border-color: $argo-color-gray-5;
+    }
+
+    &.active {
+      background: rgba(13, 173, 234, 0.05);
+      font-weight: 600;
+    }
+
+    &:focus {
+      outline: 2px solid $argo-running;
+      outline-offset: 2px;
+    }
+  }
+
+  &__status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  &__results {
+    margin-top: 12px;
+    font-size: 14px;
+    color: $argo-color-gray-6;
+    font-family: 'Heebo', sans-serif;
+  }
+}
+
+@keyframes filter-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .search-filter {
+    &__main {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    &__search-box {
+      max-width: none;
+    }
+
+    &__status-buttons {
+      flex-direction: column;
+    }
+
+    &__status-btn {
+      justify-content: flex-start;
+    }
+  }
+}

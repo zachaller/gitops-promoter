@@ -1,0 +1,136 @@
+@use '../../../../components-lib/src/styles/colors' as *;
+
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(233, 109, 118, 0.05) 0%, rgba(233, 109, 118, 0.02) 100%);
+
+  &__content {
+    max-width: 600px;
+    text-align: center;
+    background: white;
+    border-radius: 12px;
+    padding: 48px 40px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    border-left: 4px solid $argo-failed;
+  }
+
+  &__icon {
+    font-size: 64px;
+    margin-bottom: 24px;
+    animation: error-shake 0.5s ease-in-out;
+  }
+
+  &__title {
+    font-size: 28px;
+    font-weight: 600;
+    color: $argo-color-gray-7;
+    margin-bottom: 16px;
+    font-family: 'Heebo', sans-serif;
+  }
+
+  &__message {
+    font-size: 16px;
+    color: $argo-color-gray-6;
+    line-height: 1.6;
+    margin-bottom: 32px;
+    font-family: 'Heebo', sans-serif;
+  }
+
+  &__details {
+    text-align: left;
+    margin-bottom: 32px;
+    background: $argo-color-gray-1;
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid $argo-color-gray-4;
+
+    summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: $argo-color-gray-7;
+      font-family: 'Heebo', sans-serif;
+      padding: 8px;
+      border-radius: 4px;
+
+      &:hover {
+        background: $argo-color-gray-2;
+      }
+    }
+  }
+
+  &__error-stack {
+    margin-top: 16px;
+    padding: 16px;
+    background: white;
+    border-radius: 4px;
+    border: 1px solid $argo-color-gray-4;
+    overflow-x: auto;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: $argo-failed;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+
+  &__button {
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: 'Heebo', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    background: $argo-running;
+    color: white;
+
+    &:hover {
+      background: darken($argo-running, 10%);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(13, 173, 234, 0.3);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+
+    &:focus {
+      outline: 2px solid $argo-running;
+      outline-offset: 2px;
+    }
+
+    &--secondary {
+      background: white;
+      color: $argo-color-gray-7;
+      border: 2px solid $argo-color-gray-4;
+
+      &:hover {
+        background: $argo-color-gray-1;
+        border-color: $argo-color-gray-5;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+
+      &:focus {
+        outline: 2px solid $argo-color-gray-5;
+        outline-offset: 2px;
+      }
+    }
+  }
+}
+
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
