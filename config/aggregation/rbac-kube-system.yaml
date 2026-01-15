@@ -1,0 +1,23 @@
+# RoleBinding for reading the extension-apiserver-authentication ConfigMap
+# Note: This RoleBinding must be in kube-system namespace where the Role exists
+# This file is separate to avoid namespace transformation by kustomize
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: promoter-aggregation-server-auth-reader
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: rolebinding
+    app.kubernetes.io/instance: aggregation-server-auth-reader
+    app.kubernetes.io/component: aggregation-server
+    app.kubernetes.io/created-by: promoter
+    app.kubernetes.io/part-of: promoter
+    app.kubernetes.io/managed-by: kustomize
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+  - kind: ServiceAccount
+    name: aggregation-server
+    namespace: promoter-system

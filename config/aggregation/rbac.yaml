@@ -1,0 +1,169 @@
+---
+# ServiceAccount for the aggregation server
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aggregation-server
+  namespace: system
+  labels:
+    app.kubernetes.io/name: serviceaccount
+    app.kubernetes.io/instance: aggregation-server
+    app.kubernetes.io/component: aggregation-server
+    app.kubernetes.io/created-by: promoter
+    app.kubernetes.io/part-of: promoter
+    app.kubernetes.io/managed-by: kustomize
+---
+# ClusterRole for reading promoter resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aggregation-server-reader
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: aggregation-server-reader
+    app.kubernetes.io/component: aggregation-server
+    app.kubernetes.io/created-by: promoter
+    app.kubernetes.io/part-of: promoter
+    app.kubernetes.io/managed-by: kustomize
+rules:
+  # Read PromotionStrategy resources
+  - apiGroups:
+      - promoter.argoproj.io
+    resources:
+      - promotionstrategies
+    verbs:
+      - get
+      - list
+      - watch
+  # Read GitRepository resources
+  - apiGroups:
+      - promoter.argoproj.io
+    resources:
+      - gitrepositories
+    verbs:
+      - get
+      - list
+      - watch
+  # Read ChangeTransferPolicy resources
+  - apiGroups:
+      - promoter.argoproj.io
+    resources:
+      - changetransferpolicies
+    verbs:
+      - get
+      - list
+      - watch
+  # Read CommitStatus resources
+  - apiGroups:
+      - promoter.argoproj.io
+    resources:
+      - commitstatuses
+    verbs:
+      - get
+      - list
+      - watch
+  # Read ArgoCDCommitStatus resources
+  - apiGroups:
+      - promoter.argoproj.io
+    resources:
+      - argocdcommitstatuses
+    verbs:
+      - get
+      - list
+      - watch
+  # Read GitCommitStatus resources
+  - apiGroups:
+      - promoter.argoproj.io
+    resources:
+      - gitcommitstatuses
+    verbs:
+      - get
+      - list
+      - watch
+  # Read TimedCommitStatus resources
+  - apiGroups:
+      - promoter.argoproj.io
+    resources:
+      - timedcommitstatuses
+    verbs:
+      - get
+      - list
+      - watch
+  # Read PullRequest resources
+  - apiGroups:
+      - promoter.argoproj.io
+    resources:
+      - pullrequests
+    verbs:
+      - get
+      - list
+      - watch
+---
+# ClusterRoleBinding for the aggregation server
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aggregation-server-reader
+  labels:
+    app.kubernetes.io/name: clusterrolebinding
+    app.kubernetes.io/instance: aggregation-server-reader
+    app.kubernetes.io/component: aggregation-server
+    app.kubernetes.io/created-by: promoter
+    app.kubernetes.io/part-of: promoter
+    app.kubernetes.io/managed-by: kustomize
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aggregation-server-reader
+subjects:
+  - kind: ServiceAccount
+    name: aggregation-server
+    namespace: promoter-system
+---
+# ClusterRole for authentication delegation
+# This allows the aggregation server to delegate authentication to the kube-apiserver
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aggregation-server:system:auth-delegator
+  labels:
+    app.kubernetes.io/name: clusterrolebinding
+    app.kubernetes.io/instance: aggregation-server-auth-delegator
+    app.kubernetes.io/component: aggregation-server
+    app.kubernetes.io/created-by: promoter
+    app.kubernetes.io/part-of: promoter
+    app.kubernetes.io/managed-by: kustomize
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: aggregation-server
+    namespace: promoter-system
+---
+# ClusterRole for users to access the aggregation API
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: promoter-aggregation-viewer
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: promoter-aggregation-viewer
+    app.kubernetes.io/component: aggregation-server
+    app.kubernetes.io/created-by: promoter
+    app.kubernetes.io/part-of: promoter
+    app.kubernetes.io/managed-by: kustomize
+    # This label allows the role to be aggregated to the view role
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups:
+      - aggregation.promoter.argoproj.io
+    resources:
+      - promotionstrategyviews
+    verbs:
+      - get
+      - list
+      - watch

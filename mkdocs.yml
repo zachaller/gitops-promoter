@@ -36,6 +36,7 @@ nav:
       - Git Commit: commit-status-controllers/git-commit.md
       - Timed: commit-status-controllers/timed.md
       - Development Best Practices: commit-status-controllers/development-best-practices.md
+  - Aggregation API Server: aggregation-api-server.md
   - Multi-Tenancy: multi-tenancy.md
   - Monitoring:
       - Overview: monitoring/index.md

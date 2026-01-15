@@ -1,0 +1,34 @@
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1alpha1.aggregation.promoter.argoproj.io
+  labels:
+    app.kubernetes.io/name: apiservice
+    app.kubernetes.io/instance: aggregation-apiservice
+    app.kubernetes.io/component: aggregation-server
+    app.kubernetes.io/created-by: promoter
+    app.kubernetes.io/part-of: promoter
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  # The group name for the aggregation API
+  group: aggregation.promoter.argoproj.io
+  # The version of the aggregation API
+  version: v1alpha1
+  # The service that implements this API
+  service:
+    name: aggregation-server
+    namespace: promoter-system
+    port: 443
+  # Group priority determines the order in which API groups are returned
+  # Higher values are preferred
+  groupPriorityMinimum: 1000
+  # Version priority determines the order of versions within a group
+  # Higher values are preferred
+  versionPriority: 100
+  # insecureSkipTLSVerify can be set to true to skip TLS verification
+  # This should only be used for development/testing
+  # In production, use caBundle instead
+  insecureSkipTLSVerify: false
+  # caBundle is the PEM encoded CA bundle for verifying the serving certificate
+  # This should be populated by cert-manager or similar
+  # caBundle: <base64-encoded-ca-cert>

@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 
+	"github.com/argoproj-labs/gitops-promoter/internal/aggregationapi/apiserver"
 	"github.com/argoproj-labs/gitops-promoter/internal/controller"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 	"github.com/argoproj-labs/gitops-promoter/internal/webserver"
@@ -46,11 +47,17 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+
+	"k8s.io/apiserver/pkg/endpoints/openapi"
+	genericapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/options"
+	"k8s.io/apiserver/pkg/util/compatibility"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
-
+	"k8s.io/kube-openapi/pkg/common"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -408,6 +415,131 @@ func newDashboardCommand(clientConfig clientcmd.ClientConfig) *cobra.Command {
 	return cmd
 }
 
+func newAggregationServerCommand(clientConfig clientcmd.ClientConfig) *cobra.Command {
+	var securePort int
+	var certDir string
+	var tlsCertFile string
+	var tlsKeyFile string
+
+	cmd := &cobra.Command{
+		Use:   "aggregation-server",
+		Short: "GitOps Promoter aggregation API server",
+		Long: `The aggregation API server provides a read-only aggregated view of PromotionStrategy resources.
+
+It exposes a virtual resource 'PromotionStrategyView' that aggregates all related resources
+(GitRepository, ChangeTransferPolicy, CommitStatuses, PullRequests) for a given PromotionStrategy.
+
+Access the aggregated view using:
+  kubectl get promotionstrategyview -n <namespace> <name>
+
+Or via the REST API:
+  GET /apis/aggregation.promoter.argoproj.io/v1alpha1/namespaces/<namespace>/promotionstrategyviews/<name>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAggregationServer(clientConfig, securePort, certDir, tlsCertFile, tlsKeyFile)
+		},
+	}
+
+	cmd.Flags().IntVar(&securePort, "secure-port", 6443, "The port on which to serve HTTPS with authentication and authorization.")
+	cmd.Flags().StringVar(&certDir, "cert-dir", "", "The directory where the TLS certs are located. If --tls-cert-file and --tls-private-key-file are provided, this flag will be ignored.")
+	cmd.Flags().StringVar(&tlsCertFile, "tls-cert-file", "", "File containing the default x509 Certificate for HTTPS.")
+	cmd.Flags().StringVar(&tlsKeyFile, "tls-private-key-file", "", "File containing the default x509 private key matching --tls-cert-file.")
+
+	return cmd
+}
+
+func runAggregationServer(clientConfig clientcmd.ClientConfig, securePort int, certDir, tlsCertFile, tlsKeyFile string) error {
+	restConfig, err := clientConfig.ClientConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get client config: %w", err)
+	}
+
+	// Create a controller-runtime client for querying promoter resources
+	k8sClient, err := client.New(restConfig, client.Options{
+		Scheme: scheme,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+
+	// Set up secure serving options only
+	secureServingOptions := options.NewSecureServingOptions()
+	secureServingOptions.BindPort = securePort
+	if certDir != "" {
+		secureServingOptions.ServerCert.CertDirectory = certDir
+	}
+	if tlsCertFile != "" && tlsKeyFile != "" {
+		secureServingOptions.ServerCert.CertKey.CertFile = tlsCertFile
+		secureServingOptions.ServerCert.CertKey.KeyFile = tlsKeyFile
+	}
+
+	// Create the server config with default values
+	serverConfig := genericapiserver.NewConfig(apiserver.Codecs)
+
+	// Set the effective version (required for Complete())
+	serverConfig.EffectiveVersion = compatibility.DefaultBuildEffectiveVersion()
+
+	// Apply secure serving options
+	if err := secureServingOptions.ApplyTo(&serverConfig.SecureServing); err != nil {
+		return fmt.Errorf("failed to apply secure serving options: %w", err)
+	}
+
+	// Set up loopback client config (required for GenericAPIServer.New())
+	// For local development, we use the same kubeconfig
+	serverConfig.LoopbackClientConfig = restConfig
+
+	// Set up minimal OpenAPI config (required even when skipping installation)
+	// We provide empty definitions since we don't have generated OpenAPI specs
+	namer := openapi.NewDefinitionNamer(apiserver.Scheme)
+	serverConfig.OpenAPIV3Config = genericapiserver.DefaultOpenAPIV3Config(
+		func(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
+			return map[string]common.OpenAPIDefinition{}
+		},
+		namer,
+	)
+	serverConfig.OpenAPIV3Config.Info.Title = "Promoter Aggregation API"
+	serverConfig.OpenAPIV3Config.Info.Version = "v1alpha1"
+	// Ignore our API paths to avoid OpenAPI definition requirements
+	serverConfig.OpenAPIV3Config.IgnorePrefixes = []string{"/apis/aggregation.promoter.argoproj.io"}
+
+	// Skip OpenAPI installation since we don't have generated definitions
+	serverConfig.SkipOpenAPIInstallation = true
+
+	// Create the aggregation server config
+	recommendedConfig := &genericapiserver.RecommendedConfig{
+		Config: *serverConfig,
+	}
+
+	config := &apiserver.Config{
+		GenericConfig: recommendedConfig,
+		ExtraConfig: apiserver.ExtraConfig{
+			Client: k8sClient,
+		},
+	}
+
+	// Create and run the server
+	server, err := config.Complete().New()
+	if err != nil {
+		return fmt.Errorf("failed to create aggregation server: %w", err)
+	}
+
+	// Get the address for logging
+	addr := fmt.Sprintf(":%d", securePort)
+	if serverConfig.SecureServing != nil && serverConfig.SecureServing.Listener != nil {
+		addr = serverConfig.SecureServing.Listener.Addr().String()
+	}
+	setupLog.Info("Starting aggregation API server", "address", addr)
+
+	// Create a stop channel from signal handler
+	ctx := ctrl.SetupSignalHandler()
+	stopCh := ctx.Done()
+
+	// Prepare the server (sets up listeners, etc.)
+	prepared := server.GenericAPIServer.PrepareRun()
+
+	// Run the server
+	return prepared.Run(stopCh)
+}
+
 func newCommand() *cobra.Command {
 	var clientConfig clientcmd.ClientConfig
 
@@ -444,6 +576,7 @@ func newCommand() *cobra.Command {
 	clientConfig = addKubectlFlags(cmd.PersistentFlags())
 	cmd.AddCommand(newControllerCommand(clientConfig))
 	cmd.AddCommand(newDashboardCommand(clientConfig))
+	cmd.AddCommand(newAggregationServerCommand(clientConfig))
 	return cmd
 }
 

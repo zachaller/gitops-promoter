@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aggregation-server
+  namespace: system
+  labels:
+    control-plane: aggregation-server
+    app.kubernetes.io/name: service
+    app.kubernetes.io/instance: aggregation-server
+    app.kubernetes.io/component: aggregation-server
+    app.kubernetes.io/created-by: promoter
+    app.kubernetes.io/part-of: promoter
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  selector:
+    control-plane: aggregation-server
+  ports:
+    - port: 443
+      targetPort: 6443
+      protocol: TCP
+      name: https

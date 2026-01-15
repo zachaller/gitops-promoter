@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aggregation-server
+  namespace: system
+  labels:
+    control-plane: aggregation-server
+    app.kubernetes.io/name: deployment
+    app.kubernetes.io/instance: aggregation-server
+    app.kubernetes.io/component: aggregation-server
+    app.kubernetes.io/created-by: promoter
+    app.kubernetes.io/part-of: promoter
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  selector:
+    matchLabels:
+      control-plane: aggregation-server
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: aggregation-server
+      labels:
+        control-plane: aggregation-server
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - command:
+            - /gitops-promoter
+            - aggregation-server
+          args:
+            - --secure-port=6443
+            - --tls-cert-file=/var/run/secrets/serving-cert/tls.crt
+            - --tls-private-key-file=/var/run/secrets/serving-cert/tls.key
+          image: quay.io/argoprojlabs/gitops-promoter:latest
+          name: aggregation-server
+          ports:
+            - containerPort: 6443
+              name: https
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - 'ALL'
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 6443
+              scheme: HTTPS
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 6443
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi
+          volumeMounts:
+            - name: serving-cert
+              mountPath: /var/run/secrets/serving-cert
+              readOnly: true
+      serviceAccountName: aggregation-server
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: serving-cert
+          secret:
+            secretName: aggregation-server-cert
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: aggregation-server
+                topologyKey: kubernetes.io/hostname
