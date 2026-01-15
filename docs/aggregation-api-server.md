@@ -200,7 +200,49 @@ For easier local testing without TLS concerns:
        port: 443
    ```
 
-   Note: For local development, you may need to use a tool like `kubectl port-forward` or configure your cluster to reach your local machine.
+   **Important**: The APIService above points to a Service inside the cluster, but your aggregation server is running on your local machine. To make this work, you have several options:
+
+   **Option A: Direct curl access (simplest)**
+
+   Skip the APIService registration entirely and access the aggregation server directly:
+
+   ```bash
+   # Access the local server directly
+   curl -k https://localhost:6443/apis/aggregation.promoter.argoproj.io/v1alpha1/namespaces/default/promotionstrategyviews
+   ```
+
+   **Option B: Use an ExternalName Service**
+
+   If your cluster can reach your local machine (e.g., Docker Desktop, kind with host networking):
+
+   ```yaml
+   c  # For Docker Desktop, kind, Rancher Desktop (dockerd)
+     # externalName: host.rancher-desktop.internal  # For Rancher Desktop (containerd)
+     # externalName: host.k3d.internal              # For k3d
+     # externalName: 192.168.1.100                  # Your machine's IP (works for any cluster)
+   ```
+
+   | Local Kubernetes | externalName |
+   |------------------|--------------|
+   | Docker Desktop | `host.docker.internal` |
+   | kind | `host.docker.internal` |
+   | Rancher Desktop (dockerd) | `host.docker.internal` |
+   | Rancher Desktop (containerd) | `host.rancher-desktop.internal` |
+   | k3d | `host.k3d.internal` |
+   | minikube | Your machine's IP address |
+   | Other | Your machine's IP address |
+
+   **Option C: Use kubectl port-forward in reverse (for remote clusters)**
+
+   For clusters that cannot directly reach your machine, you can use a tool like [telepresence](https://www.telepresence.io/) or [ktunnel](https://github.com/omrikiei/ktunnel) to expose your local server to the cluster.
+
+   **Option D: Deploy to the cluster**
+
+   For the most realistic testing, deploy the aggregation server to your cluster using the provided manifests:
+
+   ```bash
+   kubectl apply -k config/aggregation/
+   ```
 
 ### Command Line Options
 
