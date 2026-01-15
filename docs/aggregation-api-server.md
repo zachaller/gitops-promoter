@@ -168,6 +168,9 @@ curl -k https://localhost:6443/apis/aggregation.promoter.argoproj.io/v1alpha1
 
 # List PromotionStrategyViews in a namespace
 curl -k https://localhost:6443/apis/aggregation.promoter.argoproj.io/v1alpha1/namespaces/default/promotionstrategyviews
+
+# Get a specific PromotionStrategyView
+curl -k https://localhost:6443/apis/aggregation.promoter.argoproj.io/v1alpha1/namespaces/default/promotionstrategyviews/my-app
 ```
 
 ### Running with kubectl proxy
