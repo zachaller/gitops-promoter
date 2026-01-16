@@ -197,7 +197,13 @@ export function getEnvironmentCountSummary(ps: PromotionStrategy): { total: numb
 }
 
 export type { 
-  PromotionStrategy, 
+  PromotionStrategy,
+  PromotionStrategyView,
   EnrichedEnvDetails, 
-  PromotionPhase 
+  PromotionPhase,
+  AggregatedResources,
+  GitRepositoryRef,
+  ChangeTransferPolicyRef,
+  PullRequestRef,
+  CommitStatusAggregation
 } from '../types/promotion';

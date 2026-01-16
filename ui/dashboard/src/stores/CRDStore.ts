@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { enrichFromCRD } from '@shared/utils/PSData';
-import type { PromotionStrategy } from '@shared/utils/PSData';
+import type { PromotionStrategyView } from '@shared/utils/PSData';
 
-interface CRDItem extends PromotionStrategy {
+interface CRDItem extends PromotionStrategyView {
   enriched?: unknown;
 }
 
@@ -52,7 +52,7 @@ export function createCRDStore<T extends CRDItem>(kind: string, eventName: strin
             // Real-Time fetch via /watch endpoint
             eventSource = new EventSource(`/watch?kind=${kind}&namespace=${namespace}`);
 
-            // Handle PromotionStrategy SSE events
+            // Handle PromotionStrategyView SSE events
             eventSource.addEventListener(eventName, async (evt: MessageEvent) => {
                 try {
                     const updated = JSON.parse(evt.data);

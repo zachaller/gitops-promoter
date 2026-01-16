@@ -93,12 +93,24 @@ type CommitStatusAggregation struct {
 	CommitStatuses []CommitStatusRef `json:"commitStatuses,omitempty"`
 }
 
+// ResourceMetadata contains common metadata fields for aggregated resources.
+// This mirrors the structure of metav1.ObjectMeta but only includes the fields
+// needed for identification and ownership tracking.
+type ResourceMetadata struct {
+	// Name is the name of the resource
+	Name string `json:"name"`
+	// Namespace is the namespace of the resource
+	Namespace string `json:"namespace"`
+	// UID is the unique identifier of the resource
+	UID string `json:"uid,omitempty"`
+	// OwnerReferences contains the owner references of the resource
+	OwnerReferences []metav1.OwnerReference `json:"ownerReferences,omitempty"`
+}
+
 // ArgoCDCommitStatusRef contains the ArgoCDCommitStatus resource data.
 type ArgoCDCommitStatusRef struct {
-	// Name is the name of the ArgoCDCommitStatus
-	Name string `json:"name"`
-	// Namespace is the namespace of the ArgoCDCommitStatus
-	Namespace string `json:"namespace"`
+	// Metadata contains identifying information for the resource
+	Metadata ResourceMetadata `json:"metadata"`
 	// Spec is the spec of the ArgoCDCommitStatus
 	Spec promoterv1alpha1.ArgoCDCommitStatusSpec `json:"spec,omitempty"`
 	// Status is the status of the ArgoCDCommitStatus
@@ -107,10 +119,8 @@ type ArgoCDCommitStatusRef struct {
 
 // GitCommitStatusRef contains the GitCommitStatus resource data.
 type GitCommitStatusRef struct {
-	// Name is the name of the GitCommitStatus
-	Name string `json:"name"`
-	// Namespace is the namespace of the GitCommitStatus
-	Namespace string `json:"namespace"`
+	// Metadata contains identifying information for the resource
+	Metadata ResourceMetadata `json:"metadata"`
 	// Spec is the spec of the GitCommitStatus
 	Spec promoterv1alpha1.GitCommitStatusSpec `json:"spec,omitempty"`
 	// Status is the status of the GitCommitStatus
@@ -119,10 +129,8 @@ type GitCommitStatusRef struct {
 
 // TimedCommitStatusRef contains the TimedCommitStatus resource data.
 type TimedCommitStatusRef struct {
-	// Name is the name of the TimedCommitStatus
-	Name string `json:"name"`
-	// Namespace is the namespace of the TimedCommitStatus
-	Namespace string `json:"namespace"`
+	// Metadata contains identifying information for the resource
+	Metadata ResourceMetadata `json:"metadata"`
 	// Spec is the spec of the TimedCommitStatus
 	Spec promoterv1alpha1.TimedCommitStatusSpec `json:"spec,omitempty"`
 	// Status is the status of the TimedCommitStatus
@@ -131,10 +139,10 @@ type TimedCommitStatusRef struct {
 
 // CommitStatusRef contains the CommitStatus resource data.
 type CommitStatusRef struct {
-	// Name is the name of the CommitStatus
-	Name string `json:"name"`
-	// Namespace is the namespace of the CommitStatus
-	Namespace string `json:"namespace"`
+	// Metadata contains identifying information for the resource.
+	// OwnerReferences can be used to find the parent commit status manager
+	// (e.g., TimedCommitStatus, GitCommitStatus, ArgoCDCommitStatus).
+	Metadata ResourceMetadata `json:"metadata"`
 	// Spec is the spec of the CommitStatus
 	Spec promoterv1alpha1.CommitStatusSpec `json:"spec,omitempty"`
 	// Status is the status of the CommitStatus

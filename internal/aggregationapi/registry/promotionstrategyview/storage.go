@@ -462,10 +462,13 @@ func (r *REST) aggregateCommitStatuses(ctx context.Context, ps *promoterv1alpha1
 		for _, acs := range argocdList.Items {
 			if acs.Spec.PromotionStrategyRef.Name == ps.Name {
 				view.Aggregated.CommitStatuses.ArgoCD = append(view.Aggregated.CommitStatuses.ArgoCD, aggregationv1alpha1.ArgoCDCommitStatusRef{
-					Name:      acs.Name,
-					Namespace: acs.Namespace,
-					Spec:      acs.Spec,
-					Status:    acs.Status,
+					Metadata: aggregationv1alpha1.ResourceMetadata{
+						Name:      acs.Name,
+						Namespace: acs.Namespace,
+						UID:       string(acs.UID),
+					},
+					Spec:   acs.Spec,
+					Status: acs.Status,
 				})
 			}
 		}
@@ -477,10 +480,13 @@ func (r *REST) aggregateCommitStatuses(ctx context.Context, ps *promoterv1alpha1
 		for _, gcs := range gitList.Items {
 			if gcs.Spec.PromotionStrategyRef.Name == ps.Name {
 				view.Aggregated.CommitStatuses.Git = append(view.Aggregated.CommitStatuses.Git, aggregationv1alpha1.GitCommitStatusRef{
-					Name:      gcs.Name,
-					Namespace: gcs.Namespace,
-					Spec:      gcs.Spec,
-					Status:    gcs.Status,
+					Metadata: aggregationv1alpha1.ResourceMetadata{
+						Name:      gcs.Name,
+						Namespace: gcs.Namespace,
+						UID:       string(gcs.UID),
+					},
+					Spec:   gcs.Spec,
+					Status: gcs.Status,
 				})
 			}
 		}
@@ -492,30 +498,64 @@ func (r *REST) aggregateCommitStatuses(ctx context.Context, ps *promoterv1alpha1
 		for _, tcs := range timedList.Items {
 			if tcs.Spec.PromotionStrategyRef.Name == ps.Name {
 				view.Aggregated.CommitStatuses.Timed = append(view.Aggregated.CommitStatuses.Timed, aggregationv1alpha1.TimedCommitStatusRef{
-					Name:      tcs.Name,
-					Namespace: tcs.Namespace,
-					Spec:      tcs.Spec,
-					Status:    tcs.Status,
+					Metadata: aggregationv1alpha1.ResourceMetadata{
+						Name:      tcs.Name,
+						Namespace: tcs.Namespace,
+						UID:       string(tcs.UID),
+					},
+					Spec:   tcs.Spec,
+					Status: tcs.Status,
 				})
 			}
 		}
 	}
 
-	// Aggregate low-level CommitStatus resources (those with PromotionStrategy label)
-	csList := &promoterv1alpha1.CommitStatusList{}
-	if err := r.client.List(ctx, csList,
-		client.InNamespace(ps.Namespace),
-		client.MatchingLabels{
-			promoterv1alpha1.PromotionStrategyLabel: ps.Name,
-		},
-	); err == nil {
-		for _, cs := range csList.Items {
-			view.Aggregated.CommitStatuses.CommitStatuses = append(view.Aggregated.CommitStatuses.CommitStatuses, aggregationv1alpha1.CommitStatusRef{
-				Name:      cs.Name,
-				Namespace: cs.Namespace,
-				Spec:      cs.Spec,
-				Status:    cs.Status,
-			})
+	// Aggregate low-level CommitStatus resources by looking up SHAs from the PromotionStrategy status.
+	// CommitStatus resources are looked up by their spec.sha field, matching the hydrated SHAs
+	// from each environment's active and proposed states.
+	if ps.Status.Environments != nil {
+		// Collect unique SHAs from all environments
+		shas := make(map[string]struct{})
+		for _, env := range ps.Status.Environments {
+			if env.Active.Hydrated.Sha != "" {
+				shas[env.Active.Hydrated.Sha] = struct{}{}
+			}
+			if env.Proposed.Hydrated.Sha != "" {
+				shas[env.Proposed.Hydrated.Sha] = struct{}{}
+			}
+		}
+
+		// Track which CommitStatuses we've already added to avoid duplicates
+		seen := make(map[string]struct{})
+
+		// List all CommitStatuses in the namespace and filter by SHA in-memory.
+		// This approach works regardless of whether field indexing is available.
+		csList := &promoterv1alpha1.CommitStatusList{}
+		if err := r.client.List(ctx, csList, client.InNamespace(ps.Namespace)); err == nil {
+			for _, cs := range csList.Items {
+				// Check if this CommitStatus's SHA matches any of our target SHAs
+				if _, matches := shas[cs.Spec.Sha]; !matches {
+					continue
+				}
+
+				// Skip if we've already added this CommitStatus
+				key := cs.Namespace + "/" + cs.Name
+				if _, exists := seen[key]; exists {
+					continue
+				}
+				seen[key] = struct{}{}
+
+				view.Aggregated.CommitStatuses.CommitStatuses = append(view.Aggregated.CommitStatuses.CommitStatuses, aggregationv1alpha1.CommitStatusRef{
+					Metadata: aggregationv1alpha1.ResourceMetadata{
+						Name:            cs.Name,
+						Namespace:       cs.Namespace,
+						UID:             string(cs.UID),
+						OwnerReferences: cs.OwnerReferences,
+					},
+					Spec:   cs.Spec,
+					Status: cs.Status,
+				})
+			}
 		}
 	}
 

@@ -136,4 +136,179 @@ export interface EnrichedEnvDetails {
   proposedReferenceCommitUrl: string | null;
 }
 
-export type PromotionPhase = 'promoted' | 'failure' | 'pending' | 'unknown'; 
+export type PromotionPhase = 'promoted' | 'failure' | 'pending' | 'unknown';
+
+// ===== Aggregated Types (from PromotionStrategyView) =====
+
+export interface GitRepositoryRef {
+  name: string;
+  namespace: string;
+  spec?: {
+    owner: string;
+    name: string;
+    scmProviderRef: {
+      name: string;
+      namespace?: string;
+    };
+  };
+  status?: {
+    observedGeneration?: number;
+  };
+}
+
+export interface ChangeTransferPolicyRef {
+  name: string;
+  namespace: string;
+  branch: string;
+  spec?: {
+    repositoryReference: {
+      name: string;
+    };
+    proposedBranch: string;
+    activeBranch: string;
+    autoMerge?: boolean;
+  };
+  status?: {
+    active?: {
+      dry?: Commit;
+      hydrated?: Commit;
+      commitStatuses?: CommitStatus[];
+    };
+    proposed?: {
+      dry?: Commit;
+      hydrated?: Commit;
+      commitStatuses?: CommitStatus[];
+    };
+  };
+}
+
+export interface OwnerReference {
+  apiVersion: string;
+  kind: string;
+  name: string;
+  uid: string;
+  controller?: boolean;
+  blockOwnerDeletion?: boolean;
+}
+
+// ResourceMetadata contains common metadata fields for aggregated resources.
+// This mirrors the structure of Kubernetes ObjectMeta but only includes fields
+// needed for identification and ownership tracking.
+export interface ResourceMetadata {
+  name: string;
+  namespace: string;
+  uid?: string;
+  ownerReferences?: OwnerReference[];
+}
+
+export interface ArgoCDCommitStatusRef {
+  metadata: ResourceMetadata;
+  spec?: {
+    applicationRef: {
+      name: string;
+      namespace?: string;
+    };
+    promotionStrategyRef: {
+      name: string;
+    };
+  };
+  status?: {
+    observedGeneration?: number;
+  };
+}
+
+export interface GitCommitStatusRef {
+  metadata: ResourceMetadata;
+  spec?: {
+    promotionStrategyRef: {
+      name: string;
+    };
+    sha?: string;
+    name?: string;
+    description?: string;
+    phase?: string;
+    url?: string;
+  };
+  status?: {
+    observedGeneration?: number;
+  };
+}
+
+export interface TimedCommitStatusRef {
+  metadata: ResourceMetadata;
+  spec?: {
+    promotionStrategyRef: {
+      name: string;
+    };
+    duration?: string;
+    name?: string;
+    description?: string;
+  };
+  status?: {
+    observedGeneration?: number;
+  };
+}
+
+export interface CommitStatusRef {
+  // Metadata contains identifying information for the resource.
+  // OwnerReferences can be used to find the parent commit status manager
+  // (e.g., TimedCommitStatus, GitCommitStatus, ArgoCDCommitStatus).
+  metadata: ResourceMetadata;
+  spec?: {
+    repositoryReference: {
+      name: string;
+    };
+    sha: string;
+    name: string;
+    description?: string;
+    phase?: string;
+    url?: string;
+  };
+  status?: {
+    id?: string;
+    sha?: string;
+    phase?: string;
+    observedGeneration?: number;
+  };
+}
+
+export interface PullRequestRef {
+  name: string;
+  namespace: string;
+  branch: string;
+  spec?: {
+    repositoryReference: {
+      name: string;
+    };
+    title?: string;
+    description?: string;
+    sourceBranch: string;
+    targetBranch: string;
+    state?: string;
+  };
+  status?: {
+    id?: string;
+    state?: string;
+    specHash?: string;
+    prCreationTime?: string;
+  };
+}
+
+export interface CommitStatusAggregation {
+  argoCD?: ArgoCDCommitStatusRef[];
+  git?: GitCommitStatusRef[];
+  timed?: TimedCommitStatusRef[];
+  commitStatuses?: CommitStatusRef[];
+}
+
+export interface AggregatedResources {
+  gitRepository?: GitRepositoryRef;
+  changeTransferPolicies?: ChangeTransferPolicyRef[];
+  commitStatuses?: CommitStatusAggregation;
+  pullRequests?: PullRequestRef[];
+}
+
+// PromotionStrategyView is the aggregated view returned by the API
+export interface PromotionStrategyView extends PromotionStrategy {
+  aggregated?: AggregatedResources;
+} 

@@ -13,10 +13,14 @@ import (
 	"time"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+	"github.com/argoproj-labs/gitops-promoter/internal/aggregationapi/registry/promotionstrategyview"
+	aggregationv1alpha1 "github.com/argoproj-labs/gitops-promoter/internal/aggregationapi/v1alpha1"
 	webserverlogr "github.com/argoproj-labs/gitops-promoter/internal/webserver/logr"
 	"github.com/argoproj-labs/gitops-promoter/ui/web"
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
+	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,8 +36,9 @@ var logger = ctrl.Log.WithName("webServer")
 // WebServer handles the web server functionality for the dashboard and API endpoints.
 type WebServer struct {
 	client.Client
-	Scheme *runtime.Scheme
-	Event  *Event
+	Scheme  *runtime.Scheme
+	Event   *Event
+	psvREST *promotionstrategyview.REST
 }
 
 // Event represents a server-sent event that can be broadcast to clients.
@@ -75,9 +80,10 @@ func NewWebServer(mgr controllerruntime.Manager) WebServer {
 	go event.listen()
 
 	return WebServer{
-		Event:  event,
-		Scheme: mgr.GetScheme(),
-		Client: mgr.GetClient(),
+		Event:   event,
+		Scheme:  mgr.GetScheme(),
+		Client:  mgr.GetClient(),
+		psvREST: promotionstrategyview.NewREST(mgr.GetClient()),
 	}
 }
 
@@ -115,88 +121,117 @@ func (ws *WebServer) sendDeleteEvent(e client.Object) {
 	}
 }
 
+// sendPromotionStrategyViewEvent sends an aggregated PromotionStrategyView event.
+func (ws *WebServer) sendPromotionStrategyViewEvent(ctx context.Context, ps *promoterv1alpha1.PromotionStrategy) {
+	// Get the aggregated view using the REST storage
+	ctxWithNs := promotionstrategyview.WithNamespace(ctx, ps.Namespace)
+	obj, err := ws.psvREST.Get(ctxWithNs, ps.Name, &metav1.GetOptions{})
+	if err != nil {
+		logger.Error(err, "failed to get PromotionStrategyView for SSE", "name", ps.Name, "namespace", ps.Namespace)
+		return
+	}
+
+	view, ok := obj.(*aggregationv1alpha1.PromotionStrategyView)
+	if !ok {
+		logger.Error(nil, "unexpected type from REST.Get", "type", fmt.Sprintf("%T", obj))
+		return
+	}
+
+	// Clean up annotations
+	annotations := view.GetAnnotations()
+	delete(annotations, "kubectl.kubernetes.io/last-applied-configuration")
+	view.SetAnnotations(annotations)
+	view.SetManagedFields(nil)
+
+	jsonString, err := json.Marshal(view)
+	if err != nil {
+		logger.Error(err, "failed to marshal PromotionStrategyView for SSE", "name", view.Name)
+		return
+	}
+
+	m := Message{
+		Name:      view.Name,
+		Namespace: view.Namespace,
+		Kind:      "PromotionStrategyView",
+		Data:      string(jsonString),
+	}
+	ws.Event.Message <- m
+}
+
 // SetupWithManager sets up the WebServer controller with the given manager.
+// It watches PromotionStrategy and related resources, sending aggregated PromotionStrategyView events.
 func (ws *WebServer) SetupWithManager(mgr ctrl.Manager) error {
+	// Helper to find and send the parent PromotionStrategy's aggregated view
+	sendParentPSView := func(ctx context.Context, obj client.Object) {
+		labels := obj.GetLabels()
+		psName := labels[promoterv1alpha1.PromotionStrategyLabel]
+		if psName == "" {
+			return
+		}
+
+		ps := &promoterv1alpha1.PromotionStrategy{}
+		if err := ws.Get(ctx, client.ObjectKey{Namespace: obj.GetNamespace(), Name: psName}, ps); err != nil {
+			logger.V(1).Info("failed to get parent PromotionStrategy", "name", psName, "error", err)
+			return
+		}
+		ws.sendPromotionStrategyViewEvent(ctx, ps)
+	}
+
 	err := ctrl.NewControllerManagedBy(mgr).
 		Named("webServer").
-		Watches(&promoterv1alpha1.PromotionStrategy{}, handler.Funcs{ //nolint:dupl
+		// Watch PromotionStrategy - send aggregated view on changes
+		Watches(&promoterv1alpha1.PromotionStrategy{}, handler.Funcs{
 			CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if ps, ok := e.Object.(*promoterv1alpha1.PromotionStrategy); ok {
-					ps.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PromotionStrategy"))
-					ws.sendEvent(ps)
+					ws.sendPromotionStrategyViewEvent(ctx, ps)
 				}
 			},
 			UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if ps, ok := e.ObjectNew.(*promoterv1alpha1.PromotionStrategy); ok {
-					ps.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PromotionStrategy"))
-					ws.sendEvent(ps)
+					ws.sendPromotionStrategyViewEvent(ctx, ps)
 				}
 			},
 			DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if ps, ok := e.Object.(*promoterv1alpha1.PromotionStrategy); ok {
-					ps.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PromotionStrategy"))
+					ps.SetGroupVersionKind(aggregationv1alpha1.SchemeGroupVersion.WithKind("PromotionStrategyView"))
 					ws.sendDeleteEvent(ps)
 				}
 			},
 		}).
-		Watches(&promoterv1alpha1.ChangeTransferPolicy{}, handler.Funcs{ //nolint:dupl
+		// Watch ChangeTransferPolicy - send parent PS's aggregated view on changes
+		Watches(&promoterv1alpha1.ChangeTransferPolicy{}, handler.Funcs{
 			CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if ctp, ok := e.Object.(*promoterv1alpha1.ChangeTransferPolicy); ok {
-					ctp.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("ChangeTransferPolicy"))
-					ws.sendEvent(ctp)
-				}
+				sendParentPSView(ctx, e.Object)
 			},
 			UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if ctp, ok := e.ObjectNew.(*promoterv1alpha1.ChangeTransferPolicy); ok {
-					ctp.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("ChangeTransferPolicy"))
-					ws.sendEvent(ctp)
-				}
+				sendParentPSView(ctx, e.ObjectNew)
 			},
 			DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if ctp, ok := e.Object.(*promoterv1alpha1.ChangeTransferPolicy); ok {
-					ctp.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("ChangeTransferPolicy"))
-					ws.sendDeleteEvent(ctp)
-				}
+				sendParentPSView(ctx, e.Object)
 			},
 		}).
-		Watches(&promoterv1alpha1.PullRequest{}, handler.Funcs{ //nolint:dupl
+		// Watch PullRequest - send parent PS's aggregated view on changes
+		Watches(&promoterv1alpha1.PullRequest{}, handler.Funcs{
 			CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if pr, ok := e.Object.(*promoterv1alpha1.PullRequest); ok {
-					pr.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PullRequest"))
-					ws.sendEvent(pr)
-				}
+				sendParentPSView(ctx, e.Object)
 			},
 			UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if pr, ok := e.ObjectNew.(*promoterv1alpha1.PullRequest); ok {
-					pr.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PullRequest"))
-					ws.sendEvent(pr)
-				}
+				sendParentPSView(ctx, e.ObjectNew)
 			},
 			DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if pr, ok := e.Object.(*promoterv1alpha1.PullRequest); ok {
-					pr.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PullRequest"))
-					ws.sendDeleteEvent(pr)
-				}
+				sendParentPSView(ctx, e.Object)
 			},
 		}).
-		Watches(&promoterv1alpha1.CommitStatus{}, handler.Funcs{ //nolint:dupl
+		// Watch CommitStatus - send parent PS's aggregated view on changes
+		Watches(&promoterv1alpha1.CommitStatus{}, handler.Funcs{
 			CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if cs, ok := e.Object.(*promoterv1alpha1.CommitStatus); ok {
-					cs.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("CommitStatus"))
-					ws.sendEvent(cs)
-				}
+				sendParentPSView(ctx, e.Object)
 			},
 			UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if cs, ok := e.ObjectNew.(*promoterv1alpha1.CommitStatus); ok {
-					cs.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("CommitStatus"))
-					ws.sendEvent(cs)
-				}
+				sendParentPSView(ctx, e.ObjectNew)
 			},
 			DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if cs, ok := e.Object.(*promoterv1alpha1.CommitStatus); ok {
-					cs.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("CommitStatus"))
-					ws.sendDeleteEvent(cs)
-				}
+				sendParentPSView(ctx, e.Object)
 			},
 		}).
 		Complete(ws)
@@ -337,10 +372,19 @@ func (ws *WebServer) httpGet(c *gin.Context) {
 		return
 	}
 	kind := strings.ToLower(c.Query("kind"))
-	namespace := strings.ToLower(c.Query("namespace"))
-	name := strings.ToLower(c.Query("name"))
+	namespace := c.Query("namespace")
+	name := c.Query("name")
 
 	switch kind {
+	case "promotionstrategyview":
+		ctx := promotionstrategyview.WithNamespace(c.Request.Context(), namespace)
+		obj, err := ws.psvREST.Get(ctx, name, &metav1.GetOptions{})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, err.Error())
+			return
+		}
+		c.JSON(http.StatusOK, obj)
+
 	case "promotionstrategy":
 		ps := &promoterv1alpha1.PromotionStrategy{}
 		err := ws.Get(c, client.ObjectKey{Namespace: namespace, Name: name}, ps)
@@ -388,12 +432,26 @@ func (ws *WebServer) httpList(c *gin.Context) {
 		return
 	}
 	kind := strings.ToLower(c.Query("kind"))
+	namespace := c.Query("namespace")
 	listOptions := &client.ListOptions{}
-	if c.Query("namespace") != "" {
-		listOptions = &client.ListOptions{Namespace: c.Query("namespace")}
+	if namespace != "" {
+		listOptions = &client.ListOptions{Namespace: namespace}
 	}
 
 	switch kind {
+	case "promotionstrategyview":
+		ctx := promotionstrategyview.WithNamespace(c.Request.Context(), namespace)
+		obj, err := ws.psvREST.List(ctx, &metainternalversion.ListOptions{})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, err.Error())
+			return
+		}
+		if viewList, ok := obj.(*aggregationv1alpha1.PromotionStrategyViewList); ok {
+			c.JSON(http.StatusOK, viewList.Items)
+		} else {
+			c.JSON(http.StatusInternalServerError, "unexpected response type")
+		}
+
 	case "promotionstrategy":
 		psl := &promoterv1alpha1.PromotionStrategyList{}
 		err := ws.List(c, psl, listOptions)
@@ -431,7 +489,7 @@ func (ws *WebServer) httpList(c *gin.Context) {
 		c.JSON(http.StatusOK, csl.Items)
 
 	case "namespace":
-		if c.Query("namespace") != "" {
+		if namespace != "" {
 			c.JSON(http.StatusBadRequest, "namespace is not valid for listing namespaces")
 			return
 		}

@@ -327,13 +327,13 @@ func TestREST_Get_WithCommitStatuses(t *testing.T) {
 	require.True(t, ok)
 
 	assert.Len(t, view.Aggregated.CommitStatuses.ArgoCD, 1)
-	assert.Equal(t, "test-argocd-cs", view.Aggregated.CommitStatuses.ArgoCD[0].Name)
+	assert.Equal(t, "test-argocd-cs", view.Aggregated.CommitStatuses.ArgoCD[0].Metadata.Name)
 
 	assert.Len(t, view.Aggregated.CommitStatuses.Git, 1)
-	assert.Equal(t, "test-git-cs", view.Aggregated.CommitStatuses.Git[0].Name)
+	assert.Equal(t, "test-git-cs", view.Aggregated.CommitStatuses.Git[0].Metadata.Name)
 
 	assert.Len(t, view.Aggregated.CommitStatuses.Timed, 1)
-	assert.Equal(t, "test-timed-cs", view.Aggregated.CommitStatuses.Timed[0].Name)
+	assert.Equal(t, "test-timed-cs", view.Aggregated.CommitStatuses.Timed[0].Metadata.Name)
 }
 
 func TestREST_Get_WithPullRequests(t *testing.T) {
