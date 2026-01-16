@@ -19,11 +19,13 @@ package promotionstrategyview
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -40,6 +42,7 @@ type REST struct {
 var (
 	_ rest.Getter               = &REST{}
 	_ rest.Lister               = &REST{}
+	_ rest.Watcher              = &REST{}
 	_ rest.Scoper               = &REST{}
 	_ rest.SingularNameProvider = &REST{}
 )
@@ -136,6 +139,180 @@ func (r *REST) List(ctx context.Context, options *metainternalversion.ListOption
 	}
 
 	return viewList, nil
+}
+
+// Watch implements rest.Watcher.
+// It watches PromotionStrategy resources and emits aggregated PromotionStrategyView events.
+func (r *REST) Watch(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
+	namespace := genericNamespaceFromContext(ctx)
+
+	// Create a new aggregating watcher
+	aw := newAggregatingWatcher(ctx, r, namespace, options)
+
+	// Start watching PromotionStrategies
+	go aw.run()
+
+	return aw, nil
+}
+
+// aggregatingWatcher watches multiple resources and emits aggregated events.
+type aggregatingWatcher struct {
+	ctx       context.Context
+	rest      *REST
+	namespace string
+	options   *metainternalversion.ListOptions
+	result    chan watch.Event
+	done      chan struct{}
+	once      sync.Once
+}
+
+func newAggregatingWatcher(ctx context.Context, r *REST, namespace string, options *metainternalversion.ListOptions) *aggregatingWatcher {
+	return &aggregatingWatcher{
+		ctx:       ctx,
+		rest:      r,
+		namespace: namespace,
+		options:   options,
+		result:    make(chan watch.Event, 100),
+		done:      make(chan struct{}),
+	}
+}
+
+// ResultChan returns the channel for watch events.
+func (w *aggregatingWatcher) ResultChan() <-chan watch.Event {
+	return w.result
+}
+
+// Stop stops the watcher.
+func (w *aggregatingWatcher) Stop() {
+	w.once.Do(func() {
+		close(w.done)
+	})
+}
+
+func (w *aggregatingWatcher) run() {
+	defer close(w.result)
+
+	// Create a watch on PromotionStrategies
+	psList := &promoterv1alpha1.PromotionStrategyList{}
+	listOpts := []client.ListOption{}
+	if w.namespace != "" {
+		listOpts = append(listOpts, client.InNamespace(w.namespace))
+	}
+	if w.options != nil && w.options.LabelSelector != nil {
+		listOpts = append(listOpts, client.MatchingLabelsSelector{Selector: w.options.LabelSelector})
+	}
+
+	// Get the initial list to establish the resource version
+	if err := w.rest.client.List(w.ctx, psList, listOpts...); err != nil {
+		w.result <- watch.Event{
+			Type: watch.Error,
+			Object: &metav1.Status{
+				Status:  metav1.StatusFailure,
+				Message: fmt.Sprintf("failed to list PromotionStrategies: %v", err),
+				Reason:  metav1.StatusReasonInternalError,
+				Code:    500,
+			},
+		}
+		return
+	}
+
+	// Send initial ADDED events for existing resources
+	for i := range psList.Items {
+		view, err := w.rest.buildAggregatedView(w.ctx, &psList.Items[i])
+		if err != nil {
+			continue
+		}
+		select {
+		case w.result <- watch.Event{Type: watch.Added, Object: view}:
+		case <-w.done:
+			return
+		case <-w.ctx.Done():
+			return
+		}
+	}
+
+	// Start watching for changes
+	watchClient, ok := w.rest.client.(client.WithWatch)
+	if !ok {
+		w.result <- watch.Event{
+			Type: watch.Error,
+			Object: &metav1.Status{
+				Status:  metav1.StatusFailure,
+				Message: "client does not support watch",
+				Reason:  metav1.StatusReasonInternalError,
+				Code:    500,
+			},
+		}
+		return
+	}
+
+	psWatcher, err := watchClient.Watch(w.ctx, psList, listOpts...)
+	if err != nil {
+		w.result <- watch.Event{
+			Type: watch.Error,
+			Object: &metav1.Status{
+				Status:  metav1.StatusFailure,
+				Message: fmt.Sprintf("failed to watch PromotionStrategies: %v", err),
+				Reason:  metav1.StatusReasonInternalError,
+				Code:    500,
+			},
+		}
+		return
+	}
+	defer psWatcher.Stop()
+
+	// Process watch events
+	for {
+		select {
+		case event, ok := <-psWatcher.ResultChan():
+			if !ok {
+				return
+			}
+
+			ps, ok := event.Object.(*promoterv1alpha1.PromotionStrategy)
+			if !ok {
+				// Handle error or status objects
+				if status, ok := event.Object.(*metav1.Status); ok {
+					w.result <- watch.Event{Type: watch.Error, Object: status}
+				}
+				continue
+			}
+
+			// Build the aggregated view
+			view, err := w.rest.buildAggregatedView(w.ctx, ps)
+			if err != nil {
+				continue
+			}
+
+			// Convert the event type
+			var eventType watch.EventType
+			switch event.Type {
+			case watch.Added:
+				eventType = watch.Added
+			case watch.Modified:
+				eventType = watch.Modified
+			case watch.Deleted:
+				eventType = watch.Deleted
+			case watch.Bookmark:
+				eventType = watch.Bookmark
+			default:
+				continue
+			}
+
+			select {
+			case w.result <- watch.Event{Type: eventType, Object: view}:
+			case <-w.done:
+				return
+			case <-w.ctx.Done():
+				return
+			}
+
+		case <-w.done:
+			return
+		case <-w.ctx.Done():
+			return
+		}
+	}
 }
 
 // ConvertToTable converts the object to a table for kubectl output.

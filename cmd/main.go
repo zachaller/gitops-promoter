@@ -453,8 +453,8 @@ func runAggregationServer(clientConfig clientcmd.ClientConfig, securePort int, c
 		return fmt.Errorf("failed to get client config: %w", err)
 	}
 
-	// Create a controller-runtime client for querying promoter resources
-	k8sClient, err := client.New(restConfig, client.Options{
+	// Create a controller-runtime client with watch support for querying promoter resources
+	k8sClient, err := client.NewWithWatch(restConfig, client.Options{
 		Scheme: scheme,
 	})
 	if err != nil {

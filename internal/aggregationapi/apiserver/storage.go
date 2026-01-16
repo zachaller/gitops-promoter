@@ -22,6 +22,7 @@ import (
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -37,6 +38,7 @@ type PromotionStrategyViewStorage struct {
 var (
 	_ rest.Getter               = &PromotionStrategyViewStorage{}
 	_ rest.Lister               = &PromotionStrategyViewStorage{}
+	_ rest.Watcher              = &PromotionStrategyViewStorage{}
 	_ rest.Scoper               = &PromotionStrategyViewStorage{}
 	_ rest.SingularNameProvider = &PromotionStrategyViewStorage{}
 	_ rest.TableConvertor       = &PromotionStrategyViewStorage{}
@@ -91,6 +93,13 @@ func (s *PromotionStrategyViewStorage) List(ctx context.Context, options *metain
 // ConvertToTable converts the object to a table for kubectl output.
 func (s *PromotionStrategyViewStorage) ConvertToTable(ctx context.Context, object runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
 	return s.rest.ConvertToTable(ctx, object, tableOptions)
+}
+
+// Watch watches for changes to PromotionStrategyViews.
+func (s *PromotionStrategyViewStorage) Watch(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
+	// Extract namespace from the request context and inject it into our context
+	ctx = s.injectNamespace(ctx)
+	return s.rest.Watch(ctx, options)
 }
 
 // injectNamespace extracts the namespace from the apiserver request context

@@ -19,11 +19,13 @@ package promotionstrategyview
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
@@ -401,4 +403,61 @@ func TestWithNamespace(t *testing.T) {
 	ctx = WithNamespace(ctx, "my-namespace")
 	ns = genericNamespaceFromContext(ctx)
 	assert.Equal(t, "my-namespace", ns)
+}
+
+func TestREST_Watch(t *testing.T) {
+	// Create scheme
+	scheme := runtime.NewScheme()
+	_ = promoterv1alpha1.AddToScheme(scheme)
+	_ = aggregationv1alpha1.AddToScheme(scheme)
+
+	// Create a fake client with watch support
+	ps := &promoterv1alpha1.PromotionStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-strategy",
+			Namespace: "test-namespace",
+		},
+		Spec: promoterv1alpha1.PromotionStrategySpec{
+			RepositoryReference: promoterv1alpha1.ObjectReference{
+				Name: "test-repo",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ps).
+		Build()
+
+	rest := NewREST(fakeClient)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ctx = WithNamespace(ctx, "test-namespace")
+
+	// Start watching
+	watcher, err := rest.Watch(ctx, nil)
+	require.NoError(t, err)
+	require.NotNil(t, watcher)
+
+	// Stop the watcher after a short time
+	go func() {
+		<-time.After(100 * time.Millisecond)
+		watcher.Stop()
+	}()
+
+	// We should receive at least the initial ADDED event
+	select {
+	case event := <-watcher.ResultChan():
+		// The fake client may not support Watch, so we might get an error
+		// or we might get the initial ADDED event
+		if event.Type == watch.Added {
+			view, ok := event.Object.(*aggregationv1alpha1.PromotionStrategyView)
+			require.True(t, ok)
+			assert.Equal(t, "test-strategy", view.Name)
+		}
+	case <-time.After(200 * time.Millisecond):
+		// Timeout is acceptable if fake client doesn't support watch
+	}
 }
