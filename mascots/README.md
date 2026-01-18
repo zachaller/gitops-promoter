@@ -1,121 +1,126 @@
-# GitOps Promoter Mascot SVG Gallery
+# GitOps Promoter Rocket Mascot Collection
 
-This directory contains SVG illustrations for 10 mascot character concepts for the GitOps Promoter project. Each mascot embodies different aspects of the project's "Space Age GitOps" theme and core functionality.
+This directory contains SVG illustrations for 10 rocket mascot variations for the GitOps Promoter project. Each rocket character represents a different aspect of the promotion workflow while maintaining the core "Space Age GitOps" theme and upward promotion metaphor.
 
-## 🎨 Mascot Characters
+## 🚀 The Rocket Fleet
 
-### 1. Promo the Promotion Rocket 🚀
-**File:** `svg/promo-rocket.svg`
+### 1. Launcher Rocket
+**File:** `svg/launcher-rocket.svg`
 
-A cheerful multi-stage rocket representing upward promotion through environments (DEV → TEST → PROD). Features blue exhaust flames and friendly face on the nose cone.
+The original - poised on the launch pad with countdown in progress. Features support towers, steam vapor, and blinking ready indicators. Perfect for representing the initial deployment state.
 
-**Symbolism:** Upward movement, space-age theme, multi-stage promotion workflow
-
----
-
-### 2. Hydro the Hydration Drop 💧
-**File:** `svg/hydro-drop.svg`
-
-An adorable water droplet with an orange core, representing the hydration process that transforms DRY configurations into environment-specific deployments.
-
-**Symbolism:** Transformation, hydration workflow, life-giving process
+**Symbolism:** Ready state, preparation, countdown to deployment, launch pad infrastructure
 
 ---
 
-### 3. Branchy the Multi-Armed Octopus 🐙
-**File:** `svg/branchy-octopus.svg`
+### 2. Booster Rocket
+**File:** `svg/booster-rocket.svg`
 
-A cute orange octopus with eight tentacles, each representing different git branches being managed simultaneously with coordination and intelligence.
+Powerful mid-flight acceleration with maximum thrust. Features animated exhaust flames, speed motion lines, and thrust indicators showing "MAX THRUST."
 
-**Symbolism:** Multiple git branches, orchestration, multitasking without tangling
-
----
-
-### 4. Drift the Drift-Free Navigator 👨‍🚀
-**File:** `svg/drift-navigator.svg`
-
-A friendly astronaut in an orange spacesuit, maintaining synchronized environments and ensuring drift-free operation with precision navigation tools.
-
-**Symbolism:** Space-age theme, drift-free operation, precision, source-of-truth tether
+**Symbolism:** Acceleration, power, active promotion in progress, maximum effort
 
 ---
 
-### 5. Gita the GitOps Phoenix 🦅
-**File:** `svg/gita-phoenix.svg`
+### 3. Retro Rocket
+**File:** `svg/retro-rocket.svg`
 
-A majestic phoenix with orange and blue plumage, rising from DEV flames toward PROD clouds. Tail feathers designed like git branches.
+Classic 1950s sci-fi style with round portholes, vintage bands, and traditional fins. Nostalgic design with timeless appeal.
 
-**Symbolism:** Rising through environments, transformation, continuous improvement, graceful promotion
-
----
-
-### 6. Merge the Friendly Bot 🤖
-**File:** `svg/merge-bot.svg`
-
-A lovable orange robot with blue accents, designed for merging pull requests and managing promotion workflows with care. Features heart-shaped health indicator and display screen showing merge status.
-
-**Symbolism:** Automation, reliability, mechanical precision, helpful assistant
+**Symbolism:** Classic approach, proven reliability, timeless methods, vintage charm
 
 ---
 
-### 7. Flow the River Otter 🦦
-**File:** `svg/flow-otter.svg`
+### 4. Cargo Rocket
+**File:** `svg/cargo-rocket.svg`
 
-A playful orange otter sliding smoothly through water channels marked with environment stages (DEV → TEST → PROD), holding a git branch.
+Heavy payload delivery design with visible cargo bay doors and deployment indicators. Built for carrying substantial workloads.
 
-**Symbolism:** Smooth flow, effortless promotion, playful nature, developer-friendly experience
-
----
-
-### 8. Stage the Environment Chameleon 🦎
-**File:** `svg/stage-chameleon.svg`
-
-A clever chameleon with gradient coloring (orange → blue → green) sitting on a git branch, representing adaptation through different environment stages.
-
-**Symbolism:** Color change = environment-specific configuration, adaptation, careful observation
+**Symbolism:** Payload delivery, deployment packages, heavy workloads, cargo capacity
 
 ---
 
-### 9. Sync the Orbital Satellite 🛰️
-**File:** `svg/sync-satellite.svg`
+### 5. Scout Rocket
+**File:** `svg/scout-rocket.svg`
 
-A friendly satellite with orange body and blue solar panels, orbiting around environment "planets" (DEV, TEST, PROD) and transmitting synchronization signals.
+Sleek, streamlined exploration design with sensor arrays and minimal profile. Built for speed and reconnaissance.
 
-**Symbolism:** Continuous monitoring, synchronization, communication, space-age technology
+**Symbolism:** Fast exploration, reconnaissance, lightweight deployments, agility
 
 ---
 
-### 10. Leap the Promotion Kangaroo 🦘
-**File:** `svg/leap-kangaroo.svg`
+### 6. Twin Rocket
+**File:** `svg/twin-rocket.svg`
 
-An energetic orange kangaroo with blue pouch (carrying git commits), hopping progressively upward through environment stages with confidence.
+Dual-engine parallel deployment system with connecting struts and sync indicators. Two rockets working in perfect harmony.
 
-**Symbolism:** Progressive advancement, protective of code, energetic promotion, upward movement
+**Symbolism:** Parallel deployment, redundancy, synchronized operations, teamwork
+
+---
+
+### 7. Orbital Rocket
+**File:** `svg/orbital-rocket.svg`
+
+Curved trajectory design showing orbital insertion path. Features environment orbit markers (DEV, TEST, PROD) and velocity vectors.
+
+**Symbolism:** Orbital deployment, curved promotion paths, continuous circulation, orbital mechanics
+
+---
+
+### 8. Express Rocket
+**File:** `svg/express-rocket.svg`
+
+Ultra-streamlined speed demon with sonic boom effects and MACH 12 indicators. Maximum velocity design.
+
+**Symbolism:** Speed, rapid deployment, express delivery, fast-track promotion
+
+---
+
+### 9. Atlas Rocket
+**File:** `svg/atlas-rocket.svg`
+
+Heavy-duty workhorse with side boosters and 5-engine cluster. Built for maximum capacity (50 tons) and reliability.
+
+**Symbolism:** Heavy lifting, reliability, workhorse operations, maximum capacity
+
+---
+
+### 10. Stellar Rocket
+**File:** `svg/stellar-rocket.svg`
+
+Futuristic star-powered design with animated energy channels, plasma exhaust, and glowing elements. Next-generation technology.
+
+**Symbolism:** Future technology, star power, advanced systems, innovation
 
 ---
 
 ## 🎨 Design Specifications
 
-### Color Palette
+### Unified Color Palette
 - **Primary Orange:** #FF8C42, #FFA15C, #FF6B35
 - **Secondary Blue:** #4A90E2, #5BA3F5, #3B7BC4
 - **Accent Colors:**
-  - White: #FFFFFF, #E8F4F8, #FFD4A3
-  - Green (PROD): #00CC88, #00AA66
-  - Dark: #2C3E50
+  - White: #FFFFFF, #E8F4F8
+  - Gold/Yellow: #FFD700, #FFB84D
+  - Green (PROD): #00CC88, #00FF88
+  - Dark: #2C3E50, #5A5A5A
 
-### Common Design Elements
-All mascots feature:
-- Friendly, expressive eyes with highlights
-- Happy, approachable expressions
-- Orange and blue brand color integration
-- Git/GitOps visual metaphors (branches, commits, PRs)
-- Space-age or futuristic aesthetic elements
+### Common Elements Across All Rockets
+All rockets feature:
+- **Friendly faces** in cockpit windows with expressive eyes
+- **Environment labels** (DEV, TEST, PROD) on body stages
+- **Orange body** with blue fin accents
+- **Exhaust effects** varying by rocket type
+- **Multi-stage design** representing promotion workflow
+- **Scalable SVG format** for any size use
 
-### File Format
-- **Format:** SVG (Scalable Vector Graphics)
-- **Scalability:** Vector format ensures crisp rendering at any size
-- **Compatibility:** Works in modern browsers, design tools, and documentation
+### Animation Features
+Several rockets include CSS/SVG animations:
+- **Launcher:** Blinking ready lights
+- **Booster:** Animated exhaust flames
+- **Stellar:** Energy channels, star glow, power indicators
+- **Express:** Engine glow pulses
+- **Orbital:** Position marker pulse
 
 ---
 
@@ -123,90 +128,127 @@ All mascots feature:
 
 ### In Documentation
 ```markdown
-![Promo the Promotion Rocket](mascots/svg/promo-rocket.svg)
+![Launcher Rocket](mascots/svg/launcher-rocket.svg)
 ```
 
 ### In HTML
 ```html
-<img src="mascots/svg/promo-rocket.svg" alt="Promo the Promotion Rocket" width="200">
+<img src="mascots/svg/launcher-rocket.svg" alt="Launcher Rocket" width="200">
 ```
 
-### Inline SVG
-Each SVG can be embedded directly in HTML for maximum control and styling flexibility.
-
 ### Recommended Sizes
-- **Icons/Badges:** 32px - 64px
+- **Icons/Badges:** 48px - 96px
 - **Documentation:** 150px - 300px
 - **Hero Images:** 400px - 800px
-- **Print Materials:** Any size (vector scalable)
+- **Banners:** 200px height, variable width
 
 ---
 
-## 🎯 Use Cases
+## 🎯 Use Cases by Rocket Type
 
-### Documentation
-- Feature explanations (e.g., Hydro for hydration docs)
-- Architecture diagrams (e.g., Branchy for branch management)
-- Tutorial headers and section breaks
+### Documentation & Tutorials
+- **Launcher:** Getting started guides, initial setup
+- **Scout:** Quick start guides, exploration features
+- **Retro:** Legacy system migration, traditional workflows
 
-### Website/Marketing
-- Landing page illustrations
-- Blog post headers
-- Social media graphics
-- Presentation slides
+### Status & Progress Indicators
+- **Booster:** Active deployment in progress
+- **Express:** Fast-track deployment status
+- **Orbital:** Continuous deployment cycles
 
-### Developer Experience
-- CLI loading animations
-- Dashboard UI elements
-- Error/success state illustrations
-- Tutorial guides
+### Feature Highlighting
+- **Cargo:** Payload management, package deployment
+- **Twin:** Parallel environment promotion
+- **Atlas:** Enterprise features, heavy-duty operations
 
-### Community
-- Stickers and swag designs
-- Conference materials
-- Community presentations
-- GitHub profile graphics
+### Marketing & Branding
+- **Stellar:** Future roadmap, advanced features
+- **Express:** Performance messaging, speed claims
+- **All variants:** Diverse visual storytelling
 
 ---
 
-## 🔄 Customization
+## 🔄 Selection Guide
 
-All SVG files can be easily customized:
+Choose your rocket based on the message:
 
-1. **Colors:** Modify fill and stroke attributes
-2. **Size:** Scale via width/height attributes or viewBox
-3. **Animation:** Add CSS/SVG animations
-4. **Variants:** Create different poses or expressions
-5. **Combinations:** Combine multiple mascots in scenes
+| Message | Recommended Rocket |
+|---------|-------------------|
+| Getting started / Initial deployment | Launcher |
+| Active promotion happening now | Booster |
+| Classic/proven approach | Retro |
+| Large deployments/payloads | Cargo, Atlas |
+| Fast deployments | Scout, Express |
+| Parallel environments | Twin |
+| Continuous deployment | Orbital |
+| Future/advanced features | Stellar |
+
+---
+
+## 💡 Customization Tips
+
+All SVG files support easy customization:
+
+1. **Colors:** Modify `fill` and `stroke` attributes
+2. **Size:** Adjust `viewBox` or use CSS width/height
+3. **Animation:** Enable/disable by removing `<animate>` tags
+4. **Variants:** Create new poses by rotating or transforming groups
+5. **Labels:** Change text content for different environments
+
+---
+
+## 📊 Technical Details
+
+- **Format:** SVG (Scalable Vector Graphics)
+- **Compatibility:** All modern browsers, design tools
+- **File Sizes:** 3-8 KB per file (optimized)
+- **Accessibility:** Include alt text when using in HTML
+- **Performance:** Lightweight, fast loading
+
+---
+
+## 🚀 The Promotion Journey
+
+These rockets represent the journey from DEV to PROD:
+
+1. **Launcher** - Ready to begin (DEV)
+2. **Booster** - Accelerating through environments
+3. **Scout/Express** - Quick progression
+4. **Twin** - Parallel path deployment
+5. **Orbital** - Continuous deployment cycle
+6. **Atlas/Cargo** - Heavy production deployment
+7. **Stellar** - Future-state PROD
 
 ---
 
 ## 📄 License
 
-These mascot designs are part of the GitOps Promoter project. Please refer to the project's main LICENSE file for usage terms.
+These mascot designs are part of the GitOps Promoter project. Refer to the project's main LICENSE file for usage terms.
 
 ---
 
 ## 🤝 Contributing
 
-Have ideas for new poses, expressions, or mascot variations? Contributions are welcome!
+Ideas for new rocket variants or improvements? Contributions welcome!
 
-1. Maintain consistent color palette
-2. Keep the friendly, approachable style
-3. Ensure SVG code is clean and optimized
-4. Test rendering at multiple sizes
-5. Document the symbolism and use cases
+1. Maintain consistent color palette (orange/blue/white)
+2. Include friendly face in cockpit
+3. Show DEV/TEST/PROD stages
+4. Keep SVG code clean and optimized
+5. Test at multiple sizes
+6. Document the symbolism
 
 ---
 
 ## 📚 Related Documentation
 
-- [MASCOT_IDEAS.md](../MASCOT_IDEAS.md) - Detailed concept descriptions and selection criteria
+- [MASCOT_IDEAS.md](../MASCOT_IDEAS.md) - Conceptual background and rocket descriptions
 - [Project Documentation](../docs/) - Main GitOps Promoter documentation
 
 ---
 
 **Created for:** Argoproj Labs GitOps Promoter
-**Theme:** Space Age GitOps
-**Version:** 1.0
+**Theme:** Space Age GitOps - Rocket Fleet Edition
+**Count:** 10 unique rocket variants
+**Version:** 2.0 (Rocket Collection)
 **Date:** 2026-01-18

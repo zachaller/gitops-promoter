@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 320" width="220" height="320">
+  <!-- Booster Rocket - Powerful Acceleration Mid-Flight -->
+
+  <!-- Massive exhaust flames (powerful thrust) -->
+  <path d="M 80 290 Q 70 300 60 310 Q 55 315 60 318 Q 65 315 70 310 Q 75 300 80 290 Z" fill="#FF6B35" opacity="0.8">
+    <animate attributeName="d" values="M 80 290 Q 70 300 60 310 Q 55 315 60 318 Q 65 315 70 310 Q 75 300 80 290 Z; M 80 290 Q 72 298 65 308 Q 62 313 65 316 Q 68 313 72 308 Q 78 298 80 290 Z; M 80 290 Q 70 300 60 310 Q 55 315 60 318 Q 65 315 70 310 Q 75 300 80 290 Z" dur="0.3s" repeatCount="indefinite"/>
+  </path>
+
+  <path d="M 95 290 Q 90 302 85 312 Q 83 316 88 318 Q 93 316 95 312 Q 100 302 95 290 Z" fill="#FFA15C" opacity="0.9">
+    <animate attributeName="d" values="M 95 290 Q 90 302 85 312 Q 83 316 88 318 Q 93 316 95 312 Q 100 302 95 290 Z; M 95 290 Q 92 300 88 310 Q 86 314 90 316 Q 94 314 96 310 Q 102 300 95 290 Z; M 95 290 Q 90 302 85 312 Q 83 316 88 318 Q 93 316 95 312 Q 100 302 95 290 Z" dur="0.3s" repeatCount="indefinite"/>
+  </path>
+
+  <path d="M 110 290 Q 110 305 110 315 Q 110 318 110 318 Q 110 318 110 315 Q 110 305 110 290 Z" fill="#FFD700" opacity="0.95">
+    <animate attributeName="d" values="M 110 290 Q 110 305 110 315 Q 110 318 110 318 Q 110 318 110 315 Q 110 305 110 290 Z; M 110 290 Q 110 303 110 313 Q 110 316 110 316 Q 110 316 110 313 Q 110 303 110 290 Z; M 110 290 Q 110 305 110 315 Q 110 318 110 318 Q 110 318 110 315 Q 110 305 110 290 Z" dur="0.3s" repeatCount="indefinite"/>
+  </path>
+
+  <path d="M 125 290 Q 130 302 135 312 Q 137 316 132 318 Q 127 316 125 312 Q 120 302 125 290 Z" fill="#FFA15C" opacity="0.9">
+    <animate attributeName="d" values="M 125 290 Q 130 302 135 312 Q 137 316 132 318 Q 127 316 125 312 Q 120 302 125 290 Z; M 125 290 Q 128 300 132 310 Q 134 314 130 316 Q 126 314 124 310 Q 118 300 125 290 Z; M 125 290 Q 130 302 135 312 Q 137 316 132 318 Q 127 316 125 312 Q 120 302 125 290 Z" dur="0.3s" repeatCount="indefinite"/>
+  </path>
+
+  <path d="M 140 290 Q 150 300 160 310 Q 165 315 160 318 Q 155 315 150 310 Q 145 300 140 290 Z" fill="#FF6B35" opacity="0.8">
+    <animate attributeName="d" values="M 140 290 Q 150 300 160 310 Q 165 315 160 318 Q 155 315 150 310 Q 145 300 140 290 Z; M 140 290 Q 148 298 155 308 Q 158 313 155 316 Q 152 313 148 308 Q 142 298 140 290 Z; M 140 290 Q 150 300 160 310 Q 165 315 160 318 Q 155 315 150 310 Q 145 300 140 290 Z" dur="0.3s" repeatCount="indefinite"/>
+  </path>
+
+  <!-- Extra booster flames (blue) -->
+  <path d="M 85 292 Q 80 298 75 305" stroke="#4A90E2" stroke-width="4" fill="none" opacity="0.7" stroke-linecap="round"/>
+  <path d="M 135 292 Q 140 298 145 305" stroke="#4A90E2" stroke-width="4" fill="none" opacity="0.7" stroke-linecap="round"/>
+
+  <!-- Speed motion lines -->
+  <line x1="30" y1="150" x2="50" y2="155" stroke="#FFA15C" stroke-width="3" opacity="0.4" stroke-linecap="round"/>
+  <line x1="25" y1="170" x2="45" y2="173" stroke="#FF8C42" stroke-width="3" opacity="0.4" stroke-linecap="round"/>
+  <line x1="170" y1="150" x2="190" y2="155" stroke="#FFA15C" stroke-width="3" opacity="0.4" stroke-linecap="round"/>
+  <line x1="175" y1="170" x2="195" y2="173" stroke="#FF8C42" stroke-width="3" opacity="0.4" stroke-linecap="round"/>
+
+  <!-- Rocket body - Stage 1 (bottom) DEV -->
+  <rect x="70" y="215" width="80" height="75" rx="5" fill="#FF8C42"/>
+  <rect x="75" y="220" width="70" height="65" rx="3" fill="#FFA15C" opacity="0.3"/>
+  <text x="110" y="258" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#FFFFFF" text-anchor="middle">DEV</text>
+
+  <!-- Large booster engines visible -->
+  <rect x="75" y="287" width="20" height="10" rx="2" fill="#5A5A5A"/>
+  <rect x="125" y="287" width="20" height="10" rx="2" fill="#5A5A5A"/>
+
+  <!-- Stage 2 (middle) TEST -->
+  <rect x="75" y="145" width="70" height="70" rx="5" fill="#FF8C42"/>
+  <rect x="80" y="150" width="60" height="60" rx="3" fill="#FFA15C" opacity="0.3"/>
+  <text x="110" y="188" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">TEST</text>
+
+  <!-- Stage 3 (top) PROD -->
+  <rect x="80" y="85" width="60" height="60" rx="5" fill="#FF8C42"/>
+  <rect x="85" y="90" width="50" height="50" rx="3" fill="#FFA15C" opacity="0.3"/>
+  <text x="110" y="121" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF" text-anchor="middle">PROD</text>
+
+  <!-- Nose cone (aerodynamic) -->
+  <path d="M 110 20 L 140 85 L 80 85 Z" fill="#FF6B35"/>
+
+  <!-- Command window -->
+  <circle cx="110" cy="58" r="18" fill="#E8F4F8"/>
+
+  <!-- Focused/determined face -->
+  <circle cx="105" cy="56" r="3" fill="#2C3E50"/>
+  <circle cx="115" cy="56" r="3" fill="#2C3E50"/>
+  <circle cx="106" cy="54" r="1.5" fill="#FFFFFF"/>
+  <circle cx="116" cy="54" r="1.5" fill="#FFFFFF"/>
+  <path d="M 103 63 Q 110 66 117 63" stroke="#2C3E50" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Fins (aerodynamic) -->
+  <path d="M 70 215 L 45 250 L 45 270 L 70 240 Z" fill="#4A90E2"/>
+  <path d="M 150 215 L 175 250 L 175 270 L 150 240 Z" fill="#4A90E2"/>
+
+  <!-- Fin stripes (speed) -->
+  <line x1="55" y1="255" x2="60" y2="245" stroke="#5BA3F5" stroke-width="2"/>
+  <line x1="165" y1="255" x2="160" y2="245" stroke="#5BA3F5" stroke-width="2"/>
+
+  <!-- Stage separators -->
+  <line x1="70" y1="215" x2="150" y2="215" stroke="#FF6B35" stroke-width="3"/>
+  <line x1="75" y1="145" x2="145" y2="145" stroke="#FF6B35" stroke-width="3"/>
+
+  <!-- Booster indicators (active) -->
+  <circle cx="80" cy="220" r="3" fill="#FFD700" opacity="0.95">
+    <animate attributeName="opacity" values="0.5;0.95;0.5" dur="0.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="140" cy="220" r="3" fill="#FFD700" opacity="0.95">
+    <animate attributeName="opacity" values="0.5;0.95;0.5" dur="0.5s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Acceleration meter on side -->
+  <rect x="85" y="165" width="6" height="25" rx="2" fill="#4A90E2" opacity="0.3"/>
+  <rect x="85" y="180" width="6" height="10" rx="2" fill="#00FF00" opacity="0.8"/>
+
+  <!-- Thrust indicators -->
+  <text x="110" y="280" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#FFD700">MAX THRUST</text>
+</svg>

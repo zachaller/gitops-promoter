@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 320" width="240" height="320">
+  <!-- Express Rocket - Maximum Speed Design -->
+
+  <!-- Intense speed trail -->
+  <line x1="50" y1="140" x2="70" y2="143" stroke="#FFD700" stroke-width="4" opacity="0.5" stroke-linecap="round"/>
+  <line x1="45" y1="160" x2="65" y2="162" stroke="#FF8C42" stroke-width="4" opacity="0.5" stroke-linecap="round"/>
+  <line x1="40" y1="180" x2="60" y2="182" stroke="#FFA15C" stroke-width="4" opacity="0.5" stroke-linecap="round"/>
+  <line x1="42" y1="200" x2="62" y2="202" stroke="#FFD700" stroke-width="4" opacity="0.5" stroke-linecap="round"/>
+
+  <line x1="170" y1="140" x2="190" y2="143" stroke="#FFD700" stroke-width="4" opacity="0.5" stroke-linecap="round"/>
+  <line x1="175" y1="160" x2="195" y2="162" stroke="#FF8C42" stroke-width="4" opacity="0.5" stroke-linecap="round"/>
+  <line x1="180" y1="180" x2="200" y2="182" stroke="#FFA15C" stroke-width="4" opacity="0.5" stroke-linecap="round"/>
+  <line x1="178" y1="200" x2="198" y2="202" stroke="#FFD700" stroke-width="4" opacity="0.5" stroke-linecap="round"/>
+
+  <!-- Powerful exhaust (blue plasma) -->
+  <path d="M 100 295 Q 95 305 92 313" stroke="#5BA3F5" stroke-width="8" fill="none" opacity="0.8" stroke-linecap="round">
+    <animate attributeName="opacity" values="0.5;0.8;0.5" dur="0.4s" repeatCount="indefinite"/>
+  </path>
+  <path d="M 120 298 Q 120 308 120 316" stroke="#4A90E2" stroke-width="10" fill="none" opacity="0.9" stroke-linecap="round">
+    <animate attributeName="opacity" values="0.6;0.9;0.6" dur="0.4s" repeatCount="indefinite"/>
+  </path>
+  <path d="M 140 295 Q 145 305 148 313" stroke="#5BA3F5" stroke-width="8" fill="none" opacity="0.8" stroke-linecap="round">
+    <animate attributeName="opacity" values="0.5;0.8;0.5" dur="0.4s" repeatCount="indefinite"/>
+  </path>
+
+  <!-- Ultra-streamlined body (torpedo shape) -->
+  <ellipse cx="120" cy="180" rx="32" ry="115" fill="#FF8C42"/>
+  <ellipse cx="118" cy="175" rx="28" ry="108" fill="#FFA15C" opacity="0.4"/>
+
+  <!-- Speed stripes (racing style) -->
+  <path d="M 95 120 L 110 118 L 112 123 L 97 125 Z" fill="#4A90E2" opacity="0.7"/>
+  <path d="M 92 150 L 107 148 L 109 153 L 94 155 Z" fill="#4A90E2" opacity="0.7"/>
+  <path d="M 90 180 L 105 178 L 107 183 L 92 185 Z" fill="#4A90E2" opacity="0.7"/>
+  <path d="M 92 210 L 107 208 L 109 213 L 94 215 Z" fill="#4A90E2" opacity="0.7"/>
+
+  <!-- Environment markers (minimal) -->
+  <circle cx="120" cy="240" r="12" fill="#FFFFFF" opacity="0.2"/>
+  <text x="120" y="244" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#FFFFFF" text-anchor="middle">DEV</text>
+
+  <circle cx="120" cy="180" r="12" fill="#FFFFFF" opacity="0.2"/>
+  <text x="120" y="184" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#FFFFFF" text-anchor="middle">TEST</text>
+
+  <circle cx="120" cy="115" r="12" fill="#FFFFFF" opacity="0.2"/>
+  <text x="120" y="119" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#FFFFFF" text-anchor="middle">PROD</text>
+
+  <!-- Sharp needle nose -->
+  <path d="M 120 20 L 135 85 L 105 85 Z" fill="#FF6B35"/>
+  <path d="M 120 20 L 130 75 L 110 75 Z" fill="#FFA15C" opacity="0.5"/>
+
+  <!-- Minimal cockpit (aerodynamic) -->
+  <ellipse cx="120" cy="60" rx="8" ry="10" fill="#E8F4F8"/>
+  <circle cx="119" cy="59" r="2" fill="#2C3E50"/>
+  <circle cx="121" cy="59" r="2" fill="#2C3E50"/>
+  <path d="M 118 63 Q 120 65 122 63" stroke="#2C3E50" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Micro fins (minimal drag) -->
+  <path d="M 88 230 L 78 255 L 80 265 L 88 245 Z" fill="#4A90E2"/>
+  <path d="M 152 230 L 162 255 L 160 265 L 152 245 Z" fill="#4A90E2"/>
+
+  <!-- Afterburner effect -->
+  <ellipse cx="120" cy="295" rx="20" ry="8" fill="#FFD700" opacity="0.4">
+    <animate attributeName="opacity" values="0.2;0.4;0.2" dur="0.3s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- Engine nozzles (high-performance) -->
+  <rect x="105" y="295" width="10" height="6" rx="1" fill="#5A5A5A"/>
+  <rect x="125" y="295" width="10" height="6" rx="1" fill="#5A5A5A"/>
+
+  <!-- Engine glow (intense) -->
+  <circle cx="110" cy="298" r="3" fill="#4A90E2" opacity="0.9">
+    <animate attributeName="opacity" values="0.5;0.9;0.5" dur="0.3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="130" cy="298" r="3" fill="#4A90E2" opacity="0.9">
+    <animate attributeName="opacity" values="0.5;0.9;0.5" dur="0.3s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Speed indicator panel -->
+  <rect x="155" y="170" width="50" height="45" rx="5" fill="#2C3E50" opacity="0.7"/>
+  <text x="180" y="185" font-family="monospace" font-size="9" fill="#FFD700" text-anchor="middle">SPEED</text>
+  <text x="180" y="200" font-family="monospace" font-size="16" font-weight="bold" fill="#00FF00" text-anchor="middle">MAX</text>
+
+  <!-- Mach number -->
+  <text x="180" y="212" font-family="monospace" font-size="8" fill="#5BA3F5" text-anchor="middle">MACH 12</text>
+
+  <!-- "EXPRESS" branding -->
+  <text x="120" y="270" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#FFD700" text-anchor="middle" opacity="0.8">EXPRESS</text>
+
+  <!-- Speed burst effect behind rocket -->
+  <circle cx="120" cy="180" r="60" fill="none" stroke="#FFD700" stroke-width="2" opacity="0.2"/>
+  <circle cx="120" cy="180" r="75" fill="none" stroke="#FF8C42" stroke-width="1.5" opacity="0.15"/>
+
+  <!-- Sonic boom lines -->
+  <path d="M 88 140 L 70 135" stroke="#FFFFFF" stroke-width="2" opacity="0.3" stroke-linecap="round"/>
+  <path d="M 152 140 L 170 135" stroke="#FFFFFF" stroke-width="2" opacity="0.3" stroke-linecap="round"/>
+  <path d="M 85 190 L 65 190" stroke="#FFFFFF" stroke-width="2" opacity="0.3" stroke-linecap="round"/>
+  <path d="M 155 190 L 175 190" stroke="#FFFFFF" stroke-width="2" opacity="0.3" stroke-linecap="round"/>
+</svg>
