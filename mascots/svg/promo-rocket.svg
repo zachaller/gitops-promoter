@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300" width="200" height="300">
+  <!-- Promo the Promotion Rocket -->
+
+  <!-- Blue exhaust flames -->
+  <path d="M 70 280 Q 60 290 50 300 L 60 300 Q 70 285 70 280 Z" fill="#4A90E2" opacity="0.7"/>
+  <path d="M 100 280 Q 100 295 100 300 L 100 300 Q 100 290 100 280 Z" fill="#5BA3F5" opacity="0.8"/>
+  <path d="M 130 280 Q 140 290 150 300 L 140 300 Q 130 285 130 280 Z" fill="#4A90E2" opacity="0.7"/>
+
+  <!-- Orange rocket body (multi-stage) -->
+  <!-- Stage 1 (bottom) - DEV -->
+  <rect x="60" y="200" width="80" height="80" rx="5" fill="#FF8C42"/>
+  <rect x="65" y="205" width="70" height="70" rx="3" fill="#FFA15C" opacity="0.3"/>
+  <text x="100" y="245" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">DEV</text>
+
+  <!-- Stage 2 (middle) - TEST -->
+  <rect x="65" y="130" width="70" height="70" rx="5" fill="#FF8C42"/>
+  <rect x="70" y="135" width="60" height="60" rx="3" fill="#FFA15C" opacity="0.3"/>
+  <text x="100" y="170" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#FFFFFF" text-anchor="middle">TEST</text>
+
+  <!-- Stage 3 (top) - PROD -->
+  <rect x="70" y="70" width="60" height="60" rx="5" fill="#FF8C42"/>
+  <rect x="75" y="75" width="50" height="50" rx="3" fill="#FFA15C" opacity="0.3"/>
+  <text x="100" y="107" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle">PROD</text>
+
+  <!-- Rocket nose cone -->
+  <path d="M 100 10 L 130 70 L 70 70 Z" fill="#FF6B35"/>
+
+  <!-- Window/Face area on nose -->
+  <circle cx="100" cy="50" r="15" fill="#E8F4F8"/>
+
+  <!-- Friendly eyes -->
+  <circle cx="95" cy="48" r="3" fill="#2C3E50"/>
+  <circle cx="105" cy="48" r="3" fill="#2C3E50"/>
+
+  <!-- Happy smile -->
+  <path d="M 92 54 Q 100 58 108 54" stroke="#2C3E50" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+  <!-- Blue fins/wings -->
+  <path d="M 60 200 L 40 220 L 40 240 L 60 230 Z" fill="#4A90E2"/>
+  <path d="M 140 200 L 160 220 L 160 240 L 140 230 Z" fill="#4A90E2"/>
+
+  <!-- Git branch symbols on fins -->
+  <circle cx="50" cy="225" r="3" fill="#FFFFFF"/>
+  <line x1="50" y1="228" x2="48" y2="235" stroke="#FFFFFF" stroke-width="1.5"/>
+  <line x1="50" y1="228" x2="52" y2="235" stroke="#FFFFFF" stroke-width="1.5"/>
+  <circle cx="48" cy="235" r="2" fill="#FFFFFF"/>
+  <circle cx="52" cy="235" r="2" fill="#FFFFFF"/>
+
+  <circle cx="150" cy="225" r="3" fill="#FFFFFF"/>
+  <line x1="150" y1="228" x2="148" y2="235" stroke="#FFFFFF" stroke-width="1.5"/>
+  <line x1="150" y1="228" x2="152" y2="235" stroke="#FFFFFF" stroke-width="1.5"/>
+  <circle cx="148" cy="235" r="2" fill="#FFFFFF"/>
+  <circle cx="152" cy="235" r="2" fill="#FFFFFF"/>
+
+  <!-- Stage separators -->
+  <line x1="60" y1="200" x2="140" y2="200" stroke="#FF6B35" stroke-width="2"/>
+  <line x1="65" y1="130" x2="135" y2="130" stroke="#FF6B35" stroke-width="2"/>
+
+  <!-- Rivets/details -->
+  <circle cx="70" cy="150" r="2" fill="#FF6B35"/>
+  <circle cx="130" cy="150" r="2" fill="#FF6B35"/>
+  <circle cx="70" cy="220" r="2" fill="#FF6B35"/>
+  <circle cx="130" cy="220" r="2" fill="#FF6B35"/>
+</svg>

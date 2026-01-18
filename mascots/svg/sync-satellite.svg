@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
+  <!-- Sync the Orbital Satellite -->
+
+  <!-- Central environment "planets" -->
+  <!-- DEV planet -->
+  <circle cx="100" cy="200" r="35" fill="#FF8C42" opacity="0.3"/>
+  <circle cx="100" cy="200" r="30" fill="#FF8C42" opacity="0.5"/>
+  <text x="100" y="205" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FF6B35" text-anchor="middle">DEV</text>
+
+  <!-- TEST planet -->
+  <circle cx="160" cy="160" r="40" fill="#4A90E2" opacity="0.3"/>
+  <circle cx="160" cy="160" r="35" fill="#4A90E2" opacity="0.5"/>
+  <text x="160" y="165" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#3B7BC4" text-anchor="middle">TEST</text>
+
+  <!-- PROD planet -->
+  <circle cx="220" cy="200" r="45" fill="#00CC88" opacity="0.3"/>
+  <circle cx="220" cy="200" r="40" fill="#00CC88" opacity="0.5"/>
+  <text x="220" y="206" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#00AA66" text-anchor="middle">PROD</text>
+
+  <!-- Orbital paths (dashed circles) -->
+  <circle cx="100" cy="200" r="60" stroke="#FF8C42" stroke-width="2" fill="none" stroke-dasharray="5,5" opacity="0.4"/>
+  <circle cx="160" cy="160" r="75" stroke="#4A90E2" stroke-width="2" fill="none" stroke-dasharray="5,5" opacity="0.4"/>
+  <circle cx="220" cy="200" r="80" stroke="#00CC88" stroke-width="2" fill="none" stroke-dasharray="5,5" opacity="0.4"/>
+
+  <!-- Satellite body -->
+  <rect x="140" y="65" width="40" height="45" rx="3" fill="#FF8C42"/>
+  <rect x="143" y="68" width="34" height="39" rx="2" fill="#FFA15C" opacity="0.4"/>
+
+  <!-- Solar panels (blue) -->
+  <!-- Left panel -->
+  <rect x="95" y="75" width="45" height="25" fill="#4A90E2"/>
+  <line x1="100" y1="75" x2="100" y2="100" stroke="#3B7BC4" stroke-width="1"/>
+  <line x1="108" y1="75" x2="108" y2="100" stroke="#3B7BC4" stroke-width="1"/>
+  <line x1="116" y1="75" x2="116" y2="100" stroke="#3B7BC4" stroke-width="1"/>
+  <line x1="124" y1="75" x2="124" y2="100" stroke="#3B7BC4" stroke-width="1"/>
+  <line x1="132" y1="75" x2="132" y2="100" stroke="#3B7BC4" stroke-width="1"/>
+
+  <!-- Right panel -->
+  <rect x="180" y="75" width="45" height="25" fill="#4A90E2"/>
+  <line x1="185" y1="75" x2="185" y2="100" stroke="#3B7BC4" stroke-width="1"/>
+  <line x1="193" y1="75" x2="193" y2="100" stroke="#3B7BC4" stroke-width="1"/>
+  <line x1="201" y1="75" x2="201" y2="100" stroke="#3B7BC4" stroke-width="1"/>
+  <line x1="209" y1="75" x2="209" y2="100" stroke="#3B7BC4" stroke-width="1"/>
+  <line x1="217" y1="75" x2="217" y2="100" stroke="#3B7BC4" stroke-width="1"/>
+
+  <!-- Panel connectors -->
+  <rect x="140" y="82" width="5" height="11" fill="#FFA15C"/>
+  <rect x="175" y="82" width="5" height="11" fill="#FFA15C"/>
+
+  <!-- Antenna -->
+  <line x1="160" y1="65" x2="160" y2="40" stroke="#4A90E2" stroke-width="3"/>
+  <circle cx="160" cy="35" r="6" fill="#4A90E2"/>
+  <circle cx="160" cy="35" r="3" fill="#FFFFFF"/>
+
+  <!-- Signal waves from antenna -->
+  <circle cx="160" cy="35" r="10" stroke="#5BA3F5" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <circle cx="160" cy="35" r="15" stroke="#5BA3F5" stroke-width="1.5" fill="none" opacity="0.3"/>
+  <circle cx="160" cy="35" r="20" stroke="#5BA3F5" stroke-width="1.5" fill="none" opacity="0.2"/>
+
+  <!-- Friendly face on satellite body -->
+  <circle cx="152" cy="83" r="3" fill="#2C3E50"/>
+  <circle cx="168" cy="83" r="3" fill="#2C3E50"/>
+  <circle cx="153" cy="82" r="1" fill="#FFFFFF"/>
+  <circle cx="169" cy="82" r="1" fill="#FFFFFF"/>
+
+  <!-- Happy smile -->
+  <path d="M 154 92 Q 160 96 166 92" stroke="#2C3E50" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+  <!-- Display screen showing "In Sync" -->
+  <rect x="148" y="95" width="24" height="10" rx="2" fill="#E8F4F8"/>
+  <text x="160" y="102" font-family="monospace" font-size="6" fill="#00CC00" text-anchor="middle" font-weight="bold">IN SYNC</text>
+
+  <!-- Sync signals to planets -->
+  <!-- Signal to DEV -->
+  <line x1="145" y1="105" x2="110" y2="175" stroke="#FF8C42" stroke-width="2" stroke-dasharray="4,3" opacity="0.6"/>
+  <circle cx="110" cy="175" r="4" fill="#FF8C42" opacity="0.8"/>
+  <path d="M 108 171 L 110 174 L 114 172" stroke="#FFFFFF" stroke-width="1.5" fill="none"/>
+
+  <!-- Signal to TEST -->
+  <line x1="160" y1="110" x2="160" y2="130" stroke="#4A90E2" stroke-width="2" stroke-dasharray="4,3" opacity="0.6"/>
+  <circle cx="160" cy="130" r="4" fill="#4A90E2" opacity="0.8"/>
+  <path d="M 158 126 L 160 129 L 164 127" stroke="#FFFFFF" stroke-width="1.5" fill="none"/>
+
+  <!-- Signal to PROD -->
+  <line x1="175" y1="105" x2="210" y2="165" stroke="#00CC88" stroke-width="2" stroke-dasharray="4,3" opacity="0.6"/>
+  <circle cx="210" cy="165" r="4" fill="#00CC88" opacity="0.8"/>
+  <path d="M 208 161 L 210 164 L 214 162" stroke="#FFFFFF" stroke-width="1.5" fill="none"/>
+
+  <!-- Status indicators on body -->
+  <circle cx="148" cy="75" r="2.5" fill="#00FF00" opacity="0.8"/>
+  <circle cx="172" cy="75" r="2.5" fill="#00FF00" opacity="0.8"/>
+
+  <!-- Stars in background -->
+  <circle cx="30" cy="40" r="2" fill="#FFD700" opacity="0.7"/>
+  <circle cx="290" cy="60" r="2.5" fill="#FFD700" opacity="0.7"/>
+  <circle cx="270" cy="120" r="2" fill="#FFD700" opacity="0.7"/>
+  <circle cx="50" cy="280" r="2" fill="#FFD700" opacity="0.7"/>
+  <circle cx="280" cy="270" r="2.5" fill="#FFD700" opacity="0.7"/>
+  <circle cx="40" cy="120" r="1.5" fill="#FFD700" opacity="0.6"/>
+
+  <!-- Thrust/propulsion (small) -->
+  <ellipse cx="155" cy="110" rx="3" ry="2" fill="#5BA3F5" opacity="0.5"/>
+  <ellipse cx="165" cy="110" rx="3" ry="2" fill="#5BA3F5" opacity="0.5"/>
+
+  <!-- Synchronization status labels -->
+  <text x="100" y="250" font-family="Arial, sans-serif" font-size="9" fill="#00CC00" text-anchor="middle">✓ Synced</text>
+  <text x="160" y="220" font-family="Arial, sans-serif" font-size="9" fill="#00CC00" text-anchor="middle">✓ Synced</text>
+  <text x="220" y="260" font-family="Arial, sans-serif" font-size="9" fill="#00CC00" text-anchor="middle">✓ Synced</text>
+
+  <!-- Orbital position marker (small satellite positions) -->
+  <circle cx="160" cy="87.5" r="4" fill="#FF8C42" opacity="0.6"/>
+</svg>

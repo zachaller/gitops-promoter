@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 320" width="280" height="320">
+  <!-- Gita the GitOps Phoenix -->
+
+  <!-- "DEV" flames at bottom (rising from) -->
+  <path d="M 100 300 Q 90 280 95 260 Q 100 270 105 260 Q 110 280 100 300 Z" fill="#FF6B35" opacity="0.6"/>
+  <path d="M 120 305 Q 115 285 118 265 Q 122 275 126 265 Q 130 285 120 305 Z" fill="#FF8C42" opacity="0.7"/>
+  <path d="M 140 300 Q 135 280 140 260 Q 145 270 150 260 Q 155 280 140 300 Z" fill="#FFA15C" opacity="0.6"/>
+  <path d="M 160 305 Q 155 285 160 265 Q 165 275 170 265 Q 175 285 160 305 Z" fill="#FF6B35" opacity="0.7"/>
+  <path d="M 180 300 Q 175 280 180 260 Q 185 270 190 260 Q 195 280 180 300 Z" fill="#FF8C42" opacity="0.6"/>
+
+  <text x="140" y="295" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FF6B35" text-anchor="middle">DEV</text>
+
+  <!-- Tail feathers (designed like git branches) -->
+  <path d="M 140 200 Q 120 240 110 270" stroke="#FF8C42" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 140 200 Q 130 235 125 265" stroke="#FF6B35" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M 140 200 Q 140 235 140 268" stroke="#FFA15C" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 140 200 Q 150 235 155 268" stroke="#FF6B35" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M 140 200 Q 160 240 170 270" stroke="#FF8C42" stroke-width="8" fill="none" stroke-linecap="round"/>
+
+  <!-- Branch endings (like git nodes) -->
+  <circle cx="110" cy="270" r="5" fill="#4A90E2"/>
+  <circle cx="125" cy="265" r="4" fill="#4A90E2"/>
+  <circle cx="140" cy="268" r="5" fill="#4A90E2"/>
+  <circle cx="155" cy="268" r="4" fill="#4A90E2"/>
+  <circle cx="170" cy="270" r="5" fill="#4A90E2"/>
+
+  <!-- Phoenix body -->
+  <ellipse cx="140" cy="150" rx="35" ry="50" fill="#FF8C42"/>
+  <ellipse cx="140" cy="145" rx="30" ry="45" fill="#FFA15C" opacity="0.5"/>
+
+  <!-- Wings (spread wide) -->
+  <!-- Left wing -->
+  <ellipse cx="90" cy="130" rx="45" ry="25" fill="#FF8C42" transform="rotate(-30 90 130)"/>
+  <ellipse cx="85" cy="125" rx="40" ry="22" fill="#FF6B35" opacity="0.7" transform="rotate(-30 85 125)"/>
+  <path d="M 90 120 Q 60 110 45 115" stroke="#4A90E2" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 85 130 Q 55 125 40 132" stroke="#4A90E2" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 88 140 Q 58 140 43 148" stroke="#4A90E2" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+  <!-- Right wing -->
+  <ellipse cx="190" cy="130" rx="45" ry="25" fill="#FF8C42" transform="rotate(30 190 130)"/>
+  <ellipse cx="195" cy="125" rx="40" ry="22" fill="#FF6B35" opacity="0.7" transform="rotate(30 195 125)"/>
+  <path d="M 190 120 Q 220 110 235 115" stroke="#4A90E2" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 195 130 Q 225 125 240 132" stroke="#4A90E2" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 192 140 Q 222 140 237 148" stroke="#4A90E2" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+  <!-- Phoenix head -->
+  <circle cx="140" cy="100" r="28" fill="#FF8C42"/>
+  <circle cx="140" cy="95" r="25" fill="#FFA15C" opacity="0.4"/>
+
+  <!-- Crest/crown feathers -->
+  <path d="M 125 80 Q 120 60 125 50" stroke="#FF6B35" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M 135 75 Q 132 55 135 40" stroke="#FFA15C" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M 145 75 Q 148 55 145 40" stroke="#FFA15C" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M 155 80 Q 160 60 155 50" stroke="#FF6B35" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+  <!-- Crest tips -->
+  <circle cx="125" cy="50" r="3" fill="#4A90E2"/>
+  <circle cx="135" cy="40" r="3" fill="#4A90E2"/>
+  <circle cx="145" cy="40" r="3" fill="#4A90E2"/>
+  <circle cx="155" cy="50" r="3" fill="#4A90E2"/>
+
+  <!-- Wise, kind eyes -->
+  <ellipse cx="130" cy="98" rx="6" ry="8" fill="#FFFFFF"/>
+  <ellipse cx="150" cy="98" rx="6" ry="8" fill="#FFFFFF"/>
+  <circle cx="130" cy="100" r="4" fill="#2C3E50"/>
+  <circle cx="150" cy="100" r="4" fill="#2C3E50"/>
+  <circle cx="131" cy="98" r="1.5" fill="#FFFFFF"/>
+  <circle cx="151" cy="98" r="1.5" fill="#FFFFFF"/>
+
+  <!-- Beak -->
+  <path d="M 140 105 L 145 112 L 140 110 Z" fill="#FFA15C"/>
+
+  <!-- Gentle smile -->
+  <path d="M 132 108 Q 140 111 148 108" stroke="#2C3E50" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+
+  <!-- "PROD" clouds at top (rising toward) -->
+  <ellipse cx="140" cy="25" rx="35" ry="12" fill="#E8F4F8" opacity="0.7"/>
+  <ellipse cx="120" cy="30" rx="25" ry="10" fill="#E8F4F8" opacity="0.6"/>
+  <ellipse cx="160" cy="30" rx="25" ry="10" fill="#E8F4F8" opacity="0.6"/>
+  <text x="140" y="30" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#4A90E2" text-anchor="middle">PROD</text>
+
+  <!-- Upward motion lines -->
+  <path d="M 70 180 L 75 165" stroke="#FFA15C" stroke-width="2" opacity="0.4" stroke-linecap="round"/>
+  <path d="M 80 190 L 83 175" stroke="#FF8C42" stroke-width="2" opacity="0.4" stroke-linecap="round"/>
+  <path d="M 210 180 L 205 165" stroke="#FFA15C" stroke-width="2" opacity="0.4" stroke-linecap="round"/>
+  <path d="M 200 190 L 197 175" stroke="#FF8C42" stroke-width="2" opacity="0.4" stroke-linecap="round"/>
+</svg>

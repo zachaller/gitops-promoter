@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 300" width="250" height="300">
+  <!-- Drift the Drift-Free Navigator -->
+
+  <!-- Stars in background -->
+  <circle cx="30" cy="40" r="2" fill="#FFD700" opacity="0.8"/>
+  <circle cx="220" cy="60" r="1.5" fill="#FFD700" opacity="0.7"/>
+  <circle cx="200" cy="100" r="2" fill="#FFD700" opacity="0.8"/>
+  <circle cx="50" cy="120" r="1.5" fill="#FFD700" opacity="0.7"/>
+  <circle cx="210" cy="150" r="2" fill="#FFD700" opacity="0.8"/>
+
+  <!-- Tether line to source-of-truth -->
+  <line x1="125" y1="100" x2="210" y2="30" stroke="#4A90E2" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
+  <circle cx="210" cy="30" r="6" fill="#4A90E2" opacity="0.8"/>
+  <text x="215" y="27" font-family="Arial, sans-serif" font-size="10" fill="#4A90E2">DRY</text>
+
+  <!-- Orange spacesuit body -->
+  <ellipse cx="125" cy="180" rx="35" ry="45" fill="#FF8C42"/>
+  <rect x="90" y="160" width="70" height="50" rx="8" fill="#FF8C42"/>
+  <ellipse cx="125" cy="160" rx="35" ry="15" fill="#FFA15C" opacity="0.4"/>
+
+  <!-- Arms -->
+  <ellipse cx="85" cy="175" rx="12" ry="30" fill="#FF8C42" transform="rotate(-20 85 175)"/>
+  <ellipse cx="165" cy="175" rx="12" ry="30" fill="#FF8C42" transform="rotate(20 165 175)"/>
+
+  <!-- Hands/Gloves (white) -->
+  <circle cx="80" cy="195" r="10" fill="#FFFFFF"/>
+  <circle cx="170" cy="195" r="10" fill="#FFFFFF"/>
+
+  <!-- Navigation tools in hands -->
+  <!-- Compass showing "No Drift" -->
+  <circle cx="80" cy="195" r="7" fill="#4A90E2"/>
+  <circle cx="80" cy="195" r="5" fill="#FFFFFF"/>
+  <line x1="80" y1="195" x2="80" y2="190" stroke="#FF6B35" stroke-width="2"/>
+  <text x="95" y="197" font-family="Arial, sans-serif" font-size="8" fill="#2C3E50">NO DRIFT</text>
+
+  <!-- Legs -->
+  <rect x="105" y="220" width="18" height="45" rx="5" fill="#FF8C42"/>
+  <rect x="127" y="220" width="18" height="45" rx="5" fill="#FF8C42"/>
+
+  <!-- Boots -->
+  <ellipse cx="114" cy="268" rx="12" ry="8" fill="#4A90E2"/>
+  <ellipse cx="136" cy="268" rx="12" ry="8" fill="#4A90E2"/>
+
+  <!-- Helmet -->
+  <circle cx="125" cy="100" r="45" fill="#4A90E2" opacity="0.3"/>
+  <ellipse cx="125" cy="100" rx="40" ry="45" fill="url(#helmetGradient)"/>
+
+  <defs>
+    <linearGradient id="helmetGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#5BA3F5;stop-opacity:0.6" />
+      <stop offset="50%" style="stop-color:#4A90E2;stop-opacity:0.4" />
+      <stop offset="100%" style="stop-color:#3B7BC4;stop-opacity:0.5" />
+    </linearGradient>
+  </defs>
+
+  <!-- Helmet shine -->
+  <ellipse cx="105" cy="80" rx="15" ry="20" fill="#FFFFFF" opacity="0.5"/>
+
+  <!-- Visor/Face area -->
+  <ellipse cx="125" cy="105" rx="25" ry="20" fill="#E8F4F8" opacity="0.9"/>
+
+  <!-- Friendly face through visor -->
+  <circle cx="115" cy="103" r="4" fill="#2C3E50"/>
+  <circle cx="135" cy="103" r="4" fill="#2C3E50"/>
+  <circle cx="116" cy="101" r="1.5" fill="#FFFFFF"/>
+  <circle cx="136" cy="101" r="1.5" fill="#FFFFFF"/>
+
+  <!-- Happy smile -->
+  <path d="M 112 112 Q 125 118 138 112" stroke="#2C3E50" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Helmet ring/collar -->
+  <ellipse cx="125" cy="145" rx="42" ry="8" fill="#FFA15C"/>
+
+  <!-- Chest control panel -->
+  <rect x="110" y="165" width="30" height="25" rx="3" fill="#4A90E2" opacity="0.7"/>
+  <circle cx="120" cy="175" r="3" fill="#00FF00" opacity="0.8"/>
+  <circle cx="130" cy="175" r="3" fill="#00FF00" opacity="0.8"/>
+  <rect x="113" y="183" width="14" height="3" rx="1" fill="#FFFFFF" opacity="0.6"/>
+  <rect x="127" y="183" width="10" height="3" rx="1" fill="#FFFFFF" opacity="0.6"/>
+
+  <!-- Environment indicators floating -->
+  <g transform="translate(35, 180)">
+    <circle cx="0" cy="0" r="12" fill="#4A90E2" opacity="0.3"/>
+    <text x="0" y="4" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#4A90E2" text-anchor="middle">DEV</text>
+  </g>
+
+  <g transform="translate(200, 200)">
+    <circle cx="0" cy="0" r="12" fill="#4A90E2" opacity="0.3"/>
+    <text x="0" y="4" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#4A90E2" text-anchor="middle">PROD</text>
+  </g>
+
+  <!-- Sync check marks -->
+  <path d="M 32 175 L 36 179 L 42 173" stroke="#00FF00" stroke-width="2" fill="none"/>
+  <path d="M 197 195 L 201 199 L 207 193" stroke="#00FF00" stroke-width="2" fill="none"/>
+</svg>
