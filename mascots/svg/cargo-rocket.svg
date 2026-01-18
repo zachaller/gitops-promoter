@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 320" width="260" height="320">
+  <!-- Cargo Rocket - Heavy Payload Delivery -->
+
+  <!-- Exhaust flames -->
+  <path d="M 90 295 Q 85 305 82 313" stroke="#4A90E2" stroke-width="8" fill="none" opacity="0.6" stroke-linecap="round"/>
+  <path d="M 105 298 Q 103 308 102 315" stroke="#5BA3F5" stroke-width="7" fill="none" opacity="0.7" stroke-linecap="round"/>
+  <path d="M 130 295 Q 130 305 130 315" stroke="#FFA15C" stroke-width="9" fill="none" opacity="0.8" stroke-linecap="round"/>
+  <path d="M 155 298 Q 157 308 158 315" stroke="#5BA3F5" stroke-width="7" fill="none" opacity="0.7" stroke-linecap="round"/>
+  <path d="M 170 295 Q 175 305 178 313" stroke="#4A90E2" stroke-width="8" fill="none" opacity="0.6" stroke-linecap="round"/>
+
+  <!-- Bottom engine section -->
+  <rect x="75" y="260" width="110" height="35" rx="5" fill="#FF8C42"/>
+  <rect x="80" y="265" width="100" height="25" rx="3" fill="#FFA15C" opacity="0.3"/>
+  <text x="130" y="283" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#FFFFFF" text-anchor="middle">ENGINES</text>
+
+  <!-- Large cargo bay section (bulky) -->
+  <rect x="70" y="160" width="120" height="100" rx="8" fill="#FF8C42"/>
+  <rect x="75" y="165" width="110" height="90" rx="6" fill="#FFA15C" opacity="0.3"/>
+
+  <!-- Cargo bay doors/panels -->
+  <rect x="75" y="175" width="52" height="70" rx="4" fill="#4A90E2" opacity="0.3"/>
+  <rect x="133" y="175" width="52" height="70" rx="4" fill="#4A90E2" opacity="0.3"/>
+
+  <!-- Door seam -->
+  <line x1="130" y1="175" x2="130" y2="245" stroke="#3B7BC4" stroke-width="3"/>
+
+  <!-- Cargo bay label -->
+  <text x="130" y="220" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">CARGO</text>
+  <text x="130" y="235" font-family="Arial, sans-serif" font-size="11" fill="#FFFFFF" text-anchor="middle">DEPLOYMENTS</text>
+
+  <!-- Payload indicators (boxes/packages inside) -->
+  <rect x="90" y="185" width="15" height="15" rx="2" fill="#FFFFFF" opacity="0.4"/>
+  <rect x="110" y="185" width="15" height="15" rx="2" fill="#FFFFFF" opacity="0.4"/>
+  <rect x="135" y="185" width="15" height="15" rx="2" fill="#FFFFFF" opacity="0.4"/>
+  <rect x="155" y="185" width="15" height="15" rx="2" fill="#FFFFFF" opacity="0.4"/>
+
+  <!-- Command module -->
+  <rect x="85" y="95" width="90" height="65" rx="6" fill="#FF8C42"/>
+  <rect x="90" y="100" width="80" height="55" rx="4" fill="#FFA15C" opacity="0.3"/>
+
+  <!-- Control window -->
+  <rect x="105" y="115" width="50" height="30" rx="5" fill="#E8F4F8"/>
+
+  <!-- Friendly cargo operator face -->
+  <circle cx="120" cy="128" r="4" fill="#2C3E50"/>
+  <circle cx="140" cy="128" r="4" fill="#2C3E50"/>
+  <circle cx="121" cy="126" r="1.5" fill="#FFFFFF"/>
+  <circle cx="141" cy="126" r="1.5" fill="#FFFFFF"/>
+  <path d="M 117 136 Q 130 141 143 136" stroke="#2C3E50" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Environment labels on command module -->
+  <text x="130" y="110" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle">PROD</text>
+
+  <!-- Nose cone -->
+  <path d="M 130 30 L 175 95 L 85 95 Z" fill="#FF6B35"/>
+
+  <!-- TEST label on upper body -->
+  <circle cx="130" cy="70" r="18" fill="#4A90E2" opacity="0.5"/>
+  <text x="130" y="74" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle">TEST</text>
+
+  <!-- DEV label near cargo -->
+  <rect x="75" y="248" width="110" height="12" rx="3" fill="#4A90E2" opacity="0.5"/>
+  <text x="130" y="257" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle">DEV</text>
+
+  <!-- Heavy-duty fins (large, structural) -->
+  <path d="M 70 200 L 30 250 L 30 285 L 70 255 Z" fill="#4A90E2"/>
+  <path d="M 190 200 L 230 250 L 230 285 L 190 255 Z" fill="#4A90E2"/>
+
+  <!-- Fin structural supports -->
+  <line x1="50" y1="225" x2="70" y2="215" stroke="#5BA3F5" stroke-width="2"/>
+  <line x1="45" y1="245" x2="70" y2="235" stroke="#5BA3F5" stroke-width="2"/>
+  <line x1="210" y1="225" x2="190" y2="215" stroke="#5BA3F5" stroke-width="2"/>
+  <line x1="215" y1="245" x2="190" y2="235" stroke="#5BA3F5" stroke-width="2"/>
+
+  <!-- Cargo markings -->
+  <rect x="78" y="168" width="8" height="8" fill="#FFD700" opacity="0.6"/>
+  <rect x="174" y="168" width="8" height="8" fill="#FFD700" opacity="0.6"/>
+  <text x="82" y="174" font-family="Arial, sans-serif" font-size="7" font-weight="bold" fill="#2C3E50">!</text>
+  <text x="178" y="174" font-family="Arial, sans-serif" font-size="7" font-weight="bold" fill="#2C3E50">!</text>
+
+  <!-- Engine nozzles (multiple for heavy lift) -->
+  <rect x="82" y="295" width="18" height="8" rx="2" fill="#5A5A5A"/>
+  <rect x="106" y="295" width="18" height="8" rx="2" fill="#5A5A5A"/>
+  <rect x="136" y="295" width="18" height="8" rx="2" fill="#5A5A5A"/>
+  <rect x="160" y="295" width="18" height="8" rx="2" fill="#5A5A5A"/>
+
+  <!-- Cargo weight indicator -->
+  <rect x="192" y="200" width="28" height="40" rx="3" fill="#2C3E50" opacity="0.3"/>
+  <text x="206" y="215" font-family="monospace" font-size="10" fill="#00FF00" text-anchor="middle">MASS</text>
+  <text x="206" y="228" font-family="monospace" font-size="11" font-weight="bold" fill="#00FF00" text-anchor="middle">HIGH</text>
+
+  <!-- Straps/securing bands on cargo -->
+  <line x1="70" y1="190" x2="190" y2="190" stroke="#FFD700" stroke-width="2"/>
+  <line x1="70" y1="230" x2="190" y2="230" stroke="#FFD700" stroke-width="2"/>
+</svg>

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 300" width="240" height="300">
+  <!-- Retro Rocket - Classic 1950s Sci-Fi Style -->
+
+  <!-- Classic exhaust trail -->
+  <path d="M 95 275 Q 90 285 88 295" stroke="#FFB84D" stroke-width="10" fill="none" opacity="0.6" stroke-linecap="round"/>
+  <path d="M 120 280 Q 120 290 120 298" stroke="#FFA15C" stroke-width="12" fill="none" opacity="0.7" stroke-linecap="round"/>
+  <path d="M 145 275 Q 150 285 152 295" stroke="#FFB84D" stroke-width="10" fill="none" opacity="0.6" stroke-linecap="round"/>
+
+  <!-- Rocket body (cylindrical, classic shape) -->
+  <rect x="80" y="100" width="80" height="175" rx="8" fill="#FF8C42"/>
+
+  <!-- Classic porthole windows -->
+  <circle cx="120" cy="130" r="12" fill="#4A90E2" opacity="0.4"/>
+  <circle cx="120" cy="130" r="10" fill="#E8F4F8"/>
+  <circle cx="120" cy="130" r="8" fill="#4A90E2" opacity="0.2"/>
+
+  <!-- Main window with friendly face -->
+  <circle cx="120" cy="170" r="20" fill="#4A90E2" opacity="0.4"/>
+  <circle cx="120" cy="170" r="18" fill="#E8F4F8"/>
+
+  <!-- Retro-style friendly face -->
+  <circle cx="115" cy="168" r="3.5" fill="#2C3E50"/>
+  <circle cx="125" cy="168" r="3.5" fill="#2C3E50"/>
+  <circle cx="116" cy="166" r="1.5" fill="#FFFFFF"/>
+  <circle cx="126" cy="166" r="1.5" fill="#FFFFFF"/>
+  <path d="M 113 175 Q 120 180 127 175" stroke="#2C3E50" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Additional portholes -->
+  <circle cx="120" cy="210" r="12" fill="#4A90E2" opacity="0.4"/>
+  <circle cx="120" cy="210" r="10" fill="#E8F4F8"/>
+  <circle cx="120" cy="210" r="8" fill="#4A90E2" opacity="0.2"/>
+
+  <circle cx="120" cy="245" r="10" fill="#4A90E2" opacity="0.4"/>
+  <circle cx="120" cy="245" r="8" fill="#E8F4F8"/>
+  <circle cx="120" cy="245" r="6" fill="#4A90E2" opacity="0.2"/>
+
+  <!-- Classic stripes/bands -->
+  <rect x="80" y="145" width="80" height="6" fill="#4A90E2" opacity="0.6"/>
+  <rect x="80" y="190" width="80" height="6" fill="#4A90E2" opacity="0.6"/>
+  <rect x="80" y="225" width="80" height="6" fill="#4A90E2" opacity="0.6"/>
+
+  <!-- Environment labels on bands -->
+  <text x="120" y="150" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle">PROD</text>
+  <text x="120" y="194" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle">TEST</text>
+  <text x="120" y="229" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle">DEV</text>
+
+  <!-- Rivets (classic detail) -->
+  <circle cx="85" cy="120" r="2" fill="#FF6B35"/>
+  <circle cx="155" cy="120" r="2" fill="#FF6B35"/>
+  <circle cx="85" cy="160" r="2" fill="#FF6B35"/>
+  <circle cx="155" cy="160" r="2" fill="#FF6B35"/>
+  <circle cx="85" cy="205" r="2" fill="#FF6B35"/>
+  <circle cx="155" cy="205" r="2" fill="#FF6B35"/>
+  <circle cx="85" cy="255" r="2" fill="#FF6B35"/>
+  <circle cx="155" cy="255" r="2" fill="#FF6B35"/>
+
+  <!-- Nose cone (classic pointed) -->
+  <path d="M 120 30 L 160 100 L 80 100 Z" fill="#FF6B35"/>
+
+  <!-- Antenna on top -->
+  <line x1="120" y1="30" x2="120" y2="15" stroke="#4A90E2" stroke-width="2"/>
+  <circle cx="120" cy="15" r="4" fill="#4A90E2"/>
+  <circle cx="120" cy="15" r="2" fill="#FFFFFF"/>
+
+  <!-- Radio waves from antenna -->
+  <circle cx="120" cy="15" r="8" stroke="#5BA3F5" stroke-width="1" fill="none" opacity="0.4"/>
+  <circle cx="120" cy="15" r="12" stroke="#5BA3F5" stroke-width="1" fill="none" opacity="0.3"/>
+
+  <!-- Classic large fins (symmetrical) -->
+  <path d="M 80 200 L 40 250 L 40 275 L 80 250 Z" fill="#4A90E2"/>
+  <path d="M 160 200 L 200 250 L 200 275 L 160 250 Z" fill="#4A90E2"/>
+
+  <!-- Fin highlights (3D effect) -->
+  <path d="M 80 200 L 50 235 L 50 268 L 80 235 Z" fill="#5BA3F5" opacity="0.4"/>
+  <path d="M 160 200 L 190 235 L 190 268 L 160 235 Z" fill="#5BA3F5" opacity="0.4"/>
+
+  <!-- Fin rivets -->
+  <circle cx="70" cy="225" r="2.5" fill="#FFFFFF" opacity="0.7"/>
+  <circle cx="65" cy="245" r="2.5" fill="#FFFFFF" opacity="0.7"/>
+  <circle cx="170" cy="225" r="2.5" fill="#FFFFFF" opacity="0.7"/>
+  <circle cx="175" cy="245" r="2.5" fill="#FFFFFF" opacity="0.7"/>
+
+  <!-- Engine exhausts (three classic nozzles) -->
+  <rect x="90" y="275" width="12" height="8" rx="2" fill="#5A5A5A"/>
+  <rect x="114" y="275" width="12" height="8" rx="2" fill="#5A5A5A"/>
+  <rect x="138" y="275" width="12" height="8" rx="2" fill="#5A5A5A"/>
+
+  <!-- Engine inner glow -->
+  <circle cx="96" cy="279" r="3" fill="#FFB84D" opacity="0.6"/>
+  <circle cx="120" cy="279" r="3" fill="#FFB84D" opacity="0.6"/>
+  <circle cx="144" cy="279" r="3" fill="#FFB84D" opacity="0.6"/>
+
+  <!-- Retro logo/badge -->
+  <circle cx="120" cy="110" r="10" fill="#FFFFFF" opacity="0.3"/>
+  <text x="120" y="114" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#4A90E2" text-anchor="middle">GP</text>
+
+  <!-- Classic sci-fi accent stripes on fins -->
+  <line x1="60" y1="235" x2="70" y2="245" stroke="#FFFFFF" stroke-width="2" opacity="0.5"/>
+  <line x1="170" y1="235" x2="180" y2="245" stroke="#FFFFFF" stroke-width="2" opacity="0.5"/>
+</svg>
