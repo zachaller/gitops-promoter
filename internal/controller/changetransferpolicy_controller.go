@@ -1037,9 +1037,31 @@ func (r *ChangeTransferPolicyReconciler) creatOrUpdatePullRequest(ctx context.Co
 func (r *ChangeTransferPolicyReconciler) mergePullRequests(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy) (*promoterv1alpha1.PullRequest, error) {
 	logger := log.FromContext(ctx)
 
-	for i, status := range ctp.Status.Proposed.CommitStatuses {
-		if status.Phase != string(promoterv1alpha1.CommitPhaseSuccess) {
-			logger.V(4).Info("Proposed commit status is not success", "key", ctp.Spec.ProposedCommitStatuses[i].Key, "sha", ctp.Status.Proposed.Hydrated.Sha, "phase", status.Phase)
+	// Check that all required commit statuses (from spec) are present in status and have success phase.
+	// The status array is a map keyed by the Key field, not indexed by position.
+	for _, requiredStatus := range ctp.Spec.ProposedCommitStatuses {
+		found := false
+		var foundPhase string
+		for _, statusPhase := range ctp.Status.Proposed.CommitStatuses {
+			if statusPhase.Key == requiredStatus.Key {
+				found = true
+				foundPhase = statusPhase.Phase
+				break
+			}
+		}
+
+		if !found {
+			logger.V(4).Info("Required proposed commit status not found in status",
+				"key", requiredStatus.Key,
+				"sha", ctp.Status.Proposed.Hydrated.Sha)
+			return nil, nil
+		}
+
+		if foundPhase != string(promoterv1alpha1.CommitPhaseSuccess) {
+			logger.V(4).Info("Proposed commit status is not success",
+				"key", requiredStatus.Key,
+				"sha", ctp.Status.Proposed.Hydrated.Sha,
+				"phase", foundPhase)
 			return nil, nil
 		}
 	}

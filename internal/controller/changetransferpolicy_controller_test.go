@@ -551,6 +551,187 @@ var _ = Describe("ChangeTransferPolicy Controller", func() {
 				}, constants.EventuallyTimeout).Should(Succeed())
 			})
 		})
+
+		Context("When multiple proposed commit status checks are configured in different order", func() {
+			var name string
+			var scmSecret *v1.Secret
+			var scmProvider *promoterv1alpha1.ScmProvider
+			var gitRepo *promoterv1alpha1.GitRepository
+			var commitStatus1 *promoterv1alpha1.CommitStatus
+			var commitStatus2 *promoterv1alpha1.CommitStatus
+			var changeTransferPolicy *promoterv1alpha1.ChangeTransferPolicy
+			var typeNamespacedName types.NamespacedName
+			var gitPath string
+			var err error
+			var pr promoterv1alpha1.PullRequest
+			var prName string
+			const checkKey1 = "check-one"
+			const checkKey2 = "check-two"
+
+			BeforeEach(func() {
+				name, scmSecret, scmProvider, gitRepo, commitStatus1, changeTransferPolicy = changeTransferPolicyResources(ctx, "ctp-multi-check", "default")
+
+				// Create second commit status
+				commitStatus2 = &promoterv1alpha1.CommitStatus{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name + "-check2",
+						Namespace: "default",
+						Labels: map[string]string{
+							promoterv1alpha1.CommitStatusLabel: checkKey2,
+						},
+					},
+					Spec: promoterv1alpha1.CommitStatusSpec{
+						RepositoryReference: promoterv1alpha1.ObjectReference{
+							Name: gitRepo.Name,
+						},
+						Name: checkKey2,
+					},
+				}
+
+				typeNamespacedName = types.NamespacedName{
+					Name:      name,
+					Namespace: "default",
+				}
+
+				changeTransferPolicy.Spec.ProposedBranch = testBranchDevelopmentNext
+				changeTransferPolicy.Spec.ActiveBranch = testBranchDevelopment
+				changeTransferPolicy.Spec.AutoMerge = ptr.To(false)
+
+				// Configure TWO proposed commit status checks in the spec
+				// This is the order in spec: check-one, check-two
+				changeTransferPolicy.Spec.ProposedCommitStatuses = []promoterv1alpha1.CommitStatusSelector{
+					{Key: checkKey1},
+					{Key: checkKey2},
+				}
+
+				commitStatus1.Spec.Name = checkKey1
+				commitStatus1.Labels = map[string]string{
+					promoterv1alpha1.CommitStatusLabel: checkKey1,
+				}
+
+				Expect(k8sClient.Create(ctx, scmSecret)).To(Succeed())
+				Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
+				Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
+				Expect(k8sClient.Create(ctx, changeTransferPolicy)).To(Succeed())
+
+				prName = utils.GetPullRequestName(gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name, changeTransferPolicy.Spec.ProposedBranch, changeTransferPolicy.Spec.ActiveBranch)
+
+				gitPath, err = os.MkdirTemp("", "*")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			AfterEach(func() {
+				By("Cleaning up resources")
+				_ = k8sClient.Delete(ctx, changeTransferPolicy)
+				_ = k8sClient.Delete(ctx, commitStatus1)
+				_ = k8sClient.Delete(ctx, commitStatus2)
+				_ = k8sClient.Delete(ctx, gitRepo)
+				_ = k8sClient.Delete(ctx, scmProvider)
+				_ = k8sClient.Delete(ctx, scmSecret)
+			})
+
+			It("should NOT merge when commit statuses are in different order and one is pending", func() {
+				By("Adding a pending commit")
+				makeChangeAndHydrateRepo(gitPath, gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name, "", "")
+
+				By("Getting the proposed SHA")
+				var proposedSha string
+				Eventually(func(g Gomega) {
+					err := k8sClient.Get(ctx, typeNamespacedName, changeTransferPolicy)
+					g.Expect(err).To(Succeed())
+					proposedSha = changeTransferPolicy.Status.Proposed.Hydrated.Sha
+					g.Expect(proposedSha).NotTo(BeEmpty())
+				}, constants.EventuallyTimeout).Should(Succeed())
+
+				By("Creating CommitStatus resource for check-two FIRST (reverse order) with SUCCESS")
+				Eventually(func(g Gomega) {
+					commitStatus2.Spec.Sha = proposedSha
+					commitStatus2.Spec.Phase = promoterv1alpha1.CommitPhaseSuccess
+					err = k8sClient.Create(ctx, commitStatus2)
+					g.Expect(err).To(Succeed())
+				}, constants.EventuallyTimeout).Should(Succeed())
+
+				By("Verifying CTP status has check-two as success but check-one is still pending")
+				Eventually(func(g Gomega) {
+					err := k8sClient.Get(ctx, typeNamespacedName, changeTransferPolicy)
+					g.Expect(err).To(Succeed())
+					g.Expect(changeTransferPolicy.Status.Proposed.CommitStatuses).To(HaveLen(2))
+					
+					// Find each status by key (order may vary)
+					var check1Status, check2Status *promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase
+					for i := range changeTransferPolicy.Status.Proposed.CommitStatuses {
+						if changeTransferPolicy.Status.Proposed.CommitStatuses[i].Key == checkKey1 {
+							check1Status = &changeTransferPolicy.Status.Proposed.CommitStatuses[i]
+						}
+						if changeTransferPolicy.Status.Proposed.CommitStatuses[i].Key == checkKey2 {
+							check2Status = &changeTransferPolicy.Status.Proposed.CommitStatuses[i]
+						}
+					}
+					
+					g.Expect(check1Status).NotTo(BeNil(), "check-one should exist")
+					g.Expect(check2Status).NotTo(BeNil(), "check-two should exist")
+					g.Expect(check1Status.Phase).To(Equal("pending"), "check-one should be pending")
+					g.Expect(check2Status.Phase).To(Equal("success"), "check-two should be success")
+				}, constants.EventuallyTimeout).Should(Succeed())
+
+				By("Enabling auto-merge")
+				Eventually(func(g Gomega) {
+					err = k8sClient.Get(ctx, typeNamespacedName, changeTransferPolicy)
+					Expect(err).To(Succeed())
+					changeTransferPolicy.Spec.AutoMerge = ptr.To(true)
+					err = k8sClient.Update(ctx, changeTransferPolicy)
+					g.Expect(err).To(Succeed())
+				}, constants.EventuallyTimeout).Should(Succeed())
+
+				By("Verifying PR is NOT merged because check-one is still pending")
+				Consistently(func(g Gomega) {
+					err := k8sClient.Get(ctx, typeNamespacedName, changeTransferPolicy)
+					g.Expect(err).To(Succeed())
+					if changeTransferPolicy.Status.PullRequest != nil {
+						g.Expect(changeTransferPolicy.Status.PullRequest.State).NotTo(Equal(promoterv1alpha1.PullRequestMerged), 
+							"PR should NOT be merged when check-one is pending")
+					}
+				}, "10s", "1s").Should(Succeed())
+
+				By("Now marking check-one as success")
+				Eventually(func(g Gomega) {
+					commitStatus1.Spec.Sha = proposedSha
+					commitStatus1.Spec.Phase = promoterv1alpha1.CommitPhaseSuccess
+					err = k8sClient.Create(ctx, commitStatus1)
+					g.Expect(err).To(Succeed())
+				}, constants.EventuallyTimeout).Should(Succeed())
+
+				By("Verifying BOTH checks are now success")
+				Eventually(func(g Gomega) {
+					err := k8sClient.Get(ctx, typeNamespacedName, changeTransferPolicy)
+					g.Expect(err).To(Succeed())
+					g.Expect(changeTransferPolicy.Status.Proposed.CommitStatuses).To(HaveLen(2))
+					
+					for _, status := range changeTransferPolicy.Status.Proposed.CommitStatuses {
+						g.Expect(status.Phase).To(Equal("success"), "All checks should be success")
+					}
+				}, constants.EventuallyTimeout).Should(Succeed())
+
+				By("Verifying PR is NOW merged")
+				Eventually(func(g Gomega) {
+					err := k8sClient.Get(ctx, typeNamespacedName, changeTransferPolicy)
+					g.Expect(err).To(Succeed())
+					g.Expect(changeTransferPolicy.Status.PullRequest).NotTo(BeNil(), "CTP should have PR status")
+					g.Expect(changeTransferPolicy.Status.PullRequest.State).To(Equal(promoterv1alpha1.PullRequestMerged), 
+						"PR should be merged when all checks pass")
+				}, constants.EventuallyTimeout).Should(Succeed())
+
+				By("Verifying PR resource is cleaned up")
+				Eventually(func(g Gomega) {
+					typeNamespacedNamePR := types.NamespacedName{
+						Name:      utils.KubeSafeUniqueName(ctx, prName),
+						Namespace: "default",
+					}
+					err := k8sClient.Get(ctx, typeNamespacedNamePR, &pr)
+					g.Expect(errors.IsNotFound(err)).To(BeTrue())
+				}, constants.EventuallyTimeout).Should(Succeed())
+			})
+		})
 	})
 })
 
