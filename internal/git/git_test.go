@@ -15,6 +15,7 @@ import (
 
 	"github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
 	"github.com/argoproj-labs/gitops-promoter/internal/git"
+	"github.com/argoproj-labs/gitops-promoter/internal/utils/gitpaths"
 )
 
 func TestGit(t *testing.T) {
@@ -278,6 +279,79 @@ var _ = Describe("LsRemote", func() {
 			Expect(err.Error()).To(ContainSubstring("environment/prod"))
 			Expect(err.Error()).To(ContainSubstring("environment/staging"))
 		})
+	})
+})
+
+var _ = Describe("PromoterHistoryNotes", func() {
+	var (
+		remoteDir string
+		workDir   string
+		commitSha string
+		ops       *git.EnvironmentOperations
+	)
+
+	BeforeEach(func() {
+		var err error
+
+		remoteDir, err = os.MkdirTemp("", "remote-*")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(remoteDir, "init", "--bare")
+		Expect(err).NotTo(HaveOccurred())
+
+		workDir, err = os.MkdirTemp("", "work-*")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "clone", remoteDir, workDir)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "user.email", "test@test.com")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "user.name", "Test")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "commit.gpgsign", "false")
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = runGitCmd(workDir, "commit", "--allow-empty", "-m", "initial")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "push", "origin", "HEAD:main")
+		Expect(err).NotTo(HaveOccurred())
+		out, err := runGitCmd(workDir, "rev-parse", "HEAD")
+		Expect(err).NotTo(HaveOccurred())
+		commitSha = strings.TrimSpace(out)
+
+		// Register working clone path using the same key format as CloneRepo:
+		// GetGitHttpsRepoUrl(*gitRepo) + activeBranch
+		gitpaths.Set(remoteDir+"main", workDir)
+
+		fakeProvider := &fakeGitProvider{tempDirPath: remoteDir}
+		gitRepo := &v1alpha1.GitRepository{}
+		ops = git.NewEnvironmentOperations(gitRepo, fakeProvider, "main")
+	})
+
+	AfterEach(func() {
+		gitpaths.Delete(remoteDir + "main")
+		os.RemoveAll(remoteDir)
+		os.RemoveAll(workDir)
+	})
+
+	It("returns empty map when no note exists", func() {
+		trailers, err := ops.GetPromoterHistoryNote(context.Background(), commitSha)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(trailers).To(BeEmpty())
+	})
+
+	It("round-trips a note written in trailer format", func() {
+		content := "Pull-request-id: 42\nPull-request-url: https://github.com/org/repo/pull/42\n"
+		err := ops.WritePromoterHistoryNote(context.Background(), commitSha, content)
+		Expect(err).NotTo(HaveOccurred())
+
+		trailers, err := ops.GetPromoterHistoryNote(context.Background(), commitSha)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(trailers).To(HaveKeyWithValue("Pull-request-id", ContainElement("42")))
+		Expect(trailers).To(HaveKeyWithValue("Pull-request-url", ContainElement("https://github.com/org/repo/pull/42")))
+	})
+
+	It("FetchPromoterHistoryNotes succeeds when the ref does not exist yet", func() {
+		err := ops.FetchPromoterHistoryNotes(context.Background())
+		Expect(err).NotTo(HaveOccurred())
 	})
 })
 

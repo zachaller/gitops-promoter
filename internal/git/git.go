@@ -656,6 +656,88 @@ func (g *EnvironmentOperations) GetTrailers(ctx context.Context, sha string) (ma
 	return ParseTrailersFromMessage(ctx, msgStdout)
 }
 
+// PromoterHistoryNotesRef is the git notes ref used to store PR merge history
+// for externally merged pull requests.
+const PromoterHistoryNotesRef = "refs/notes/promoter.history"
+
+// FetchPromoterHistoryNotes fetches refs/notes/promoter.history from the remote.
+// If the ref does not exist yet, it returns nil (not an error).
+func (g *EnvironmentOperations) FetchPromoterHistoryNotes(ctx context.Context) error {
+	logger := log.FromContext(ctx)
+	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	if gitPath == "" {
+		return fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
+	}
+
+	start := time.Now()
+	_, stderr, err := g.runCmd(ctx, gitPath, "fetch", "origin", "+"+PromoterHistoryNotesRef+":"+PromoterHistoryNotesRef)
+	if err != nil {
+		if strings.Contains(stderr, "couldn't find remote ref") {
+			metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationFetchNotes, metrics.GitOperationResultSuccess, time.Since(start))
+			logger.V(4).Info("Promoter history notes ref does not exist on remote yet", "ref", PromoterHistoryNotesRef)
+			return nil
+		}
+		metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationFetchNotes, metrics.GitOperationResultFailure, time.Since(start))
+		return fmt.Errorf("failed to fetch promoter history notes: %w", err)
+	}
+	metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationFetchNotes, metrics.GitOperationResultSuccess, time.Since(start))
+	logger.V(4).Info("Fetched promoter history notes", "ref", PromoterHistoryNotesRef)
+	return nil
+}
+
+// GetPromoterHistoryNote reads the promoter history git note for a given commit SHA
+// and returns the parsed trailers. Returns an empty map if no note exists.
+func (g *EnvironmentOperations) GetPromoterHistoryNote(ctx context.Context, sha string) (map[string][]string, error) {
+	logger := log.FromContext(ctx)
+	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	if gitPath == "" {
+		return nil, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
+	}
+
+	stdout, stderr, err := g.runCmd(ctx, gitPath, "notes", "--ref="+PromoterHistoryNotesRef, "show", sha)
+	if err != nil {
+		if strings.Contains(strings.ToLower(stderr), "no note found") {
+			logger.V(4).Info("No promoter history note found for commit", "sha", sha)
+			return map[string][]string{}, nil
+		}
+		return nil, fmt.Errorf("failed to read promoter history note for sha %q: %w", sha, err)
+	}
+
+	// git interpret-trailers --only-trailers requires a message body before the trailers.
+	// The note content is stored as pure trailers, so we prepend a dummy subject line.
+	noteContent := "note\n\n" + strings.TrimSpace(stdout)
+	trailers, err := ParseTrailersFromMessage(ctx, noteContent)
+	if err != nil {
+		logger.V(4).Info("Failed to parse promoter history note as trailers, ignoring", "sha", sha, "error", err)
+		return map[string][]string{}, nil
+	}
+	logger.V(4).Info("Got promoter history note", "sha", sha, "trailers", trailers)
+	return trailers, nil
+}
+
+// WritePromoterHistoryNote writes content (in trailer format) as a git note on the given
+// commit SHA and pushes it to the remote.
+func (g *EnvironmentOperations) WritePromoterHistoryNote(ctx context.Context, sha, content string) error {
+	logger := log.FromContext(ctx)
+	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	if gitPath == "" {
+		return fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
+	}
+
+	_, stderr, err := g.runCmd(ctx, gitPath, "notes", "--ref="+PromoterHistoryNotesRef, "add", "-f", "-m", content, sha)
+	if err != nil {
+		return fmt.Errorf("failed to add promoter history note for sha %q: %w (stderr: %s)", sha, err, stderr)
+	}
+
+	_, stderr, err = g.runCmd(ctx, gitPath, "push", "origin", PromoterHistoryNotesRef+":"+PromoterHistoryNotesRef)
+	if err != nil {
+		return fmt.Errorf("failed to push promoter history notes: %w (stderr: %s)", err, stderr)
+	}
+
+	logger.V(4).Info("Wrote and pushed promoter history note", "sha", sha)
+	return nil
+}
+
 // GitShow runs git show with a specific format string for a commit SHA.
 // The format parameter uses git's pretty-format placeholders (e.g., %ae for author email, %ce for committer email).
 // See https://git-scm.com/docs/git-show#_pretty_formats for available format options.

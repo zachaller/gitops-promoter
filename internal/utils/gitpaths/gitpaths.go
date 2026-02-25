@@ -31,3 +31,8 @@ func GetValues() []string {
 func Set(key string, path string) {
 	storage.Store(key, path)
 }
+
+// Delete removes the path associated with the given key from the storage.
+func Delete(key string) {
+	storage.Delete(key)
+}
