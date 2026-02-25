@@ -678,6 +678,7 @@ func (g *EnvironmentOperations) FetchPromoterHistoryNotes(ctx context.Context) e
 			return nil
 		}
 		metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationFetchNotes, metrics.GitOperationResultFailure, time.Since(start))
+		logger.Error(err, "Failed to fetch promoter history notes", "stderr", stderr)
 		return fmt.Errorf("failed to fetch promoter history notes: %w", err)
 	}
 	metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationFetchNotes, metrics.GitOperationResultSuccess, time.Since(start))
@@ -726,12 +727,13 @@ func (g *EnvironmentOperations) WritePromoterHistoryNote(ctx context.Context, sh
 
 	_, stderr, err := g.runCmd(ctx, gitPath, "notes", "--ref="+PromoterHistoryNotesRef, "add", "-f", "-m", content, sha)
 	if err != nil {
-		return fmt.Errorf("failed to add promoter history note for sha %q: %w (stderr: %s)", sha, err, stderr)
+		logger.Error(err, "Failed to add promoter history note", "sha", sha, "stderr", stderr)
+		return fmt.Errorf("failed to add promoter history note for sha %q: %w", sha, err)
 	}
 
 	_, stderr, err = g.runCmd(ctx, gitPath, "push", "origin", PromoterHistoryNotesRef+":"+PromoterHistoryNotesRef)
 	if err != nil {
-		return fmt.Errorf("failed to push promoter history notes: %w (stderr: %s)", err, stderr)
+		return fmt.Errorf("failed to push promoter history notes: %w", err)
 	}
 
 	logger.V(4).Info("Wrote and pushed promoter history note", "sha", sha)
