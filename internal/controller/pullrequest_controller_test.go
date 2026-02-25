@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/argoproj-labs/gitops-promoter/internal/git"
 	"github.com/argoproj-labs/gitops-promoter/internal/types/conditions"
 	"github.com/argoproj-labs/gitops-promoter/internal/types/constants"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -679,6 +680,111 @@ var _ = Describe("PullRequest Controller", func() {
 					g.Expect(err.Error()).To(ContainSubstring("pullrequests.promoter.argoproj.io \"" + name + "\" not found"))
 				}, constants.EventuallyTimeout).Should(Succeed())
 			})
+		})
+	})
+
+	Context("When a PullRequest has external-merge-commit-sha annotation", func() {
+		var name string
+		var scmSecret *v1.Secret
+		var scmProvider *promoterv1alpha1.ScmProvider
+		var gitRepo *promoterv1alpha1.GitRepository
+		var pullRequest *promoterv1alpha1.PullRequest
+		var typeNamespacedName types.NamespacedName
+
+		BeforeEach(func() {
+			By("Creating test resources")
+			name, scmSecret, scmProvider, gitRepo, pullRequest = pullRequestResources(ctx, "history-note-annotation")
+
+			typeNamespacedName = types.NamespacedName{
+				Name:      name,
+				Namespace: "default",
+			}
+
+			Expect(k8sClient.Create(ctx, scmSecret)).To(Succeed())
+			Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
+			Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
+			Expect(k8sClient.Create(ctx, pullRequest)).To(Succeed())
+
+			By("Waiting for PullRequest to be open")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, typeNamespacedName, pullRequest)).To(Succeed())
+				g.Expect(pullRequest.Status.State).To(Equal(promoterv1alpha1.PullRequestOpen))
+				g.Expect(pullRequest.Status.ID).ToNot(BeEmpty())
+			}, constants.EventuallyTimeout).Should(Succeed())
+		})
+
+		It("writes a promoter history note and removes annotation when external-merge-commit-sha annotation is present", func() {
+			By("Getting a real commit SHA from the test repo")
+			mergeCommitSHA := getGitBranchSHA(ctx, gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name, "environment/development")
+			Expect(mergeCommitSHA).ToNot(BeEmpty())
+
+			By("Patching the ExternalMergeCommitSHAAnnotation onto the PullRequest")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, typeNamespacedName, pullRequest)).To(Succeed())
+				orig := pullRequest.DeepCopy()
+				if pullRequest.Annotations == nil {
+					pullRequest.Annotations = map[string]string{}
+				}
+				pullRequest.Annotations[promoterv1alpha1.ExternalMergeCommitSHAAnnotation] = mergeCommitSHA
+				g.Expect(k8sClient.Patch(ctx, pullRequest, client.MergeFrom(orig))).To(Succeed())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Simulating external deletion by removing PR from fake provider")
+			fakeProvider := fake.NewFakePullRequestProvider(k8sClient)
+			Expect(fakeProvider.DeletePullRequest(ctx, *pullRequest)).To(Succeed())
+
+			By("Triggering reconciliation by updating the PR spec")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, typeNamespacedName, pullRequest)).To(Succeed())
+				orig := pullRequest.DeepCopy()
+				pullRequest.Spec.Description = pullRequest.Spec.Description + " "
+				g.Expect(k8sClient.Patch(ctx, pullRequest, client.MergeFrom(orig))).To(Succeed())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Waiting for the PullRequest to be deleted (cleanup ran)")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, typeNamespacedName, pullRequest)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring("pullrequests.promoter.argoproj.io \"" + name + "\" not found"))
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Verifying the promoter history git note was written")
+			gitServerPort := 5000 + GinkgoParallelProcess()
+			repoURL := fmt.Sprintf("http://localhost:%d/%s/%s", gitServerPort, gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name)
+
+			// Clone a fresh copy and fetch the notes ref to verify the note was written
+			gitPath, err := cloneTestRepo(ctx, name)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Fetch the promoter history notes ref
+			_, fetchErr := runGitCmd(ctx, gitPath, "fetch", repoURL, "+"+git.PromoterHistoryNotesRef+":"+git.PromoterHistoryNotesRef)
+			Expect(fetchErr).NotTo(HaveOccurred(), "should be able to fetch promoter history notes ref")
+
+			// Read the git note for the merge commit SHA
+			noteContent, noteErr := runGitCmd(ctx, gitPath, "notes", "--ref="+git.PromoterHistoryNotesRef, "show", mergeCommitSHA)
+			Expect(noteErr).NotTo(HaveOccurred(), "git note should exist for commit %s", mergeCommitSHA)
+			Expect(noteContent).To(ContainSubstring(constants.TrailerPullRequestID + ":"))
+		})
+
+		It("proceeds with cleanup normally when annotation is absent", func() {
+			By("Simulating external deletion by removing PR from fake provider")
+			fakeProvider := fake.NewFakePullRequestProvider(k8sClient)
+			Expect(fakeProvider.DeletePullRequest(ctx, *pullRequest)).To(Succeed())
+
+			By("Triggering reconciliation by updating the PR spec")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, typeNamespacedName, pullRequest)).To(Succeed())
+				orig := pullRequest.DeepCopy()
+				pullRequest.Spec.Description = pullRequest.Spec.Description + " "
+				g.Expect(k8sClient.Patch(ctx, pullRequest, client.MergeFrom(orig))).To(Succeed())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Waiting for the PullRequest to be deleted (normal cleanup)")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, typeNamespacedName, pullRequest)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring("pullrequests.promoter.argoproj.io \"" + name + "\" not found"))
+			}, constants.EventuallyTimeout).Should(Succeed())
 		})
 	})
 

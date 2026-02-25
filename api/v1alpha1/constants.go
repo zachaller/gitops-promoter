@@ -47,3 +47,8 @@ const ScmProviderSecretFinalizer = "scmprovider.promoter.argoproj.io/secret-fina
 
 // ClusterScmProviderSecretFinalizer prevents deletion of Secret while ClusterScmProvider references it
 const ClusterScmProviderSecretFinalizer = "clusterscmprovider.promoter.argoproj.io/secret-finalizer"
+
+// ExternalMergeCommitSHAAnnotation is patched onto a PullRequest by the webhook
+// handler when the PR is merged externally via the SCM. The PR controller reads
+// this annotation to write a promoter history git note.
+const ExternalMergeCommitSHAAnnotation = "promoter.argoproj.io/external-merge-commit-sha"

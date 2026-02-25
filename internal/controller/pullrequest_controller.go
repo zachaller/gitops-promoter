@@ -30,6 +30,7 @@ import (
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
 	"github.com/argoproj-labs/gitops-promoter/internal/git"
+	gitauth "github.com/argoproj-labs/gitops-promoter/internal/gitauth"
 	"github.com/argoproj-labs/gitops-promoter/internal/scms"
 	bitbucket_cloud "github.com/argoproj-labs/gitops-promoter/internal/scms/bitbucket_cloud"
 	"github.com/argoproj-labs/gitops-promoter/internal/scms/fake"
@@ -192,6 +193,7 @@ func (r *PullRequestReconciler) cleanupTerminalStates(ctx context.Context, pr *p
 
 	if externallyMergedOrClosed {
 		logger.Info("Cleaning up externally merged or closed pull request", "pullRequestID", pr.Status.ID)
+		r.writeHistoryNote(ctx, pr)
 	} else {
 		logger.Info("Cleaning up closed and merged pull request", "pullRequestID", pr.Status.ID)
 	}
@@ -302,8 +304,20 @@ func (r *PullRequestReconciler) SetupWithManager(ctx context.Context, mgr ctrl.M
 		return fmt.Errorf("failed to get pull request max concurrent reconciles: %w", err)
 	}
 
+	if err := mgr.GetFieldIndexer().IndexField(ctx, &promoterv1alpha1.PullRequest{}, ".status.id", func(obj client.Object) []string {
+		pr := obj.(*promoterv1alpha1.PullRequest)
+		if pr.Status.ID == "" {
+			return nil
+		}
+		return []string{pr.Status.ID}
+	}); err != nil {
+		return fmt.Errorf("failed to index PullRequest by status.id: %w", err)
+	}
+
 	err = ctrl.NewControllerManagedBy(mgr).
-		For(&promoterv1alpha1.PullRequest{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&promoterv1alpha1.PullRequest{}, builder.WithPredicates(
+			predicate.Or(predicate.GenerationChangedPredicate{}, predicate.AnnotationChangedPredicate{}),
+		)).
 		WithOptions(controller.Options{MaxConcurrentReconciles: maxConcurrentReconciles, RateLimiter: rateLimiter}).
 		Complete(r)
 	if err != nil {
@@ -460,4 +474,78 @@ func (r *PullRequestReconciler) closePullRequest(ctx context.Context, pr *promot
 	}
 	pr.Status.State = promoterv1alpha1.PullRequestClosed
 	return nil
+}
+
+// writeHistoryNote reads the external-merge-commit-sha annotation, writes a promoter
+// history git note in trailer format, and removes the annotation. It is a no-op if the
+// annotation is absent. Errors are logged but do not block PR cleanup (history is best-effort).
+func (r *PullRequestReconciler) writeHistoryNote(ctx context.Context, pr *promoterv1alpha1.PullRequest) {
+	logger := log.FromContext(ctx)
+
+	mergeCommitSHA, ok := pr.Annotations[promoterv1alpha1.ExternalMergeCommitSHAAnnotation]
+	if !ok || mergeCommitSHA == "" {
+		return
+	}
+
+	scmProvider, secret, err := utils.GetScmProviderAndSecretFromRepositoryReference(
+		ctx, r.Client, r.SettingsMgr.GetControllerNamespace(), pr.Spec.RepositoryReference, pr)
+	if err != nil {
+		logger.Error(err, "failed to get SCM provider for history note, skipping")
+		r.removeHistoryNoteAnnotation(ctx, pr)
+		return
+	}
+
+	gitAuthProvider, err := gitauth.CreateGitOperationsProvider(
+		ctx, r.Client, scmProvider, secret,
+		client.ObjectKey{Namespace: pr.Namespace, Name: pr.Spec.RepositoryReference.Name})
+	if err != nil {
+		logger.Error(err, "failed to create git auth provider for history note, skipping")
+		r.removeHistoryNoteAnnotation(ctx, pr)
+		return
+	}
+
+	gitRepo, err := utils.GetGitRepositoryFromObjectKey(
+		ctx, r.Client, client.ObjectKey{Namespace: pr.Namespace, Name: pr.Spec.RepositoryReference.Name})
+	if err != nil {
+		logger.Error(err, "failed to get GitRepository for history note, skipping")
+		r.removeHistoryNoteAnnotation(ctx, pr)
+		return
+	}
+
+	gitOps := git.NewEnvironmentOperations(gitRepo, gitAuthProvider, pr.Spec.TargetBranch)
+	if err := gitOps.CloneRepo(ctx); err != nil {
+		logger.Error(err, "failed to clone repo for history note, skipping")
+		r.removeHistoryNoteAnnotation(ctx, pr)
+		return
+	}
+
+	content := buildHistoryNoteContent(pr)
+	if err := gitOps.WritePromoterHistoryNote(ctx, mergeCommitSHA, content); err != nil {
+		logger.Error(err, "failed to write promoter history note, skipping")
+	}
+
+	r.removeHistoryNoteAnnotation(ctx, pr)
+}
+
+// buildHistoryNoteContent formats PR status fields as a git trailer block.
+func buildHistoryNoteContent(pr *promoterv1alpha1.PullRequest) string {
+	mergeTime := time.Now().Format(time.RFC3339)
+	lines := []string{
+		fmt.Sprintf("%s: %s", constants.TrailerPullRequestID, pr.Status.ID),
+		fmt.Sprintf("%s: %s", constants.TrailerPullRequestUrl, pr.Status.Url),
+		fmt.Sprintf("%s: %s", constants.TrailerPullRequestCreationTime, pr.Status.PRCreationTime.Format(time.RFC3339)),
+		fmt.Sprintf("%s: %s", constants.TrailerPullRequestMergeTime, mergeTime),
+		fmt.Sprintf("%s: %s", constants.TrailerPullRequestSourceBranch, pr.Spec.SourceBranch),
+		fmt.Sprintf("%s: %s", constants.TrailerPullRequestTargetBranch, pr.Spec.TargetBranch),
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r *PullRequestReconciler) removeHistoryNoteAnnotation(ctx context.Context, pr *promoterv1alpha1.PullRequest) {
+	logger := log.FromContext(ctx)
+	patch := client.MergeFrom(pr.DeepCopy())
+	delete(pr.Annotations, promoterv1alpha1.ExternalMergeCommitSHAAnnotation)
+	if err := r.Patch(ctx, pr, patch); err != nil && !errors.IsNotFound(err) {
+		logger.Error(err, "failed to remove external-merge-commit-sha annotation")
+	}
 }
