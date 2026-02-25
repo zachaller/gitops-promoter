@@ -199,7 +199,6 @@ func (r *ChangeTransferPolicyReconciler) Reconcile(ctx context.Context, req ctrl
 	}, nil
 }
 
-// calculateHistory this function calculates the history by getting the first parents on the active branch and using the trailers to reconstruct the history.
 // calculateHistory calculates the history by getting the first parents on the active branch and using the trailers to reconstruct the history.
 // This function is best effort and will log errors but continue processing if it encounters issues with individual commits. This is because history is stored in git
 // in order to get out of a bad state requires re-writing git history or pushing a bunch of commits greater than the max history limit.
@@ -231,10 +230,12 @@ func (r *ChangeTransferPolicyReconciler) calculateHistory(ctx context.Context, c
 
 // buildHistoryEntry creates a single history entry for the given SHA
 func (r *ChangeTransferPolicyReconciler) buildHistoryEntry(ctx context.Context, sha string, gitOperations *git.EnvironmentOperations) (promoterv1alpha1.History, bool, error) {
+	logger := log.FromContext(ctx)
 	// Check promoter history note first (externally merged PRs), fall back to commit trailers (promoter-merged PRs)
 	activeTrailers, err := gitOperations.GetPromoterHistoryNote(ctx, sha)
 	if err != nil {
-		return promoterv1alpha1.History{}, false, fmt.Errorf("failed to get promoter history note for SHA %q: %w", sha, err)
+		logger.V(4).Info("failed to get promoter history note, falling back to commit trailers", "sha", sha, "error", err)
+		activeTrailers = nil
 	}
 	if len(activeTrailers) == 0 {
 		activeTrailers, err = gitOperations.GetTrailers(ctx, sha)
