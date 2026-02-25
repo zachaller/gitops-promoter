@@ -520,26 +520,21 @@ func (r *PullRequestReconciler) writeHistoryNote(ctx context.Context, pr *promot
 		// non-fatal: best-effort fetch; the write may still succeed if there are no conflicts
 	}
 
-	content := buildHistoryNoteContent(pr)
-	if err := gitOps.WritePromoterHistoryNote(ctx, mergeCommitSHA, content); err != nil {
+	content, err := buildHistoryNoteContent(ctx, pr)
+	if err != nil {
+		logger.Error(err, "failed to build history note content, skipping")
+	} else if err := gitOps.WritePromoterHistoryNote(ctx, mergeCommitSHA, content); err != nil {
 		logger.Error(err, "failed to write promoter history note, skipping")
 	}
 
 	r.removeHistoryNoteAnnotation(ctx, pr)
 }
 
-// buildHistoryNoteContent formats PR status fields as a git trailer block.
-func buildHistoryNoteContent(pr *promoterv1alpha1.PullRequest) string {
-	mergeTime := time.Now().Format(time.RFC3339)
-	lines := []string{
-		fmt.Sprintf("%s: %s", constants.TrailerPullRequestID, pr.Status.ID),
-		fmt.Sprintf("%s: %s", constants.TrailerPullRequestUrl, pr.Status.Url),
-		fmt.Sprintf("%s: %s", constants.TrailerPullRequestCreationTime, pr.Status.PRCreationTime.Format(time.RFC3339)),
-		fmt.Sprintf("%s: %s", constants.TrailerPullRequestMergeTime, mergeTime),
-		fmt.Sprintf("%s: %s", constants.TrailerPullRequestSourceBranch, pr.Spec.SourceBranch),
-		fmt.Sprintf("%s: %s", constants.TrailerPullRequestTargetBranch, pr.Spec.TargetBranch),
-	}
-	return strings.Join(lines, "\n")
+// buildHistoryNoteContent appends the merge time trailer to the PR's existing commit message,
+// which already contains all other trailers (PR ID, URL, creation time, source/target branch,
+// commit statuses, SHA info). This mirrors mergePullRequest which does the same before merging.
+func buildHistoryNoteContent(ctx context.Context, pr *promoterv1alpha1.PullRequest) (string, error) {
+	return git.AddTrailerToCommitMessage(ctx, pr.Spec.Commit.Message, constants.TrailerPullRequestMergeTime, time.Now().Format(time.RFC3339))
 }
 
 func (r *PullRequestReconciler) removeHistoryNoteAnnotation(ctx context.Context, pr *promoterv1alpha1.PullRequest) {

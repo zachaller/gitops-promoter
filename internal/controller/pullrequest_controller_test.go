@@ -718,6 +718,19 @@ var _ = Describe("PullRequest Controller", func() {
 			mergeCommitSHA := getGitBranchSHA(ctx, gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name, "environment/development")
 			Expect(mergeCommitSHA).ToNot(BeEmpty())
 
+			By("Setting Spec.Commit.Message with trailers (as the CTP controller normally would)")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, typeNamespacedName, pullRequest)).To(Succeed())
+				orig := pullRequest.DeepCopy()
+				pullRequest.Spec.Commit.Message = fmt.Sprintf("chore: promote\n\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n",
+					constants.TrailerPullRequestID, pullRequest.Status.ID,
+					constants.TrailerPullRequestUrl, pullRequest.Status.Url,
+					constants.TrailerPullRequestSourceBranch, pullRequest.Spec.SourceBranch,
+					constants.TrailerPullRequestTargetBranch, pullRequest.Spec.TargetBranch,
+				)
+				g.Expect(k8sClient.Patch(ctx, pullRequest, client.MergeFrom(orig))).To(Succeed())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
 			By("Patching the ExternalMergeCommitSHAAnnotation onto the PullRequest")
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, typeNamespacedName, pullRequest)).To(Succeed())
