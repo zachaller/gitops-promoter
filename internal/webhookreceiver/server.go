@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
@@ -171,6 +172,31 @@ func (wr *WebhookReceiver) postRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle GitHub PR merge events — this is a separate path from push events.
+	if ok, prNumber, mergeCommitSHA := isPRMergeEvent(provider, jsonBytes); ok {
+		logger.V(4).Info("received GitHub PR merge event", "prNumber", prNumber, "sha", mergeCommitSHA)
+		pr, findErr := wr.findPullRequestByID(r.Context(), prNumber)
+		if findErr != nil {
+			logger.Error(findErr, "failed to find PullRequest for PR merge event", "prNumber", prNumber)
+		} else if pr == nil {
+			logger.V(4).Info("no PullRequest found for PR merge event", "prNumber", prNumber)
+		} else {
+			patch := client.MergeFrom(pr.DeepCopy())
+			if pr.Annotations == nil {
+				pr.Annotations = map[string]string{}
+			}
+			pr.Annotations[promoterv1alpha1.ExternalMergeCommitSHAAnnotation] = mergeCommitSHA
+			if patchErr := wr.k8sClient.Patch(r.Context(), pr, patch); patchErr != nil {
+				logger.Error(patchErr, "failed to patch external-merge-commit-sha annotation", "prNumber", prNumber)
+			} else {
+				logger.Info("patched external-merge-commit-sha annotation on PullRequest", "prNumber", prNumber, "sha", mergeCommitSHA)
+			}
+		}
+		responseCode = http.StatusNoContent
+		w.WriteHeader(responseCode)
+		return
+	}
+
 	ctp, err := wr.findChangeTransferPolicy(r.Context(), provider, jsonBytes)
 	if err != nil {
 		logger.V(4).Info("could not find any matching ChangeTransferPolicies", "error", err)
@@ -320,4 +346,37 @@ func (wr *WebhookReceiver) extractDeliveryID(r *http.Request) string {
 		return id
 	}
 	return ""
+}
+
+// isPRMergeEvent returns true when the payload is a GitHub pull_request event where the PR
+// was merged (not just closed). Returns the PR number as a string and the merge commit SHA.
+func isPRMergeEvent(provider string, jsonBytes []byte) (ok bool, prNumber string, mergeCommitSHA string) {
+	if provider != ProviderGitHub {
+		return false, "", ""
+	}
+	if gjson.GetBytes(jsonBytes, "action").String() != "closed" {
+		return false, "", ""
+	}
+	if !gjson.GetBytes(jsonBytes, "pull_request.merged").Bool() {
+		return false, "", ""
+	}
+	number := gjson.GetBytes(jsonBytes, "pull_request.number").Int()
+	sha := gjson.GetBytes(jsonBytes, "pull_request.merge_commit_sha").String()
+	if number == 0 || sha == "" {
+		return false, "", ""
+	}
+	return true, strconv.FormatInt(number, 10), sha
+}
+
+// findPullRequestByID looks up a PullRequest resource by its Status.ID field.
+// Returns nil, nil when no PullRequest with the given ID exists.
+func (wr *WebhookReceiver) findPullRequestByID(ctx context.Context, prID string) (*promoterv1alpha1.PullRequest, error) {
+	var prList promoterv1alpha1.PullRequestList
+	if err := wr.k8sClient.List(ctx, &prList, client.MatchingFields{".status.id": prID}); err != nil {
+		return nil, fmt.Errorf("failed to list PullRequests by status.id %q: %w", prID, err)
+	}
+	if len(prList.Items) == 0 {
+		return nil, nil
+	}
+	return &prList.Items[0], nil
 }
