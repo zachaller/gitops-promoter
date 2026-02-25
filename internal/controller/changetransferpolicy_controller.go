@@ -152,6 +152,12 @@ func (r *ChangeTransferPolicyReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, fmt.Errorf("failed to fetch git notes: %w", err)
 	}
 
+	// Fetch promoter history notes for externally merged PR history
+	if err = gitOperations.FetchPromoterHistoryNotes(ctx); err != nil {
+		logger.V(4).Info("failed to fetch promoter history notes, skipping", "error", err)
+		// non-fatal: history is best-effort
+	}
+
 	err = r.calculateStatus(ctx, &ctp, gitOperations)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to calculate ChangeTransferPolicy status: %w", err)
@@ -225,9 +231,16 @@ func (r *ChangeTransferPolicyReconciler) calculateHistory(ctx context.Context, c
 
 // buildHistoryEntry creates a single history entry for the given SHA
 func (r *ChangeTransferPolicyReconciler) buildHistoryEntry(ctx context.Context, sha string, gitOperations *git.EnvironmentOperations) (promoterv1alpha1.History, bool, error) {
-	activeTrailers, err := gitOperations.GetTrailers(ctx, sha)
+	// Check promoter history note first (externally merged PRs), fall back to commit trailers (promoter-merged PRs)
+	activeTrailers, err := gitOperations.GetPromoterHistoryNote(ctx, sha)
 	if err != nil {
-		return promoterv1alpha1.History{}, false, fmt.Errorf("failed to get trailers for SHA %q: %w", sha, err)
+		return promoterv1alpha1.History{}, false, fmt.Errorf("failed to get promoter history note for SHA %q: %w", sha, err)
+	}
+	if len(activeTrailers) == 0 {
+		activeTrailers, err = gitOperations.GetTrailers(ctx, sha)
+		if err != nil {
+			return promoterv1alpha1.History{}, false, fmt.Errorf("failed to get trailers for SHA %q: %w", sha, err)
+		}
 	}
 
 	historyEntry := promoterv1alpha1.History{

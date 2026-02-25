@@ -22,8 +22,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+	"github.com/argoproj-labs/gitops-promoter/internal/git"
 	"github.com/argoproj-labs/gitops-promoter/internal/types/constants"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
@@ -551,6 +553,90 @@ var _ = Describe("ChangeTransferPolicy Controller", func() {
 					g.Expect(changeTransferPolicy.Status.Active.CommitStatuses[0].Key).To(Equal(healthCheckCSKey))
 					// This MUST be "success" - proves we read from spec, not status
 					g.Expect(changeTransferPolicy.Status.Active.CommitStatuses[0].Phase).To(Equal("success"))
+				}, constants.EventuallyTimeout).Should(Succeed())
+			})
+		})
+
+		Context("When history is populated from a promoter history note", func() {
+			var name string
+			var scmSecret *v1.Secret
+			var scmProvider *promoterv1alpha1.ScmProvider
+			var gitRepo *promoterv1alpha1.GitRepository
+			var changeTransferPolicy *promoterv1alpha1.ChangeTransferPolicy
+			var typeNamespacedName types.NamespacedName
+			var gitPath string
+			var err error
+
+			BeforeEach(func() {
+				name, scmSecret, scmProvider, gitRepo, _, changeTransferPolicy = changeTransferPolicyResources(ctx, "ctp-history-note", "default")
+
+				typeNamespacedName = types.NamespacedName{
+					Name:      name,
+					Namespace: "default",
+				}
+
+				changeTransferPolicy.Spec.ProposedBranch = testBranchDevelopmentNext
+				changeTransferPolicy.Spec.ActiveBranch = testBranchDevelopment
+				changeTransferPolicy.Spec.AutoMerge = ptr.To(false)
+
+				Expect(k8sClient.Create(ctx, scmSecret)).To(Succeed())
+				Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
+				Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
+				Expect(k8sClient.Create(ctx, changeTransferPolicy)).To(Succeed())
+
+				gitPath, err = os.MkdirTemp("", "*")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			AfterEach(func() {
+				By("Cleaning up resources")
+				Expect(k8sClient.Delete(ctx, changeTransferPolicy)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, gitRepo)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, scmProvider)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, scmSecret)).To(Succeed())
+				_ = os.RemoveAll(gitPath)
+			})
+
+			It("populates history from promoter history note when present", func() {
+				By("Adding a pending commit and waiting for CTP to reconcile")
+				makeChangeAndHydrateRepo(gitPath, gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name, "", "")
+
+				// Wait for the CTP to be reconciled so the active branch SHA is known
+				Eventually(func(g Gomega) {
+					err = k8sClient.Get(ctx, typeNamespacedName, changeTransferPolicy)
+					g.Expect(err).To(Succeed())
+					g.Expect(changeTransferPolicy.Status.Active.Hydrated.Sha).ToNot(BeEmpty())
+				}, constants.EventuallyTimeout).Should(Succeed())
+
+				// Get the current active SHA from git
+				activeSha, err := runGitCmd(ctx, gitPath, "rev-parse", "origin/"+changeTransferPolicy.Spec.ActiveBranch)
+				Expect(err).NotTo(HaveOccurred())
+				activeSha = strings.TrimSpace(activeSha)
+				Expect(activeSha).NotTo(BeEmpty())
+
+				By("Pushing a git note in trailer format onto the active SHA")
+				noteContent := fmt.Sprintf(
+					"Pull-request-id: 99\nPull-request-url: https://github.com/org/repo/pull/99\n"+
+						"Pull-request-creation-time: %s\nPull-request-merge-time: %s\n",
+					time.Now().Add(-10*time.Minute).Format(time.RFC3339),
+					time.Now().Format(time.RFC3339),
+				)
+				_, err = runGitCmd(ctx, gitPath, "notes", "--ref="+git.PromoterHistoryNotesRef, "add", "-f", "-m", noteContent, activeSha)
+				Expect(err).NotTo(HaveOccurred())
+				_, err = runGitCmd(ctx, gitPath, "push", "origin", git.PromoterHistoryNotesRef+":"+git.PromoterHistoryNotesRef)
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Triggering CTP reconciliation")
+				enqueueCTP(typeNamespacedName.Namespace, typeNamespacedName.Name)
+
+				By("Verifying history is populated from the note")
+				Eventually(func(g Gomega) {
+					var ctp promoterv1alpha1.ChangeTransferPolicy
+					g.Expect(k8sClient.Get(ctx, typeNamespacedName, &ctp)).To(Succeed())
+					g.Expect(ctp.Status.History).NotTo(BeEmpty())
+					g.Expect(ctp.Status.History[0].PullRequest).NotTo(BeNil())
+					g.Expect(ctp.Status.History[0].PullRequest.ID).To(Equal("99"))
+					g.Expect(ctp.Status.History[0].PullRequest.Url).To(Equal("https://github.com/org/repo/pull/99"))
 				}, constants.EventuallyTimeout).Should(Succeed())
 			})
 		})
