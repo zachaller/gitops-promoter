@@ -763,7 +763,7 @@ var _ = Describe("PullRequest Controller", func() {
 			// Read the git note for the merge commit SHA
 			noteContent, noteErr := runGitCmd(ctx, gitPath, "notes", "--ref="+git.PromoterHistoryNotesRef, "show", mergeCommitSHA)
 			Expect(noteErr).NotTo(HaveOccurred(), "git note should exist for commit %s", mergeCommitSHA)
-			Expect(noteContent).To(ContainSubstring(constants.TrailerPullRequestID + ":"))
+			Expect(noteContent).To(ContainSubstring(constants.TrailerPullRequestID + ": " + pullRequest.Status.ID))
 		})
 
 		It("proceeds with cleanup normally when annotation is absent", func() {

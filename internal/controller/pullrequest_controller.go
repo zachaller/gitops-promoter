@@ -491,7 +491,6 @@ func (r *PullRequestReconciler) writeHistoryNote(ctx context.Context, pr *promot
 		ctx, r.Client, r.SettingsMgr.GetControllerNamespace(), pr.Spec.RepositoryReference, pr)
 	if err != nil {
 		logger.Error(err, "failed to get SCM provider for history note, skipping")
-		r.removeHistoryNoteAnnotation(ctx, pr)
 		return
 	}
 
@@ -500,7 +499,6 @@ func (r *PullRequestReconciler) writeHistoryNote(ctx context.Context, pr *promot
 		client.ObjectKey{Namespace: pr.Namespace, Name: pr.Spec.RepositoryReference.Name})
 	if err != nil {
 		logger.Error(err, "failed to create git auth provider for history note, skipping")
-		r.removeHistoryNoteAnnotation(ctx, pr)
 		return
 	}
 
@@ -508,15 +506,18 @@ func (r *PullRequestReconciler) writeHistoryNote(ctx context.Context, pr *promot
 		ctx, r.Client, client.ObjectKey{Namespace: pr.Namespace, Name: pr.Spec.RepositoryReference.Name})
 	if err != nil {
 		logger.Error(err, "failed to get GitRepository for history note, skipping")
-		r.removeHistoryNoteAnnotation(ctx, pr)
 		return
 	}
 
 	gitOps := git.NewEnvironmentOperations(gitRepo, gitAuthProvider, pr.Spec.TargetBranch)
 	if err := gitOps.CloneRepo(ctx); err != nil {
 		logger.Error(err, "failed to clone repo for history note, skipping")
-		r.removeHistoryNoteAnnotation(ctx, pr)
 		return
+	}
+
+	if err := gitOps.FetchPromoterHistoryNotes(ctx); err != nil {
+		logger.V(4).Info("failed to fetch promoter history notes before write, proceeding anyway", "error", err)
+		// non-fatal: best-effort fetch; the write may still succeed if there are no conflicts
 	}
 
 	content := buildHistoryNoteContent(pr)
