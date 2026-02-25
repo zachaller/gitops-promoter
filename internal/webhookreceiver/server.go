@@ -313,7 +313,6 @@ func (wr *WebhookReceiver) findChangeTransferPolicy(ctx context.Context, provide
 func (wr *WebhookReceiver) extractDeliveryID(r *http.Request) string {
 	// Check common headers in a sensible order and return the first non-empty value.
 	// GitHub
-	fmt.Println("received a webhook event")
 	if id := r.Header.Get("X-Github-Delivery"); id != "" {
 		return id
 	}
@@ -369,7 +368,8 @@ func isPRMergeEvent(provider string, jsonBytes []byte) (ok bool, prNumber string
 }
 
 // findPullRequestByID looks up a PullRequest resource by its Status.ID field.
-// Returns nil, nil when no PullRequest with the given ID exists.
+// Requires the ".status.id" field index to be registered on PullRequest, which is
+// done by PullRequestReconciler.SetupWithManager. Returns nil, nil when no match exists.
 func (wr *WebhookReceiver) findPullRequestByID(ctx context.Context, prID string) (*promoterv1alpha1.PullRequest, error) {
 	var prList promoterv1alpha1.PullRequestList
 	if err := wr.k8sClient.List(ctx, &prList, client.MatchingFields{".status.id": prID}); err != nil {
