@@ -347,24 +347,72 @@ func (wr *WebhookReceiver) extractDeliveryID(r *http.Request) string {
 	return ""
 }
 
-// isPRMergeEvent returns true when the payload is a GitHub pull_request event where the PR
-// was merged (not just closed). Returns the PR number as a string and the merge commit SHA.
+// isPRMergeEvent returns true when the payload represents a merged pull/merge request.
+// It extracts the PR number and merge commit SHA for supported providers.
 func isPRMergeEvent(provider string, jsonBytes []byte) (ok bool, prNumber string, mergeCommitSHA string) {
-	if provider != ProviderGitHub {
+	switch provider {
+	case ProviderGitHub:
+		if gjson.GetBytes(jsonBytes, "action").String() != "closed" {
+			return false, "", ""
+		}
+		if !gjson.GetBytes(jsonBytes, "pull_request.merged").Bool() {
+			return false, "", ""
+		}
+		number := gjson.GetBytes(jsonBytes, "pull_request.number").Int()
+		sha := gjson.GetBytes(jsonBytes, "pull_request.merge_commit_sha").String()
+		if number == 0 || sha == "" {
+			return false, "", ""
+		}
+		return true, strconv.FormatInt(number, 10), sha
+	case ProviderGitLab:
+		if gjson.GetBytes(jsonBytes, "object_kind").String() != "merge_request" {
+			return false, "", ""
+		}
+		if gjson.GetBytes(jsonBytes, "object_attributes.action").String() != "merge" {
+			return false, "", ""
+		}
+		number := gjson.GetBytes(jsonBytes, "object_attributes.iid").Int()
+		sha := gjson.GetBytes(jsonBytes, "object_attributes.merge_commit_sha").String()
+		if number == 0 || sha == "" {
+			return false, "", ""
+		}
+		return true, strconv.FormatInt(number, 10), sha
+	case ProviderGitea, ProviderForgejo:
+		if gjson.GetBytes(jsonBytes, "action").String() != "closed" {
+			return false, "", ""
+		}
+		if !gjson.GetBytes(jsonBytes, "pull_request.merged").Bool() {
+			return false, "", ""
+		}
+		number := gjson.GetBytes(jsonBytes, "pull_request.number").Int()
+		sha := gjson.GetBytes(jsonBytes, "pull_request.merge_commit_sha").String()
+		if number == 0 || sha == "" {
+			return false, "", ""
+		}
+		return true, strconv.FormatInt(number, 10), sha
+	case ProviderBitbucketCloud:
+		sha := gjson.GetBytes(jsonBytes, "pullrequest.merge_commit.hash").String()
+		if sha == "" {
+			return false, "", ""
+		}
+		number := gjson.GetBytes(jsonBytes, "pullrequest.id").Int()
+		if number == 0 {
+			return false, "", ""
+		}
+		return true, strconv.FormatInt(number, 10), sha
+	case ProviderAzureDevops:
+		if gjson.GetBytes(jsonBytes, "eventType").String() != "git.pullrequest.merged" {
+			return false, "", ""
+		}
+		number := gjson.GetBytes(jsonBytes, "resource.pullRequestId").Int()
+		sha := gjson.GetBytes(jsonBytes, "resource.lastMergeCommit.commitId").String()
+		if number == 0 || sha == "" {
+			return false, "", ""
+		}
+		return true, strconv.FormatInt(number, 10), sha
+	default:
 		return false, "", ""
 	}
-	if gjson.GetBytes(jsonBytes, "action").String() != "closed" {
-		return false, "", ""
-	}
-	if !gjson.GetBytes(jsonBytes, "pull_request.merged").Bool() {
-		return false, "", ""
-	}
-	number := gjson.GetBytes(jsonBytes, "pull_request.number").Int()
-	sha := gjson.GetBytes(jsonBytes, "pull_request.merge_commit_sha").String()
-	if number == 0 || sha == "" {
-		return false, "", ""
-	}
-	return true, strconv.FormatInt(number, 10), sha
 }
 
 // findPullRequestByID looks up a PullRequest resource by its Status.ID field.

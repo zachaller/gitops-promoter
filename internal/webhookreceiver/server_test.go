@@ -104,7 +104,7 @@ var _ = Describe("DetectProvider", func() {
 	})
 })
 
-// buildPRMergePayload builds a GitHub pull_request webhook payload for a merged PR.
+// buildPRMergePayload builds a GitHub/Gitea/Forgejo pull_request webhook payload for a merged or closed PR.
 func buildPRMergePayload(prNumber int, mergeCommitSHA string, merged bool) string {
 	mergedStr := "false"
 	if merged {
@@ -224,6 +224,375 @@ var _ = Describe("When a GitHub PR merge event is received", func() {
 		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
 
 		// Verify that the annotation is NOT set.
+		Consistently(func(g Gomega) {
+			var updatedPR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: prName, Namespace: testNamespace}, &updatedPR)).To(Succeed())
+			g.Expect(updatedPR.Annotations).NotTo(HaveKey(promoterv1alpha1.ExternalMergeCommitSHAAnnotation))
+		}, 2*time.Second, 500*time.Millisecond).Should(Succeed())
+	})
+})
+
+func buildGitLabMRMergePayload(mrIID int, mergeCommitSHA string) string {
+	return fmt.Sprintf(`{
+		"object_kind": "merge_request",
+		"object_attributes": {
+			"iid": %d,
+			"action": "merge",
+			"merge_commit_sha": "%s"
+		}
+	}`, mrIID, mergeCommitSHA)
+}
+
+func buildGitLabMROpenPayload(mrIID int) string {
+	return fmt.Sprintf(`{
+		"object_kind": "merge_request",
+		"object_attributes": {
+			"iid": %d,
+			"action": "open"
+		}
+	}`, mrIID)
+}
+
+func buildBitbucketMergePayload(prID int, mergeCommitHash string) string {
+	return fmt.Sprintf(`{
+		"pullrequest": {
+			"id": %d,
+			"merge_commit": {
+				"hash": "%s"
+			}
+		}
+	}`, prID, mergeCommitHash)
+}
+
+func buildAzureDevOpsMergePayload(prID int, mergeCommitSHA string) string {
+	return fmt.Sprintf(`{
+		"eventType": "git.pullrequest.merged",
+		"publisherId": "tfs",
+		"resource": {
+			"pullRequestId": %d,
+			"lastMergeCommit": {
+				"commitId": "%s"
+			}
+		}
+	}`, prID, mergeCommitSHA)
+}
+
+func buildAzureDevOpsPushPayload() string {
+	return `{
+		"eventType": "git.push",
+		"publisherId": "tfs",
+		"resource": {
+			"refUpdates": [{"name": "refs/heads/main", "oldObjectId": "abc123def456", "newObjectId": "def456abc123"}]
+		}
+	}`
+}
+
+var _ = Describe("When a GitLab MR merge event is received", func() {
+	const testNamespace = "default"
+
+	It("patches the external-merge-commit-sha annotation when MR number matches", func() {
+		prName := "test-pr-gitlab-merged"
+		pr := createTestPullRequest(prName, testNamespace, "142")
+
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, pr)
+		})
+
+		payload := buildGitLabMRMergePayload(142, "aaabbbbcccc1111")
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Gitlab-Event":    "Merge Request Hook",
+			"X-Gitlab-Delivery": "test-delivery-gitlab-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+		Eventually(func(g Gomega) {
+			var updatedPR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: prName, Namespace: testNamespace}, &updatedPR)).To(Succeed())
+			g.Expect(updatedPR.Annotations).To(HaveKeyWithValue(
+				promoterv1alpha1.ExternalMergeCommitSHAAnnotation, "aaabbbbcccc1111",
+			))
+		}, 30*time.Second, 500*time.Millisecond).Should(Succeed())
+	})
+
+	It("returns 204 and does nothing when no PullRequest matches the MR number", func() {
+		payload := buildGitLabMRMergePayload(99142, "deadbeef")
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Gitlab-Event":    "Merge Request Hook",
+			"X-Gitlab-Delivery": "test-delivery-gitlab-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+	})
+
+	It("ignores non-merge MR events", func() {
+		prName := "test-pr-gitlab-open-only"
+		pr := createTestPullRequest(prName, testNamespace, "142")
+
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, pr)
+		})
+
+		payload := buildGitLabMROpenPayload(142)
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Gitlab-Event":    "Merge Request Hook",
+			"X-Gitlab-Delivery": "test-delivery-gitlab-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+		Consistently(func(g Gomega) {
+			var updatedPR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: prName, Namespace: testNamespace}, &updatedPR)).To(Succeed())
+			g.Expect(updatedPR.Annotations).NotTo(HaveKey(promoterv1alpha1.ExternalMergeCommitSHAAnnotation))
+		}, 2*time.Second, 500*time.Millisecond).Should(Succeed())
+	})
+})
+
+var _ = Describe("When a Gitea PR merge event is received", func() {
+	const testNamespace = "default"
+
+	It("patches the external-merge-commit-sha annotation when PR number matches", func() {
+		prName := "test-pr-gitea-merged"
+		pr := createTestPullRequest(prName, testNamespace, "242")
+
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, pr)
+		})
+
+		payload := buildPRMergePayload(242, "aaabbbbcccc2222", true)
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Gitea-Event":    "pull_request",
+			"X-Gitea-Delivery": "test-delivery-gitea-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+		Eventually(func(g Gomega) {
+			var updatedPR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: prName, Namespace: testNamespace}, &updatedPR)).To(Succeed())
+			g.Expect(updatedPR.Annotations).To(HaveKeyWithValue(
+				promoterv1alpha1.ExternalMergeCommitSHAAnnotation, "aaabbbbcccc2222",
+			))
+		}, 30*time.Second, 500*time.Millisecond).Should(Succeed())
+	})
+
+	It("returns 204 and does nothing when no PullRequest matches the PR number", func() {
+		payload := buildPRMergePayload(99242, "deadbeef", true)
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Gitea-Event":    "pull_request",
+			"X-Gitea-Delivery": "test-delivery-gitea-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+	})
+
+	It("ignores closed-but-not-merged PR events", func() {
+		prName := "test-pr-gitea-closed-only"
+		pr := createTestPullRequest(prName, testNamespace, "242")
+
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, pr)
+		})
+
+		payload := buildPRMergePayload(242, "aaabbbbcccc2222", false)
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Gitea-Event":    "pull_request",
+			"X-Gitea-Delivery": "test-delivery-gitea-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+		Consistently(func(g Gomega) {
+			var updatedPR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: prName, Namespace: testNamespace}, &updatedPR)).To(Succeed())
+			g.Expect(updatedPR.Annotations).NotTo(HaveKey(promoterv1alpha1.ExternalMergeCommitSHAAnnotation))
+		}, 2*time.Second, 500*time.Millisecond).Should(Succeed())
+	})
+})
+
+var _ = Describe("When a Forgejo PR merge event is received", func() {
+	const testNamespace = "default"
+
+	It("patches the external-merge-commit-sha annotation when PR number matches", func() {
+		prName := "test-pr-forgejo-merged"
+		pr := createTestPullRequest(prName, testNamespace, "342")
+
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, pr)
+		})
+
+		payload := buildPRMergePayload(342, "aaabbbbcccc3333", true)
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Forgejo-Event":    "pull_request",
+			"X-Forgejo-Delivery": "test-delivery-forgejo-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+		Eventually(func(g Gomega) {
+			var updatedPR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: prName, Namespace: testNamespace}, &updatedPR)).To(Succeed())
+			g.Expect(updatedPR.Annotations).To(HaveKeyWithValue(
+				promoterv1alpha1.ExternalMergeCommitSHAAnnotation, "aaabbbbcccc3333",
+			))
+		}, 30*time.Second, 500*time.Millisecond).Should(Succeed())
+	})
+
+	It("returns 204 and does nothing when no PullRequest matches the PR number", func() {
+		payload := buildPRMergePayload(99342, "deadbeef", true)
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Forgejo-Event":    "pull_request",
+			"X-Forgejo-Delivery": "test-delivery-forgejo-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+	})
+
+	It("ignores closed-but-not-merged PR events", func() {
+		prName := "test-pr-forgejo-closed-only"
+		pr := createTestPullRequest(prName, testNamespace, "342")
+
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, pr)
+		})
+
+		payload := buildPRMergePayload(342, "aaabbbbcccc3333", false)
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Forgejo-Event":    "pull_request",
+			"X-Forgejo-Delivery": "test-delivery-forgejo-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+		Consistently(func(g Gomega) {
+			var updatedPR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: prName, Namespace: testNamespace}, &updatedPR)).To(Succeed())
+			g.Expect(updatedPR.Annotations).NotTo(HaveKey(promoterv1alpha1.ExternalMergeCommitSHAAnnotation))
+		}, 2*time.Second, 500*time.Millisecond).Should(Succeed())
+	})
+})
+
+var _ = Describe("When a Bitbucket Cloud PR merge event is received", func() {
+	const testNamespace = "default"
+
+	It("patches the external-merge-commit-sha annotation when PR number matches", func() {
+		prName := "test-pr-bitbucket-merged"
+		pr := createTestPullRequest(prName, testNamespace, "442")
+
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, pr)
+		})
+
+		payload := buildBitbucketMergePayload(442, "aaabbbbcccc4444")
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Hook-Uuid": "test-hook-uuid-bitbucket-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+		Eventually(func(g Gomega) {
+			var updatedPR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: prName, Namespace: testNamespace}, &updatedPR)).To(Succeed())
+			g.Expect(updatedPR.Annotations).To(HaveKeyWithValue(
+				promoterv1alpha1.ExternalMergeCommitSHAAnnotation, "aaabbbbcccc4444",
+			))
+		}, 30*time.Second, 500*time.Millisecond).Should(Succeed())
+	})
+
+	It("returns 204 and does nothing when no PullRequest matches the PR number", func() {
+		payload := buildBitbucketMergePayload(99442, "deadbeef")
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Hook-Uuid": "test-hook-uuid-bitbucket-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+	})
+
+	It("ignores non-merge Bitbucket events", func() {
+		prName := "test-pr-bitbucket-no-merge"
+		pr := createTestPullRequest(prName, testNamespace, "442")
+
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, pr)
+		})
+
+		// Payload without pullrequest.merge_commit.hash — not a merge event.
+		payload := `{"pullrequest":{"id":442}}`
+		resp := sendWebhookRequest(payload, map[string]string{
+			"X-Hook-Uuid": "test-hook-uuid-bitbucket-1",
+		})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+		Consistently(func(g Gomega) {
+			var updatedPR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: prName, Namespace: testNamespace}, &updatedPR)).To(Succeed())
+			g.Expect(updatedPR.Annotations).NotTo(HaveKey(promoterv1alpha1.ExternalMergeCommitSHAAnnotation))
+		}, 2*time.Second, 500*time.Millisecond).Should(Succeed())
+	})
+})
+
+var _ = Describe("When an Azure DevOps PR merge event is received", func() {
+	const testNamespace = "default"
+
+	It("patches the external-merge-commit-sha annotation when PR number matches", func() {
+		prName := "test-pr-azuredevops-merged"
+		pr := createTestPullRequest(prName, testNamespace, "542")
+
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, pr)
+		})
+
+		payload := buildAzureDevOpsMergePayload(542, "aaabbbbcccc5555")
+		resp := sendWebhookRequest(payload, map[string]string{})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+		Eventually(func(g Gomega) {
+			var updatedPR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: prName, Namespace: testNamespace}, &updatedPR)).To(Succeed())
+			g.Expect(updatedPR.Annotations).To(HaveKeyWithValue(
+				promoterv1alpha1.ExternalMergeCommitSHAAnnotation, "aaabbbbcccc5555",
+			))
+		}, 30*time.Second, 500*time.Millisecond).Should(Succeed())
+	})
+
+	It("returns 204 and does nothing when no PullRequest matches the PR number", func() {
+		payload := buildAzureDevOpsMergePayload(99542, "deadbeef")
+		resp := sendWebhookRequest(payload, map[string]string{})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+	})
+
+	It("ignores non-PR-merge Azure DevOps events", func() {
+		prName := "test-pr-azuredevops-push-only"
+		pr := createTestPullRequest(prName, testNamespace, "542")
+
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, pr)
+		})
+
+		payload := buildAzureDevOpsPushPayload()
+		resp := sendWebhookRequest(payload, map[string]string{})
+		defer func() { _ = resp.Body.Close() }()
+
+		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
 		Consistently(func(g Gomega) {
 			var updatedPR promoterv1alpha1.PullRequest
 			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: prName, Namespace: testNamespace}, &updatedPR)).To(Succeed())
