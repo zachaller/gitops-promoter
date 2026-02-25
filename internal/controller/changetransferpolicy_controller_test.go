@@ -17,15 +17,19 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
+	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
 	"github.com/argoproj-labs/gitops-promoter/internal/git"
+	"github.com/argoproj-labs/gitops-promoter/internal/scms/fake"
 	"github.com/argoproj-labs/gitops-promoter/internal/types/constants"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 	. "github.com/onsi/ginkgo/v2"
@@ -35,6 +39,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 //go:embed testdata/ChangeTransferPolicy.yaml
@@ -748,6 +753,131 @@ var _ = Describe("ChangeTransferPolicy Controller", func() {
 					g.Expect(errors.IsNotFound(err)).To(BeTrue())
 				}, constants.EventuallyTimeout).Should(Succeed())
 			})
+		})
+	})
+
+	Context("When a PR is merged externally via webhook and records PR history", func() {
+		var name string
+		var scmSecret *v1.Secret
+		var scmProvider *promoterv1alpha1.ScmProvider
+		var gitRepo *promoterv1alpha1.GitRepository
+		var changeTransferPolicy *promoterv1alpha1.ChangeTransferPolicy
+		var typeNamespacedName types.NamespacedName
+		var gitPath string
+		var err error
+
+		BeforeEach(func() {
+			name, scmSecret, scmProvider, gitRepo, _, changeTransferPolicy = changeTransferPolicyResources(ctx, "ctp-webhook-history", "default")
+
+			typeNamespacedName = types.NamespacedName{
+				Name:      name,
+				Namespace: "default",
+			}
+
+			changeTransferPolicy.Spec.ProposedBranch = testBranchDevelopmentNext
+			changeTransferPolicy.Spec.ActiveBranch = testBranchDevelopment
+			changeTransferPolicy.Spec.AutoMerge = ptr.To(false)
+
+			Expect(k8sClient.Create(ctx, scmSecret)).To(Succeed())
+			Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
+			Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
+			Expect(k8sClient.Create(ctx, changeTransferPolicy)).To(Succeed())
+
+			gitPath, err = os.MkdirTemp("", "*")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			By("Cleaning up resources")
+			_ = k8sClient.Delete(ctx, changeTransferPolicy)
+			_ = k8sClient.Delete(ctx, gitRepo)
+			_ = k8sClient.Delete(ctx, scmProvider)
+			_ = k8sClient.Delete(ctx, scmSecret)
+			_ = os.RemoveAll(gitPath)
+		})
+
+		It("records PR history in CTP status when PR is merged externally via GitHub PR merge webhook", func() {
+			By("Adding a pending commit so the CTP creates a PR")
+			makeChangeAndHydrateRepo(gitPath, gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name, "", "")
+
+			By("Waiting for CTP to reconcile and create a PR with a status.id")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, typeNamespacedName, changeTransferPolicy)).To(Succeed())
+				g.Expect(changeTransferPolicy.Status.PullRequest).NotTo(BeNil())
+				g.Expect(changeTransferPolicy.Status.PullRequest.ID).NotTo(BeEmpty())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			ctpPRID := changeTransferPolicy.Status.PullRequest.ID
+
+			By("Finding the CTP-managed PullRequest resource")
+			var prList promoterv1alpha1.PullRequestList
+			Expect(k8sClient.List(ctx, &prList, client.InNamespace("default"),
+				client.MatchingLabels{promoterv1alpha1.ChangeTransferPolicyLabel: utils.KubeSafeLabel(name)},
+			)).To(Succeed())
+			Expect(prList.Items).To(HaveLen(1), "expected exactly one CTP-managed PR")
+			ctpPR := &prList.Items[0]
+			prNamespacedName := types.NamespacedName{Name: ctpPR.Name, Namespace: ctpPR.Namespace}
+
+			By("Getting the current active branch SHA to use as the merge commit SHA")
+			mergeCommitSHA := getGitBranchSHA(ctx, gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name, testBranchDevelopment)
+			Expect(mergeCommitSHA).ToNot(BeEmpty())
+
+			By("Removing the CTP PR from the fake provider to simulate external merge")
+			fakeProvider := fake.NewFakePullRequestProvider(k8sClient)
+			Expect(fakeProvider.DeletePullRequest(ctx, *ctpPR)).To(Succeed())
+
+			By("Sending a GitHub PR merge webhook to the webhook receiver")
+			prIDInt, convErr := strconv.Atoi(ctpPRID)
+			Expect(convErr).NotTo(HaveOccurred(), "PR status.id should be a valid integer")
+
+			webhookPayload := fmt.Sprintf(
+				`{"action":"closed","pull_request":{"number":%d,"merged":true,"merge_commit_sha":"%s"}}`,
+				prIDInt, mergeCommitSHA,
+			)
+			webhookURL := fmt.Sprintf("http://localhost:%d/", webhookReceiverPort)
+			req, httpErr := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewBufferString(webhookPayload))
+			Expect(httpErr).NotTo(HaveOccurred())
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-Github-Event", "pull_request")
+			req.Header.Set("X-Github-Delivery", fmt.Sprintf("test-pr-merge-%d", time.Now().Unix()))
+
+			httpClient := &http.Client{Timeout: 10 * time.Second}
+			resp, httpErr := httpClient.Do(req)
+			Expect(httpErr).NotTo(HaveOccurred())
+			defer func() { _ = resp.Body.Close() }()
+			Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+			By("Waiting for the CTP PullRequest to be deleted (PR controller detected external merge annotation, wrote history note, and cleaned up)")
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, prNamespacedName, ctpPR)
+				g.Expect(errors.IsNotFound(err)).To(BeTrue())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			By("Verifying the promoter history git note was written to the merge commit SHA")
+			gitClonePath, cloneErr := cloneTestRepo(ctx, name)
+			Expect(cloneErr).NotTo(HaveOccurred())
+			defer func() { _ = os.RemoveAll(gitClonePath) }()
+
+			gitServerPort := 5000 + GinkgoParallelProcess()
+			repoURL := fmt.Sprintf("http://localhost:%d/%s/%s", gitServerPort, gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name)
+			_, fetchErr := runGitCmd(ctx, gitClonePath, "fetch", repoURL, "+"+git.PromoterHistoryNotesRef+":"+git.PromoterHistoryNotesRef)
+			Expect(fetchErr).NotTo(HaveOccurred(), "should be able to fetch promoter history notes ref")
+
+			noteContent, noteErr := runGitCmd(ctx, gitClonePath, "notes", "--ref="+git.PromoterHistoryNotesRef, "show", mergeCommitSHA)
+			Expect(noteErr).NotTo(HaveOccurred(), "git note should exist for merge commit SHA %s", mergeCommitSHA)
+			Expect(noteContent).To(ContainSubstring(constants.TrailerPullRequestID + ": " + ctpPRID))
+
+			By("Triggering CTP reconciliation to pick up the history note")
+			enqueueCTP(typeNamespacedName.Namespace, typeNamespacedName.Name)
+
+			By("Waiting for CTP status.history to contain the externally merged PR")
+			Eventually(func(g Gomega) {
+				var ctp promoterv1alpha1.ChangeTransferPolicy
+				g.Expect(k8sClient.Get(ctx, typeNamespacedName, &ctp)).To(Succeed())
+				g.Expect(ctp.Status.History).NotTo(BeEmpty())
+				g.Expect(ctp.Status.History[0].PullRequest).NotTo(BeNil())
+				g.Expect(ctp.Status.History[0].PullRequest.ID).To(Equal(ctpPRID))
+			}, constants.EventuallyTimeout).Should(Succeed())
 		})
 	})
 })
