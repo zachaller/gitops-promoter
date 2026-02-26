@@ -115,6 +115,25 @@ func (ws *WebServer) sendDeleteEvent(e client.Object) {
 	}
 }
 
+func (ws *WebServer) sendAggregateEvent(ctx context.Context, namespace, psName string) {
+	agg, err := ws.buildAggregate(ctx, namespace, psName)
+	if err != nil {
+		logger.Error(err, "failed to build aggregate for SSE", "namespace", namespace, "name", psName)
+		return
+	}
+	data, err := json.Marshal(agg)
+	if err != nil {
+		logger.Error(err, "failed to marshal aggregate", "namespace", namespace, "name", psName)
+		return
+	}
+	ws.Event.Message <- Message{
+		Name:      psName,
+		Namespace: namespace,
+		Kind:      "PromotionStrategyAggregate",
+		Data:      string(data),
+	}
+}
+
 // SetupWithManager sets up the WebServer controller with the given manager.
 func (ws *WebServer) SetupWithManager(mgr ctrl.Manager) error {
 	err := ctrl.NewControllerManagedBy(mgr).
@@ -124,18 +143,26 @@ func (ws *WebServer) SetupWithManager(mgr ctrl.Manager) error {
 				if ps, ok := e.Object.(*promoterv1alpha1.PromotionStrategy); ok {
 					ps.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PromotionStrategy"))
 					ws.sendEvent(ps)
+					ws.sendAggregateEvent(ctx, ps.Namespace, ps.Name)
 				}
 			},
 			UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if ps, ok := e.ObjectNew.(*promoterv1alpha1.PromotionStrategy); ok {
 					ps.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PromotionStrategy"))
 					ws.sendEvent(ps)
+					ws.sendAggregateEvent(ctx, ps.Namespace, ps.Name)
 				}
 			},
 			DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if ps, ok := e.Object.(*promoterv1alpha1.PromotionStrategy); ok {
 					ps.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PromotionStrategy"))
 					ws.sendDeleteEvent(ps)
+					ws.Event.Message <- Message{
+						Name:      ps.Name,
+						Namespace: ps.Namespace,
+						Kind:      "PromotionStrategyAggregate",
+						Data:      `{"action":"delete","name":"` + ps.Name + `","namespace":"` + ps.Namespace + `"}`,
+					}
 				}
 			},
 		}).
@@ -144,18 +171,27 @@ func (ws *WebServer) SetupWithManager(mgr ctrl.Manager) error {
 				if ctp, ok := e.Object.(*promoterv1alpha1.ChangeTransferPolicy); ok {
 					ctp.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("ChangeTransferPolicy"))
 					ws.sendEvent(ctp)
+					if psName := psNameFromOwnerRefs(ctp); psName != "" {
+						ws.sendAggregateEvent(ctx, ctp.Namespace, psName)
+					}
 				}
 			},
 			UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if ctp, ok := e.ObjectNew.(*promoterv1alpha1.ChangeTransferPolicy); ok {
 					ctp.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("ChangeTransferPolicy"))
 					ws.sendEvent(ctp)
+					if psName := psNameFromOwnerRefs(ctp); psName != "" {
+						ws.sendAggregateEvent(ctx, ctp.Namespace, psName)
+					}
 				}
 			},
 			DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if ctp, ok := e.Object.(*promoterv1alpha1.ChangeTransferPolicy); ok {
 					ctp.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("ChangeTransferPolicy"))
 					ws.sendDeleteEvent(ctp)
+					if psName := psNameFromOwnerRefs(ctp); psName != "" {
+						ws.sendAggregateEvent(ctx, ctp.Namespace, psName)
+					}
 				}
 			},
 		}).
@@ -164,18 +200,42 @@ func (ws *WebServer) SetupWithManager(mgr ctrl.Manager) error {
 				if pr, ok := e.Object.(*promoterv1alpha1.PullRequest); ok {
 					pr.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PullRequest"))
 					ws.sendEvent(pr)
+					if ctpName := ctpNameFromOwnerRefs(pr); ctpName != "" {
+						parentCTP := &promoterv1alpha1.ChangeTransferPolicy{}
+						if err := ws.Get(ctx, client.ObjectKey{Namespace: pr.Namespace, Name: ctpName}, parentCTP); err == nil {
+							if psName := psNameFromOwnerRefs(parentCTP); psName != "" {
+								ws.sendAggregateEvent(ctx, pr.Namespace, psName)
+							}
+						}
+					}
 				}
 			},
 			UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if pr, ok := e.ObjectNew.(*promoterv1alpha1.PullRequest); ok {
 					pr.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PullRequest"))
 					ws.sendEvent(pr)
+					if ctpName := ctpNameFromOwnerRefs(pr); ctpName != "" {
+						parentCTP := &promoterv1alpha1.ChangeTransferPolicy{}
+						if err := ws.Get(ctx, client.ObjectKey{Namespace: pr.Namespace, Name: ctpName}, parentCTP); err == nil {
+							if psName := psNameFromOwnerRefs(parentCTP); psName != "" {
+								ws.sendAggregateEvent(ctx, pr.Namespace, psName)
+							}
+						}
+					}
 				}
 			},
 			DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if pr, ok := e.Object.(*promoterv1alpha1.PullRequest); ok {
 					pr.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("PullRequest"))
 					ws.sendDeleteEvent(pr)
+					if ctpName := ctpNameFromOwnerRefs(pr); ctpName != "" {
+						parentCTP := &promoterv1alpha1.ChangeTransferPolicy{}
+						if err := ws.Get(ctx, client.ObjectKey{Namespace: pr.Namespace, Name: ctpName}, parentCTP); err == nil {
+							if psName := psNameFromOwnerRefs(parentCTP); psName != "" {
+								ws.sendAggregateEvent(ctx, pr.Namespace, psName)
+							}
+						}
+					}
 				}
 			},
 		}).
@@ -184,18 +244,42 @@ func (ws *WebServer) SetupWithManager(mgr ctrl.Manager) error {
 				if cs, ok := e.Object.(*promoterv1alpha1.CommitStatus); ok {
 					cs.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("CommitStatus"))
 					ws.sendEvent(cs)
+					if ctpName := ctpNameFromOwnerRefs(cs); ctpName != "" {
+						parentCTP := &promoterv1alpha1.ChangeTransferPolicy{}
+						if err := ws.Get(ctx, client.ObjectKey{Namespace: cs.Namespace, Name: ctpName}, parentCTP); err == nil {
+							if psName := psNameFromOwnerRefs(parentCTP); psName != "" {
+								ws.sendAggregateEvent(ctx, cs.Namespace, psName)
+							}
+						}
+					}
 				}
 			},
 			UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if cs, ok := e.ObjectNew.(*promoterv1alpha1.CommitStatus); ok {
 					cs.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("CommitStatus"))
 					ws.sendEvent(cs)
+					if ctpName := ctpNameFromOwnerRefs(cs); ctpName != "" {
+						parentCTP := &promoterv1alpha1.ChangeTransferPolicy{}
+						if err := ws.Get(ctx, client.ObjectKey{Namespace: cs.Namespace, Name: ctpName}, parentCTP); err == nil {
+							if psName := psNameFromOwnerRefs(parentCTP); psName != "" {
+								ws.sendAggregateEvent(ctx, cs.Namespace, psName)
+							}
+						}
+					}
 				}
 			},
 			DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if cs, ok := e.Object.(*promoterv1alpha1.CommitStatus); ok {
 					cs.SetGroupVersionKind(promoterv1alpha1.GroupVersion.WithKind("CommitStatus"))
 					ws.sendDeleteEvent(cs)
+					if ctpName := ctpNameFromOwnerRefs(cs); ctpName != "" {
+						parentCTP := &promoterv1alpha1.ChangeTransferPolicy{}
+						if err := ws.Get(ctx, client.ObjectKey{Namespace: cs.Namespace, Name: ctpName}, parentCTP); err == nil {
+							if psName := psNameFromOwnerRefs(parentCTP); psName != "" {
+								ws.sendAggregateEvent(ctx, cs.Namespace, psName)
+							}
+						}
+					}
 				}
 			},
 		}).
@@ -469,6 +553,22 @@ func (ws *WebServer) httpWatch(c *gin.Context) {
 		return
 	}
 
+	// Send initial aggregate state when watching a specific PromotionStrategyAggregate
+	if strings.EqualFold(c.Query("kind"), "PromotionStrategyAggregate") {
+		if ns := c.Query("namespace"); ns != "" {
+			if name := c.Query("name"); name != "" {
+				if agg, err := ws.buildAggregate(c.Request.Context(), ns, name); err != nil {
+					logger.Error(err, "failed to build initial aggregate", "namespace", ns, "name", name)
+				} else if data, err := json.Marshal(agg); err != nil {
+					logger.Error(err, "failed to marshal initial aggregate")
+				} else {
+					c.SSEvent("PromotionStrategyAggregate", string(data))
+					c.Writer.Flush()
+				}
+			}
+		}
+	}
+
 	gone := c.Stream(func(w io.Writer) bool {
 		// Stream message to client from message channel
 		if msg, ok := <-clientChan; ok {
@@ -571,4 +671,24 @@ func filter(msg Message, c *gin.Context) (bool, error) {
 		return false, fmt.Errorf("failed to match path: %w", err)
 	}
 	return match, nil
+}
+
+// psNameFromOwnerRefs returns the PromotionStrategy owner name from an object's owner references, or "" if not found.
+func psNameFromOwnerRefs(obj client.Object) string {
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.Kind == "PromotionStrategy" {
+			return ref.Name
+		}
+	}
+	return ""
+}
+
+// ctpNameFromOwnerRefs returns the ChangeTransferPolicy owner name from an object's owner references, or "" if not found.
+func ctpNameFromOwnerRefs(obj client.Object) string {
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.Kind == "ChangeTransferPolicy" {
+			return ref.Name
+		}
+	}
+	return ""
 }
