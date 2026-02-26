@@ -172,9 +172,9 @@ func (wr *WebhookReceiver) postRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle GitHub PR merge events — this is a separate path from push events.
+	// Handle PR merge events — this is a separate path from push events.
 	if ok, prNumber, mergeCommitSHA := isPRMergeEvent(provider, jsonBytes); ok {
-		logger.V(4).Info("received GitHub PR merge event", "prNumber", prNumber, "sha", mergeCommitSHA)
+		logger.V(4).Info("received PR merge event", "prNumber", prNumber, "sha", mergeCommitSHA)
 		pr, findErr := wr.findPullRequestByID(r.Context(), prNumber)
 		if findErr != nil {
 			logger.Error(findErr, "failed to find PullRequest for PR merge event", "prNumber", prNumber)
