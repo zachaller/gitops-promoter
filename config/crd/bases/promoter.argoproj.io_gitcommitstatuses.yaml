@@ -278,7 +278,6 @@ spec:
                         May be empty if the PromotionStrategy hasn't reconciled yet.
                         Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
                       maxLength: 64
-                      minLength: 40
                       pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
                       type: string
                     targetedSha:
@@ -294,7 +293,6 @@ spec:
                   required:
                   - branch
                   - phase
-                  - proposedHydratedSha
                   type: object
                 type: array
                 x-kubernetes-list-map-keys:

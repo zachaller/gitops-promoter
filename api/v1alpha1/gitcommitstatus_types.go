@@ -138,11 +138,10 @@ type GitCommitStatusEnvironmentStatus struct {
 	// promotions based on the validation of the ACTIVE commit.
 	// May be empty if the PromotionStrategy hasn't reconciled yet.
 	// Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
-	// +required
-	// +kubebuilder:validation:MinLength=40
+	// +optional
 	// +kubebuilder:validation:MaxLength=64
 	// +kubebuilder:validation:Pattern=`^([a-f0-9]{40}|[a-f0-9]{64})$`
-	ProposedHydratedSha string `json:"proposedHydratedSha"`
+	ProposedHydratedSha string `json:"proposedHydratedSha,omitempty"`
 
 	// ActiveHydratedSha is the currently active (deployed) hydrated commit SHA that was validated.
 	// This comes from the PromotionStrategy's environment status.
