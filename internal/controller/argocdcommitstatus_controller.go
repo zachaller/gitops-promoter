@@ -59,6 +59,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -75,6 +76,7 @@ type ArgoCDCommitStatusReconciler struct {
 	SettingsMgr            *settings.Manager
 	KubeConfigProvider     *kubeconfig.Provider
 	localClient            client.Client
+	localScheme            *runtime.Scheme
 	watchLocalApplications bool
 }
 
@@ -111,7 +113,7 @@ func (r *ArgoCDCommitStatusReconciler) Reconcile(ctx context.Context, req mcreco
 
 	var argoCDCommitStatus promoterv1alpha1.ArgoCDCommitStatus
 	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &argoCDCommitStatus, r.localClient, r.Recorder, &err)
+	defer utils.HandleReconciliationResult(ctx, startTime, &argoCDCommitStatus, r.localClient, r.Recorder, &err, r.localScheme)
 
 	err = r.localClient.Get(ctx, req.NamespacedName, &argoCDCommitStatus, &client.GetOptions{})
 	if err != nil {
@@ -456,8 +458,9 @@ func lookupArgoCDCommitStatusFromArgoCDApplication(mgr mcmanager.Manager) mchand
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ArgoCDCommitStatusReconciler) SetupWithManager(ctx context.Context, mcMgr mcmanager.Manager) error {
-	// Set the local client for interacting with manager cluster
+	// Set the local client and scheme for interacting with manager cluster
 	r.localClient = mcMgr.GetLocalManager().GetClient()
+	r.localScheme = mcMgr.GetLocalManager().GetScheme()
 
 	// Use Direct methods to read configuration from the API server without cache during setup.
 	// The cache is not started during SetupWithManager, so we must use the non-cached API reader.

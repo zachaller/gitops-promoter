@@ -18,6 +18,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -254,9 +255,10 @@ func HandleReconciliationResult(
 	ctx context.Context,
 	startTime time.Time,
 	obj StatusConditionUpdater,
-	client client.Client,
+	k8sClient client.Client,
 	recorder record.EventRecorder,
 	err *error,
+	scheme *runtime.Scheme,
 ) {
 	// Recover from any panic and convert it to an error.
 	// This function is always called as a defer from the Reconcile function, which means recover() will work correctly here.
@@ -319,8 +321,14 @@ func HandleReconciliationResult(
 		})
 	}
 
-	// Single status update. This is the only place Status().Update() is called for reconciled resources.
-	if updateErr := client.Status().Update(ctx, obj); updateErr != nil {
+	// Set TypeMeta required for server-side apply. After a Get(), TypeMeta is stripped by the decoder,
+	// so we look it up from the scheme before applying.
+	if gvks, _, gvkErr := scheme.ObjectKinds(obj); gvkErr == nil && len(gvks) > 0 {
+		obj.GetObjectKind().SetGroupVersionKind(gvks[0])
+	}
+
+	// Single status update via server-side apply. This is the only place status is persisted for reconciled resources.
+	if updateErr := k8sClient.Status().Patch(ctx, obj, client.Apply, client.ForceOwnership, client.FieldOwner("gitops-promoter")); updateErr != nil {
 		if *err == nil {
 			*err = fmt.Errorf("failed to update status: %w", updateErr)
 		} else {
