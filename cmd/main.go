@@ -247,6 +247,14 @@ func runController(
 	}).SetupWithManager(processSignalsCtx, localManager); err != nil {
 		panic(fmt.Errorf("unable to create PromotionStrategy controller: %w", err))
 	}
+	if err = (&controller.PreviousEnvironmentHealthCommitStatusReconciler{
+		Client:      localManager.GetClient(),
+		Scheme:      localManager.GetScheme(),
+		Recorder:    localManager.GetEventRecorderFor("PreviousEnvironmentHealthCommitStatus"),
+		SettingsMgr: settingsMgr,
+	}).SetupWithManager(processSignalsCtx, localManager); err != nil {
+		panic(fmt.Errorf("unable to create PreviousEnvironmentHealthCommitStatus controller: %w", err))
+	}
 	if err = (&controller.ScmProviderReconciler{
 		Client:   localManager.GetClient(),
 		Scheme:   localManager.GetScheme(),
