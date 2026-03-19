@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -178,6 +179,24 @@ func (r *PreviousEnvironmentHealthCommitStatusReconciler) getOrderedCTPs(ctx con
 	return ctps, nil
 }
 
+// ensurePreviousEnvironmentSelector ensures that the CTP has the PreviousEnvironmentCommitStatusKey
+// in its ProposedCommitStatuses. This is needed so the CTP knows to wait for the previous environment
+// health check before merging. The selector is added via patch so it doesn't conflict with the
+// PromotionStrategy controller's CreateOrUpdate (which preserves externally-managed selectors).
+func (r *PreviousEnvironmentHealthCommitStatusReconciler) ensurePreviousEnvironmentSelector(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy) error {
+	selector := promoterv1alpha1.CommitStatusSelector{
+		Key: promoterv1alpha1.PreviousEnvironmentCommitStatusKey,
+	}
+
+	if slices.Contains(ctp.Spec.ProposedCommitStatuses, selector) {
+		return nil
+	}
+
+	patch := client.MergeFrom(ctp.DeepCopy())
+	ctp.Spec.ProposedCommitStatuses = append(ctp.Spec.ProposedCommitStatuses, selector)
+	return r.Patch(ctx, ctp, patch)
+}
+
 // updatePreviousEnvironmentCommitStatus checks each non-first environment and creates/updates
 // a CommitStatus resource on the current environment's proposed commit based on the previous
 // environment's health.
@@ -198,6 +217,12 @@ func (r *PreviousEnvironmentHealthCommitStatusReconciler) updatePreviousEnvironm
 		if len(ps.Spec.ActiveCommitStatuses) == 0 && len(ps.Spec.Environments[i-1].ActiveCommitStatuses) == 0 {
 			// Skip, there aren't any active commit statuses configured for the PromotionStrategy or the previous environment.
 			continue
+		}
+
+		// Ensure the CTP has the proposed commit status selector so it waits for
+		// the previous environment health check before merging.
+		if err := r.ensurePreviousEnvironmentSelector(ctx, ctp); err != nil {
+			return fmt.Errorf("failed to ensure previous environment selector on CTP %s: %w", ctp.Name, err)
 		}
 
 		previousEnvironmentStatus := getEnvironmentStatusFromCTP(ctps[i-1])

@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"slices"
 	"sync"
 	"time"
 
@@ -206,22 +205,21 @@ func (r *PromotionStrategyReconciler) upsertChangeTransferPolicy(ctx context.Con
 		ctp.Spec.ActiveCommitStatuses = append(ctp.Spec.ActiveCommitStatuses, environment.ActiveCommitStatuses...)
 		ctp.Spec.ActiveCommitStatuses = append(ctp.Spec.ActiveCommitStatuses, ps.Spec.ActiveCommitStatuses...)
 
-		ctp.Spec.ProposedCommitStatuses = make([]promoterv1alpha1.CommitStatusSelector, 0, len(environment.ProposedCommitStatuses)+len(ps.Spec.ProposedCommitStatuses))
-		ctp.Spec.ProposedCommitStatuses = append(ctp.Spec.ProposedCommitStatuses, environment.ProposedCommitStatuses...)
-		ctp.Spec.ProposedCommitStatuses = append(ctp.Spec.ProposedCommitStatuses, ps.Spec.ProposedCommitStatuses...)
-
-		ctp.Spec.AutoMerge = environment.AutoMerge
-
-		environmentIndex, _ := utils.GetEnvironmentByBranch(*ps, environment.Branch)
-		previousEnvironmentIndex := environmentIndex - 1
-		if environmentIndex > 0 && len(ps.Spec.ActiveCommitStatuses) != 0 || (previousEnvironmentIndex >= 0 && len(ps.Spec.Environments[previousEnvironmentIndex].ActiveCommitStatuses) != 0) {
-			previousEnvironmentCommitStatusSelector := promoterv1alpha1.CommitStatusSelector{
-				Key: promoterv1alpha1.PreviousEnvironmentCommitStatusKey,
-			}
-			if !slices.Contains(ctp.Spec.ProposedCommitStatuses, previousEnvironmentCommitStatusSelector) {
-				ctp.Spec.ProposedCommitStatuses = append(ctp.Spec.ProposedCommitStatuses, previousEnvironmentCommitStatusSelector)
+		// Capture selectors managed by other controllers (e.g., PreviousEnvironmentHealthCommitStatus)
+		// before rebuilding the list, so we can preserve them.
+		var externalSelectors []promoterv1alpha1.CommitStatusSelector
+		for _, s := range ctp.Spec.ProposedCommitStatuses {
+			if s.Key == promoterv1alpha1.PreviousEnvironmentCommitStatusKey {
+				externalSelectors = append(externalSelectors, s)
 			}
 		}
+
+		ctp.Spec.ProposedCommitStatuses = make([]promoterv1alpha1.CommitStatusSelector, 0, len(environment.ProposedCommitStatuses)+len(ps.Spec.ProposedCommitStatuses)+len(externalSelectors))
+		ctp.Spec.ProposedCommitStatuses = append(ctp.Spec.ProposedCommitStatuses, environment.ProposedCommitStatuses...)
+		ctp.Spec.ProposedCommitStatuses = append(ctp.Spec.ProposedCommitStatuses, ps.Spec.ProposedCommitStatuses...)
+		ctp.Spec.ProposedCommitStatuses = append(ctp.Spec.ProposedCommitStatuses, externalSelectors...)
+
+		ctp.Spec.AutoMerge = environment.AutoMerge
 
 		return nil
 	})
