@@ -63,8 +63,9 @@ type ScmProviderSpec struct {
 
 // ScmProviderStatus defines the observed state of ScmProvider
 type ScmProviderStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// Conditions Represents the observations of the current state.
 	// +patchMergeKey=type
@@ -91,6 +92,10 @@ type ScmProvider struct {
 // GetConditions returns the conditions of the ScmProvider.
 func (s *ScmProvider) GetConditions() *[]metav1.Condition {
 	return &s.Status.Conditions
+}
+
+func (s *ScmProvider) SetObservedGeneration(generation int64) {
+	s.Status.ObservedGeneration = generation
 }
 
 //+kubebuilder:object:root=true

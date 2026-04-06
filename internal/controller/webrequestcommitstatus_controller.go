@@ -141,8 +141,10 @@ func (r *WebRequestCommitStatusReconciler) Reconcile(ctx context.Context, req ct
 	startTime := time.Now()
 
 	var wrcs promoterv1alpha1.WebRequestCommitStatus
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &wrcs, r.Client, r.Recorder, &result, &err)
+	defer utils.HandleReconciliationResult(ctx, startTime, &wrcs, r.Client, r.Recorder, &result, &err,
+		constants.WebRequestCommitStatusControllerFieldOwner,
+		func() any { return r.buildStatusApplyConfig(&wrcs) },
+	)
 
 	// 1. Fetch the WebRequestCommitStatus instance
 	err = r.Get(ctx, req.NamespacedName, &wrcs)
@@ -209,6 +211,39 @@ func (r *WebRequestCommitStatusReconciler) Reconcile(ctx context.Context, req ct
 	}
 
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+func (r *WebRequestCommitStatusReconciler) buildStatusApplyConfig(wrcs *promoterv1alpha1.WebRequestCommitStatus) *acv1alpha1.WebRequestCommitStatusApplyConfiguration {
+	statusApply := acv1alpha1.WebRequestCommitStatusStatus().
+		WithObservedGeneration(wrcs.Status.ObservedGeneration).
+		WithConditions(utils.ConditionsToApplyConfig(wrcs.Status.Conditions)...)
+	for i := range wrcs.Status.Environments {
+		env := &wrcs.Status.Environments[i]
+		envApply := acv1alpha1.WebRequestCommitStatusEnvironmentStatus().
+			WithBranch(env.Branch).
+			WithReportedSha(env.ReportedSha).
+			WithLastSuccessfulSha(env.LastSuccessfulSha).
+			WithPhase(env.Phase)
+		envApply.LastRequestTime = env.LastRequestTime
+		envApply.LastResponseStatusCode = env.LastResponseStatusCode
+		envApply.TriggerOutput = env.TriggerOutput
+		envApply.ResponseOutput = env.ResponseOutput
+		statusApply.WithEnvironments(envApply)
+	}
+	if wrcs.Status.PromotionStrategyContext != nil {
+		psc := wrcs.Status.PromotionStrategyContext
+		pscApply := acv1alpha1.WebRequestCommitStatusPromotionStrategyContextStatus().
+			WithPhase(psc.Phase).
+			WithPhasePerBranch(psc.PhasePerBranch).
+			WithLastSuccessfulShas(psc.LastSuccessfulShas)
+		pscApply.LastRequestTime = psc.LastRequestTime
+		pscApply.LastResponseStatusCode = psc.LastResponseStatusCode
+		pscApply.TriggerOutput = psc.TriggerOutput
+		pscApply.ResponseOutput = psc.ResponseOutput
+		statusApply.WithPromotionStrategyContext(pscApply)
+	}
+	return acv1alpha1.WebRequestCommitStatus(wrcs.Name, wrcs.Namespace).
+		WithStatus(statusApply)
 }
 
 // SetupWithManager registers the controller with the manager: watch for WebRequestCommitStatus (and

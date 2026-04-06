@@ -31,7 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+	acv1alpha1 "github.com/argoproj-labs/gitops-promoter/applyconfiguration/api/v1alpha1"
 	"github.com/argoproj-labs/gitops-promoter/internal/settings"
+	"github.com/argoproj-labs/gitops-promoter/internal/types/constants"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 )
 
@@ -56,8 +58,10 @@ func (r *ClusterScmProviderReconciler) Reconcile(ctx context.Context, req ctrl.R
 	startTime := time.Now()
 
 	var clusterScmProvider promoterv1alpha1.ClusterScmProvider
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &clusterScmProvider, r.Client, r.Recorder, &result, &err)
+	defer utils.HandleReconciliationResult(ctx, startTime, &clusterScmProvider, r.Client, r.Recorder, &result, &err,
+		constants.ClusterScmProviderControllerFieldOwner,
+		func() any { return r.buildStatusApplyConfig(&clusterScmProvider) },
+	)
 
 	if err := r.Get(ctx, req.NamespacedName, &clusterScmProvider); err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -77,6 +81,13 @@ func (r *ClusterScmProviderReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ClusterScmProviderReconciler) buildStatusApplyConfig(csp *promoterv1alpha1.ClusterScmProvider) *acv1alpha1.ClusterScmProviderApplyConfiguration {
+	return acv1alpha1.ClusterScmProvider(csp.Name, csp.Namespace).
+		WithStatus(acv1alpha1.ScmProviderStatus().
+			WithObservedGeneration(csp.Status.ObservedGeneration).
+			WithConditions(utils.ConditionsToApplyConfig(csp.Status.Conditions)...))
 }
 
 // SetupWithManager sets up the controller with the Manager.

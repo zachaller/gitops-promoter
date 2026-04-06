@@ -101,8 +101,10 @@ func (r *ChangeTransferPolicyReconciler) Reconcile(ctx context.Context, req ctrl
 	startTime := time.Now()
 
 	var ctp promoterv1alpha1.ChangeTransferPolicy
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &ctp, r.Client, r.Recorder, &result, &err)
+	defer utils.HandleReconciliationResult(ctx, startTime, &ctp, r.Client, r.Recorder, &result, &err,
+		constants.ChangeTransferPolicyControllerFieldOwner,
+		func() any { return r.buildStatusApplyConfig(&ctp) },
+	)
 
 	err = r.Get(ctx, req.NamespacedName, &ctp, &client.GetOptions{})
 	if err != nil {
@@ -434,6 +436,22 @@ func removeKnownTrailers(input string) string {
 	result := strings.Join(filtered, "\n")
 	result = strings.TrimSpace(result)
 	return result
+}
+
+func (r *ChangeTransferPolicyReconciler) buildStatusApplyConfig(ctp *promoterv1alpha1.ChangeTransferPolicy) *acv1alpha1.ChangeTransferPolicyApplyConfiguration {
+	statusApply := acv1alpha1.ChangeTransferPolicyStatus().
+		WithProposed(commitBranchStateToApplyConfig(&ctp.Status.Proposed)).
+		WithActive(commitBranchStateToApplyConfig(&ctp.Status.Active)).
+		WithObservedGeneration(ctp.Status.ObservedGeneration).
+		WithConditions(utils.ConditionsToApplyConfig(ctp.Status.Conditions)...)
+	if ctp.Status.PullRequest != nil {
+		statusApply.WithPullRequest(pullRequestCommonStatusToApplyConfig(ctp.Status.PullRequest))
+	}
+	for i := range ctp.Status.History {
+		statusApply.WithHistory(historyToApplyConfig(&ctp.Status.History[i]))
+	}
+	return acv1alpha1.ChangeTransferPolicy(ctp.Name, ctp.Namespace).
+		WithStatus(statusApply)
 }
 
 // SetupWithManager sets up the controller with the Manager.

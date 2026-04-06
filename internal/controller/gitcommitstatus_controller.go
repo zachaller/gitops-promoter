@@ -46,6 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+	acv1alpha1 "github.com/argoproj-labs/gitops-promoter/applyconfiguration/api/v1alpha1"
 )
 
 // GitCommitStatusReconciler reconciles a GitCommitStatus object
@@ -81,8 +82,10 @@ func (r *GitCommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	startTime := time.Now()
 
 	var gcs promoterv1alpha1.GitCommitStatus
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &gcs, r.Client, r.Recorder, &result, &err)
+	defer utils.HandleReconciliationResult(ctx, startTime, &gcs, r.Client, r.Recorder, &result, &err,
+		constants.GitCommitStatusControllerFieldOwner,
+		func() any { return r.buildStatusApplyConfig(&gcs) },
+	)
 
 	err = r.Get(ctx, req.NamespacedName, &gcs, &client.GetOptions{})
 	if err != nil {
@@ -127,6 +130,25 @@ func (r *GitCommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *GitCommitStatusReconciler) buildStatusApplyConfig(gcs *promoterv1alpha1.GitCommitStatus) *acv1alpha1.GitCommitStatusApplyConfiguration {
+	statusApply := acv1alpha1.GitCommitStatusStatus().
+		WithObservedGeneration(gcs.Status.ObservedGeneration).
+		WithConditions(utils.ConditionsToApplyConfig(gcs.Status.Conditions)...)
+	for i := range gcs.Status.Environments {
+		env := &gcs.Status.Environments[i]
+		envApply := acv1alpha1.GitCommitStatusEnvironmentStatus().
+			WithBranch(env.Branch).
+			WithProposedHydratedSha(env.ProposedHydratedSha).
+			WithActiveHydratedSha(env.ActiveHydratedSha).
+			WithTargetedSha(env.TargetedSha).
+			WithPhase(env.Phase)
+		envApply.ExpressionResult = env.ExpressionResult
+		statusApply.WithEnvironments(envApply)
+	}
+	return acv1alpha1.GitCommitStatus(gcs.Name, gcs.Namespace).
+		WithStatus(statusApply)
 }
 
 // SetupWithManager sets up the controller with the Manager.

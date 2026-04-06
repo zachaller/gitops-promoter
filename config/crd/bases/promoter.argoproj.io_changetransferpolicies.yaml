@@ -942,6 +942,11 @@ spec:
                       type: object
                   type: object
                 type: array
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
               proposed:
                 description: Proposed is the state of the proposed branch.
                 properties:

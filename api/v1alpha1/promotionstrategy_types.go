@@ -116,6 +116,10 @@ type PromotionStrategyStatus struct {
 	// +listMapKey=branch
 	Environments []EnvironmentStatus `json:"environments"`
 
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions Represents the observations of the current state.
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -127,6 +131,10 @@ type PromotionStrategyStatus struct {
 // GetConditions returns the conditions of the PromotionStrategy.
 func (ps *PromotionStrategy) GetConditions() *[]metav1.Condition {
 	return &ps.Status.Conditions
+}
+
+func (ps *PromotionStrategy) SetObservedGeneration(generation int64) {
+	ps.Status.ObservedGeneration = generation
 }
 
 // EnvironmentStatus defines the observed state of an environment in a PromotionStrategy.

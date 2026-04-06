@@ -171,6 +171,10 @@ type ChangeTransferPolicyStatus struct {
 	// History is in reverse chronological order (newest is first).
 	History []History `json:"history,omitempty"`
 
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions Represents the observations of the current state.
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -228,6 +232,10 @@ type PullRequestCommonStatus struct {
 // GetConditions returns the conditions of the ChangeTransferPolicy
 func (ps *ChangeTransferPolicy) GetConditions() *[]metav1.Condition {
 	return &ps.Status.Conditions
+}
+
+func (ps *ChangeTransferPolicy) SetObservedGeneration(generation int64) {
+	ps.Status.ObservedGeneration = generation
 }
 
 // +kubebuilder:ac:generate=true

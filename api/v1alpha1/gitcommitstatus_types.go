@@ -113,6 +113,10 @@ type GitCommitStatusStatus struct {
 	// +optional
 	Environments []GitCommitStatusEnvironmentStatus `json:"environments,omitempty"`
 
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions represent the latest available observations of the GitCommitStatus's state.
 	// Standard condition types include "Ready" which aggregates the status of all environments.
 	// +listType=map
@@ -233,6 +237,10 @@ type GitCommitStatusList struct {
 // GetConditions returns the conditions of the GitCommitStatus.
 func (g *GitCommitStatus) GetConditions() *[]metav1.Condition {
 	return &g.Status.Conditions
+}
+
+func (g *GitCommitStatus) SetObservedGeneration(generation int64) {
+	g.Status.ObservedGeneration = generation
 }
 
 func init() {

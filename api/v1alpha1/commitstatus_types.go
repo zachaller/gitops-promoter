@@ -68,9 +68,6 @@ type CommitStatusSpec struct {
 
 // CommitStatusStatus defines the observed state of CommitStatus
 type CommitStatusStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// Id is the unique identifier of the commit status, set by the SCM
 	Id string `json:"id,omitempty"`
 	// Sha is the commit SHA that the status is set on.
@@ -84,6 +81,10 @@ type CommitStatusStatus struct {
 	// +kubebuilder:validation:Optional
 	Phase CommitStatusPhase `json:"phase,omitempty"`
 
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions Represents the observations of the current state.
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -95,6 +96,10 @@ type CommitStatusStatus struct {
 // GetConditions returns the conditions of the CommitStatus
 func (cs *CommitStatus) GetConditions() *[]metav1.Condition {
 	return &cs.Status.Conditions
+}
+
+func (cs *CommitStatus) SetObservedGeneration(generation int64) {
+	cs.Status.ObservedGeneration = generation
 }
 
 // +kubebuilder:ac:generate=true

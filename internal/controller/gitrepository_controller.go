@@ -31,6 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+	acv1alpha1 "github.com/argoproj-labs/gitops-promoter/applyconfiguration/api/v1alpha1"
+	"github.com/argoproj-labs/gitops-promoter/internal/types/constants"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 )
 
@@ -54,8 +56,10 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	startTime := time.Now()
 
 	var gitRepo promoterv1alpha1.GitRepository
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &gitRepo, r.Client, r.Recorder, &result, &err)
+	defer utils.HandleReconciliationResult(ctx, startTime, &gitRepo, r.Client, r.Recorder, &result, &err,
+		constants.GitRepositoryControllerFieldOwner,
+		func() any { return r.buildStatusApplyConfig(&gitRepo) },
+	)
 
 	if err := r.Get(ctx, req.NamespacedName, &gitRepo); err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -70,6 +74,13 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *GitRepositoryReconciler) buildStatusApplyConfig(gr *promoterv1alpha1.GitRepository) *acv1alpha1.GitRepositoryApplyConfiguration {
+	return acv1alpha1.GitRepository(gr.Name, gr.Namespace).
+		WithStatus(acv1alpha1.GitRepositoryStatus().
+			WithObservedGeneration(gr.Status.ObservedGeneration).
+			WithConditions(utils.ConditionsToApplyConfig(gr.Status.Conditions)...))
 }
 
 // SetupWithManager sets up the controller with the Manager.

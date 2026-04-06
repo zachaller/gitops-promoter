@@ -47,6 +47,10 @@ func (s *ClusterScmProvider) GetConditions() *[]metav1.Condition {
 	return &s.Status.Conditions
 }
 
+func (s *ClusterScmProvider) SetObservedGeneration(generation int64) {
+	s.Status.ObservedGeneration = generation
+}
+
 // +kubebuilder:object:root=true
 
 // ClusterScmProviderList contains a list of ClusterScmProvider.

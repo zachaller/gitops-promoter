@@ -31,6 +31,7 @@ import (
 	"github.com/argoproj-labs/gitops-promoter/internal/settings"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+	acv1alpha1 "github.com/argoproj-labs/gitops-promoter/applyconfiguration/api/v1alpha1"
 	"github.com/argoproj-labs/gitops-promoter/internal/scms"
 	"github.com/argoproj-labs/gitops-promoter/internal/scms/azuredevops"
 	"github.com/argoproj-labs/gitops-promoter/internal/scms/github"
@@ -78,8 +79,10 @@ func (r *CommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	startTime := time.Now()
 
 	var cs promoterv1alpha1.CommitStatus
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &cs, r.Client, r.Recorder, &result, &err)
+	defer utils.HandleReconciliationResult(ctx, startTime, &cs, r.Client, r.Recorder, &result, &err,
+		constants.CommitStatusControllerFieldOwner,
+		func() any { return r.buildStatusApplyConfig(&cs) },
+	)
 
 	err = r.Get(ctx, req.NamespacedName, &cs, &client.GetOptions{})
 	if err != nil {
@@ -122,6 +125,19 @@ func (r *CommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	r.Recorder.Eventf(&cs, nil, "Normal", constants.CommitStatusSetReason, "SettingCommitStatus", "Commit status %s set to %s for hash %s", cs.Name, cs.Spec.Phase, cs.Spec.Sha)
 
 	return ctrl.Result{}, nil
+}
+
+func (r *CommitStatusReconciler) buildStatusApplyConfig(cs *promoterv1alpha1.CommitStatus) *acv1alpha1.CommitStatusApplyConfiguration {
+	statusApply := acv1alpha1.CommitStatusStatus().
+		WithObservedGeneration(cs.Status.ObservedGeneration).
+		WithId(cs.Status.Id).
+		WithPhase(cs.Status.Phase).
+		WithConditions(utils.ConditionsToApplyConfig(cs.Status.Conditions)...)
+	if cs.Status.Sha != "" {
+		statusApply.WithSha(cs.Status.Sha)
+	}
+	return acv1alpha1.CommitStatus(cs.Name, cs.Namespace).
+		WithStatus(statusApply)
 }
 
 // SetupWithManager sets up the controller with the Manager.

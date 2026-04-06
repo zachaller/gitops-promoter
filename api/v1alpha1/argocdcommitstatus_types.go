@@ -92,6 +92,10 @@ type ArgoCDCommitStatusStatus struct {
 	// This field is sorted by environment (same order as the referenced PromotionStrategy), then namespace, then name.
 	ApplicationsSelected []ApplicationsSelected `json:"applicationsSelected,omitempty"`
 
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions Represents the observations of the current state.
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -103,6 +107,10 @@ type ArgoCDCommitStatusStatus struct {
 // GetConditions returns the conditions of the ArgoCDCommitStatus.
 func (cs *ArgoCDCommitStatus) GetConditions() *[]metav1.Condition {
 	return &cs.Status.Conditions
+}
+
+func (cs *ArgoCDCommitStatus) SetObservedGeneration(generation int64) {
+	cs.Status.ObservedGeneration = generation
 }
 
 // ApplicationsSelected represents the Argo CD applications that are selected by the commit status. The fields in this

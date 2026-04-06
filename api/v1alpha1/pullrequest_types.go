@@ -92,6 +92,10 @@ type PullRequestStatus struct {
 	// the owning ChangeTransferPolicy to maintain a record of the external action.
 	ExternallyMergedOrClosed *bool `json:"externallyMergedOrClosed,omitempty"`
 
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions Represents the observations of the current state.
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -103,6 +107,10 @@ type PullRequestStatus struct {
 // GetConditions returns the conditions of the PullRequest.
 func (ps *PullRequest) GetConditions() *[]metav1.Condition {
 	return &ps.Status.Conditions
+}
+
+func (ps *PullRequest) SetObservedGeneration(generation int64) {
+	ps.Status.ObservedGeneration = generation
 }
 
 // +kubebuilder:ac:generate=true

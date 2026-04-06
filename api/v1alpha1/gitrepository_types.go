@@ -54,8 +54,9 @@ type ScmProviderObjectReference struct {
 
 // GitRepositoryStatus defines the observed state of GitRepository
 type GitRepositoryStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// Conditions Represents the observations of the current state.
 	// +patchMergeKey=type
@@ -83,6 +84,10 @@ type GitRepository struct {
 // GetConditions returns the conditions of the GitRepository.
 func (gr *GitRepository) GetConditions() *[]metav1.Condition {
 	return &gr.Status.Conditions
+}
+
+func (gr *GitRepository) SetObservedGeneration(generation int64) {
+	gr.Status.ObservedGeneration = generation
 }
 
 //+kubebuilder:object:root=true

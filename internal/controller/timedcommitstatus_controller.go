@@ -72,8 +72,10 @@ func (r *TimedCommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	startTime := time.Now()
 
 	var tcs promoterv1alpha1.TimedCommitStatus
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &tcs, r.Client, r.Recorder, &result, &err)
+	defer utils.HandleReconciliationResult(ctx, startTime, &tcs, r.Client, r.Recorder, &result, &err,
+		constants.TimedCommitStatusControllerFieldOwner,
+		func() any { return r.buildStatusApplyConfig(&tcs) },
+	)
 
 	// 1. Fetch the TimedCommitStatus instance
 	err = r.Get(ctx, req.NamespacedName, &tcs, &client.GetOptions{})
@@ -132,6 +134,25 @@ func (r *TimedCommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return ctrl.Result{
 		RequeueAfter: requeueDuration,
 	}, nil
+}
+
+func (r *TimedCommitStatusReconciler) buildStatusApplyConfig(tcs *promoterv1alpha1.TimedCommitStatus) *acv1alpha1.TimedCommitStatusApplyConfiguration {
+	statusApply := acv1alpha1.TimedCommitStatusStatus().
+		WithObservedGeneration(tcs.Status.ObservedGeneration).
+		WithConditions(utils.ConditionsToApplyConfig(tcs.Status.Conditions)...)
+	for i := range tcs.Status.Environments {
+		env := &tcs.Status.Environments[i]
+		statusApply.WithEnvironments(
+			acv1alpha1.TimedCommitStatusEnvironmentsStatus().
+				WithBranch(env.Branch).
+				WithSha(env.Sha).
+				WithCommitTime(env.CommitTime).
+				WithRequiredDuration(env.RequiredDuration).
+				WithPhase(env.Phase).
+				WithAtMostDurationRemaining(env.AtMostDurationRemaining))
+	}
+	return acv1alpha1.TimedCommitStatus(tcs.Name, tcs.Namespace).
+		WithStatus(statusApply)
 }
 
 // SetupWithManager sets up the controller with the Manager.

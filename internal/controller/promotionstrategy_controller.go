@@ -87,8 +87,10 @@ func (r *PromotionStrategyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	startTime := time.Now()
 
 	var ps promoterv1alpha1.PromotionStrategy
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &ps, r.Client, r.Recorder, &result, &err)
+	defer utils.HandleReconciliationResult(ctx, startTime, &ps, r.Client, r.Recorder, &result, &err,
+		constants.PromotionStrategyControllerFieldOwner,
+		func() any { return r.buildStatusApplyConfig(&ps) },
+	)
 
 	err = r.Get(ctx, req.NamespacedName, &ps, &client.GetOptions{})
 	if err != nil {
@@ -152,6 +154,34 @@ func (r *PromotionStrategyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		Requeue:      true,
 		RequeueAfter: requeueDuration,
 	}, nil
+}
+
+func (r *PromotionStrategyReconciler) buildStatusApplyConfig(ps *promoterv1alpha1.PromotionStrategy) *acv1alpha1.PromotionStrategyApplyConfiguration {
+	statusApply := acv1alpha1.PromotionStrategyStatus().
+		WithObservedGeneration(ps.Status.ObservedGeneration).
+		WithConditions(utils.ConditionsToApplyConfig(ps.Status.Conditions)...)
+	for i := range ps.Status.Environments {
+		env := &ps.Status.Environments[i]
+		envApply := acv1alpha1.EnvironmentStatus().
+			WithBranch(env.Branch).
+			WithProposed(commitBranchStateToApplyConfig(&env.Proposed)).
+			WithActive(commitBranchStateToApplyConfig(&env.Active))
+		if env.PullRequest != nil {
+			envApply.WithPullRequest(pullRequestCommonStatusToApplyConfig(env.PullRequest))
+		}
+		for j := range env.LastHealthyDryShas {
+			hds := &env.LastHealthyDryShas[j]
+			envApply.WithLastHealthyDryShas(acv1alpha1.HealthyDryShas().
+				WithSha(hds.Sha).
+				WithTime(hds.Time))
+		}
+		for j := range env.History {
+			envApply.WithHistory(historyToApplyConfig(&env.History[j]))
+		}
+		statusApply.WithEnvironments(envApply)
+	}
+	return acv1alpha1.PromotionStrategy(ps.Name, ps.Namespace).
+		WithStatus(statusApply)
 }
 
 // SetupWithManager sets up the controller with the Manager.

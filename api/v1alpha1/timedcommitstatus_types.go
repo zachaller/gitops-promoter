@@ -52,14 +52,15 @@ type TimedCommitStatusEnvironments struct {
 
 // TimedCommitStatusStatus defines the observed state of TimedCommitStatus.
 type TimedCommitStatusStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// Environments holds the status of each environment being tracked.
 	// +listType=map
 	// +listMapKey=branch
 	// +optional
 	Environments []TimedCommitStatusEnvironmentsStatus `json:"environments,omitempty"`
+
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// Conditions represent the latest available observations of an object's state
 	// +listType=map
@@ -138,6 +139,10 @@ type TimedCommitStatusList struct {
 // GetConditions returns the conditions of the TimedCommitStatus.
 func (tcs *TimedCommitStatus) GetConditions() *[]metav1.Condition {
 	return &tcs.Status.Conditions
+}
+
+func (tcs *TimedCommitStatus) SetObservedGeneration(generation int64) {
+	tcs.Status.ObservedGeneration = generation
 }
 
 func init() {

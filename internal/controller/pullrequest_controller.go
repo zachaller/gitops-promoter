@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+	acv1alpha1 "github.com/argoproj-labs/gitops-promoter/applyconfiguration/api/v1alpha1"
 	"github.com/argoproj-labs/gitops-promoter/internal/git"
 	"github.com/argoproj-labs/gitops-promoter/internal/scms"
 	bitbucket_cloud "github.com/argoproj-labs/gitops-promoter/internal/scms/bitbucket_cloud"
@@ -77,8 +78,10 @@ func (r *PullRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	startTime := time.Now()
 
 	var pr promoterv1alpha1.PullRequest
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &pr, r.Client, r.Recorder, &result, &err)
+	defer utils.HandleReconciliationResult(ctx, startTime, &pr, r.Client, r.Recorder, &result, &err,
+		constants.PullRequestControllerFieldOwner,
+		func() any { return r.buildStatusApplyConfig(&pr) },
+	)
 
 	if err := r.Get(ctx, req.NamespacedName, &pr); err != nil {
 		if errors.IsNotFound(err) {
@@ -298,6 +301,21 @@ func (r *PullRequestReconciler) handleStateTransitions(ctx context.Context, pr *
 	}
 
 	return false, nil
+}
+
+func (r *PullRequestReconciler) buildStatusApplyConfig(pr *promoterv1alpha1.PullRequest) *acv1alpha1.PullRequestApplyConfiguration {
+	statusApply := acv1alpha1.PullRequestStatus().
+		WithObservedGeneration(pr.Status.ObservedGeneration).
+		WithID(pr.Status.ID).
+		WithState(pr.Status.State).
+		WithUrl(pr.Status.Url).
+		WithConditions(utils.ConditionsToApplyConfig(pr.Status.Conditions)...)
+	if !pr.Status.PRCreationTime.IsZero() {
+		statusApply.WithPRCreationTime(pr.Status.PRCreationTime)
+	}
+	statusApply.ExternallyMergedOrClosed = pr.Status.ExternallyMergedOrClosed
+	return acv1alpha1.PullRequest(pr.Name, pr.Namespace).
+		WithStatus(statusApply)
 }
 
 // SetupWithManager sets up the controller with the Manager.

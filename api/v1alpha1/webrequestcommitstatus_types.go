@@ -382,6 +382,10 @@ type WebRequestCommitStatusStatus struct {
 	// +optional
 	PromotionStrategyContext *WebRequestCommitStatusPromotionStrategyContextStatus `json:"promotionStrategyContext,omitempty"`
 
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions represent the latest available observations of an object's state
 	// +listType=map
 	// +listMapKey=type
@@ -535,6 +539,10 @@ type WebRequestCommitStatusList struct {
 // GetConditions returns the conditions of the WebRequestCommitStatus.
 func (wrcs *WebRequestCommitStatus) GetConditions() *[]metav1.Condition {
 	return &wrcs.Status.Conditions
+}
+
+func (wrcs *WebRequestCommitStatus) SetObservedGeneration(generation int64) {
+	wrcs.Status.ObservedGeneration = generation
 }
 
 func init() {
