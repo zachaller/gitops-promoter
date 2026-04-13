@@ -72,8 +72,21 @@ func (r *TimedCommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	startTime := time.Now()
 
 	var tcs promoterv1alpha1.TimedCommitStatus
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &tcs, r.Client, r.Recorder, &result, &err)
+	// This function will update the resource status at the end of the reconciliation using Server-Side Apply.
+	defer func() {
+		statusApply := utils.TimedCommitStatusStatusToApplyConfig(tcs.Status)
+		applyConfig := acv1alpha1.TimedCommitStatus(tcs.Name, tcs.Namespace).WithStatus(statusApply)
+		utils.HandleSSAReconciliationResult(ctx, startTime, &tcs, utils.SSAReconciliationParams{
+			ApplyConfig:      applyConfig,
+			AppendConditions: func(c ...*acmetav1.ConditionApplyConfiguration) { statusApply.WithConditions(c...) },
+			Client:           r.Client,
+			FieldOwner:       constants.TimedCommitStatusControllerFieldOwner,
+			Recorder:         r.Recorder,
+			FallbackFactory: func(name, ns string, c ...*acmetav1.ConditionApplyConfiguration) any {
+				return acv1alpha1.TimedCommitStatus(name, ns).WithStatus(acv1alpha1.TimedCommitStatusStatus().WithConditions(c...))
+			},
+		}, &result, &err)
+	}()
 
 	// 1. Fetch the TimedCommitStatus instance
 	err = r.Get(ctx, req.NamespacedName, &tcs, &client.GetOptions{})
@@ -86,7 +99,6 @@ func (r *TimedCommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get TimedCommitStatus %q: %w", req.Name, err)
 	}
 
-	// Remove any existing Ready condition. We want to start fresh.
 	meta.RemoveStatusCondition(tcs.GetConditions(), string(promoterConditions.Ready))
 
 	// 2. Fetch the referenced PromotionStrategy

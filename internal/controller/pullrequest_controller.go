@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+	acv1alpha1 "github.com/argoproj-labs/gitops-promoter/applyconfiguration/api/v1alpha1"
 	"github.com/argoproj-labs/gitops-promoter/internal/git"
 	"github.com/argoproj-labs/gitops-promoter/internal/scms"
 	bitbucket_cloud "github.com/argoproj-labs/gitops-promoter/internal/scms/bitbucket_cloud"
@@ -37,13 +38,12 @@ import (
 	"github.com/argoproj-labs/gitops-promoter/internal/scms/gitea"
 	"github.com/argoproj-labs/gitops-promoter/internal/scms/github"
 	"github.com/argoproj-labs/gitops-promoter/internal/scms/gitlab"
-	promoterConditions "github.com/argoproj-labs/gitops-promoter/internal/types/conditions"
 	"github.com/argoproj-labs/gitops-promoter/internal/types/constants"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	acmetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -77,8 +77,21 @@ func (r *PullRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	startTime := time.Now()
 
 	var pr promoterv1alpha1.PullRequest
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &pr, r.Client, r.Recorder, &result, &err)
+	// This function will update the resource status at the end of the reconciliation using Server-Side Apply.
+	defer func() {
+		statusApply := utils.PullRequestStatusToApplyConfig(pr.Status)
+		applyConfig := acv1alpha1.PullRequest(pr.Name, pr.Namespace).WithStatus(statusApply)
+		utils.HandleSSAReconciliationResult(ctx, startTime, &pr, utils.SSAReconciliationParams{
+			ApplyConfig:      applyConfig,
+			AppendConditions: func(c ...*acmetav1.ConditionApplyConfiguration) { statusApply.WithConditions(c...) },
+			Client:           r.Client,
+			FieldOwner:       constants.PullRequestControllerFieldOwner,
+			Recorder:         r.Recorder,
+			FallbackFactory: func(name, ns string, c ...*acmetav1.ConditionApplyConfiguration) any {
+				return acv1alpha1.PullRequest(name, ns).WithStatus(acv1alpha1.PullRequestStatus().WithConditions(c...))
+			},
+		}, &result, &err)
+	}()
 
 	if err := r.Get(ctx, req.NamespacedName, &pr); err != nil {
 		if errors.IsNotFound(err) {
@@ -87,9 +100,6 @@ func (r *PullRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to get PullRequest: %w", err)
 	}
-
-	// Remove any existing Ready condition. We want to start fresh.
-	meta.RemoveStatusCondition(pr.GetConditions(), string(promoterConditions.Ready))
 
 	// Handle deletion early - if being deleted and status.ID is empty, we can skip provider setup
 	if handled, err := r.handleEmptyIDDeletion(ctx, &pr); handled || err != nil {
@@ -120,7 +130,7 @@ func (r *PullRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	// Requeue immediately so that the deferred HandleReconciliationResult persists the in-memory
+	// Requeue immediately so that the deferred HandleSSAReconciliationResult persists the in-memory
 	// status change, then the following reconciliation's cleanupTerminalStates handles deletion.
 	// This covers two cases:
 	// 1. ExternallyMergedOrClosed was set (PR vanished on provider while spec.state was still "open")
@@ -140,7 +150,7 @@ func (r *PullRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// cleanup on the next reconciliation. The flow is:
 	// 1. handleStateTransitions updates pr.Status.State to Merged/Closed in memory
 	// 2. We return here with RequeueAfter
-	// 3. The deferred HandleReconciliationResult persists the status update to the cluster
+	// 3. The deferred HandleSSAReconciliationResult persists the status update to the cluster
 	// 4. The next reconciliation sees the persisted Merged/Closed state
 	// 5. cleanupTerminalStates (which runs earlier in the loop) handles deletion
 	// Previously, merge/close would delete inline, but this was problematic because the status

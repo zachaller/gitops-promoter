@@ -36,6 +36,7 @@ import (
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	acmetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -46,6 +47,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+	acv1alpha1 "github.com/argoproj-labs/gitops-promoter/applyconfiguration/api/v1alpha1"
 )
 
 // GitCommitStatusReconciler reconciles a GitCommitStatus object
@@ -81,8 +83,21 @@ func (r *GitCommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	startTime := time.Now()
 
 	var gcs promoterv1alpha1.GitCommitStatus
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &gcs, r.Client, r.Recorder, &result, &err)
+	// This function will update the resource status at the end of the reconciliation using Server-Side Apply.
+	defer func() {
+		statusApply := utils.GitCommitStatusStatusToApplyConfig(gcs.Status)
+		applyConfig := acv1alpha1.GitCommitStatus(gcs.Name, gcs.Namespace).WithStatus(statusApply)
+		utils.HandleSSAReconciliationResult(ctx, startTime, &gcs, utils.SSAReconciliationParams{
+			ApplyConfig:      applyConfig,
+			AppendConditions: func(c ...*acmetav1.ConditionApplyConfiguration) { statusApply.WithConditions(c...) },
+			Client:           r.Client,
+			FieldOwner:       constants.GitCommitStatusControllerFieldOwner,
+			Recorder:         r.Recorder,
+			FallbackFactory: func(name, ns string, c ...*acmetav1.ConditionApplyConfiguration) any {
+				return acv1alpha1.GitCommitStatus(name, ns).WithStatus(acv1alpha1.GitCommitStatusStatus().WithConditions(c...))
+			},
+		}, &result, &err)
+	}()
 
 	err = r.Get(ctx, req.NamespacedName, &gcs, &client.GetOptions{})
 	if err != nil {
@@ -95,7 +110,6 @@ func (r *GitCommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, fmt.Errorf("failed to get GitCommitStatus %q: %w", req.Name, err)
 	}
 
-	// Remove any existing Ready condition. We want to start fresh.
 	meta.RemoveStatusCondition(gcs.GetConditions(), string(promoterConditions.Ready))
 
 	// Fetch the referenced PromotionStrategy

@@ -115,8 +115,21 @@ func (r *ArgoCDCommitStatusReconciler) Reconcile(ctx context.Context, req mcreco
 	startTime := time.Now()
 
 	var argoCDCommitStatus promoterv1alpha1.ArgoCDCommitStatus
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &argoCDCommitStatus, r.localClient, r.Recorder, &result, &err)
+	// This function will update the resource status at the end of the reconciliation using Server-Side Apply.
+	defer func() {
+		statusApply := utils.ArgoCDCommitStatusStatusToApplyConfig(argoCDCommitStatus.Status)
+		applyConfig := acv1alpha1.ArgoCDCommitStatus(argoCDCommitStatus.Name, argoCDCommitStatus.Namespace).WithStatus(statusApply)
+		utils.HandleSSAReconciliationResult(ctx, startTime, &argoCDCommitStatus, utils.SSAReconciliationParams{
+			ApplyConfig:      applyConfig,
+			AppendConditions: func(c ...*acmetav1.ConditionApplyConfiguration) { statusApply.WithConditions(c...) },
+			Client:           r.localClient,
+			FieldOwner:       constants.ArgoCDCommitStatusControllerFieldOwner,
+			Recorder:         r.Recorder,
+			FallbackFactory: func(name, ns string, c ...*acmetav1.ConditionApplyConfiguration) any {
+				return acv1alpha1.ArgoCDCommitStatus(name, ns).WithStatus(acv1alpha1.ArgoCDCommitStatusStatus().WithConditions(c...))
+			},
+		}, &result, &err)
+	}()
 
 	err = r.localClient.Get(ctx, req.NamespacedName, &argoCDCommitStatus, &client.GetOptions{})
 	if err != nil {
@@ -129,7 +142,6 @@ func (r *ArgoCDCommitStatusReconciler) Reconcile(ctx context.Context, req mcreco
 		return ctrl.Result{}, fmt.Errorf("failed to get ArgoCDCommitStatus: %w", err)
 	}
 
-	// Remove any existing Ready condition. We want to start fresh.
 	meta.RemoveStatusCondition(argoCDCommitStatus.GetConditions(), string(promoterConditions.Ready))
 
 	ls, err := metav1.LabelSelectorAsSelector(argoCDCommitStatus.Spec.ApplicationSelector)

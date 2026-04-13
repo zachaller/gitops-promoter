@@ -87,8 +87,21 @@ func (r *PromotionStrategyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	startTime := time.Now()
 
 	var ps promoterv1alpha1.PromotionStrategy
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &ps, r.Client, r.Recorder, &result, &err)
+	// This function will update the resource status at the end of the reconciliation using Server-Side Apply.
+	defer func() {
+		statusApply := utils.PromotionStrategyStatusToApplyConfig(ps.Status)
+		applyConfig := acv1alpha1.PromotionStrategy(ps.Name, ps.Namespace).WithStatus(statusApply)
+		utils.HandleSSAReconciliationResult(ctx, startTime, &ps, utils.SSAReconciliationParams{
+			ApplyConfig:      applyConfig,
+			AppendConditions: func(c ...*acmetav1.ConditionApplyConfiguration) { statusApply.WithConditions(c...) },
+			Client:           r.Client,
+			FieldOwner:       constants.PromotionStrategyControllerFieldOwner,
+			Recorder:         r.Recorder,
+			FallbackFactory: func(name, ns string, c ...*acmetav1.ConditionApplyConfiguration) any {
+				return acv1alpha1.PromotionStrategy(name, ns).WithStatus(acv1alpha1.PromotionStrategyStatus().WithConditions(c...))
+			},
+		}, &result, &err)
+	}()
 
 	err = r.Get(ctx, req.NamespacedName, &ps, &client.GetOptions{})
 	if err != nil {
@@ -100,14 +113,15 @@ func (r *PromotionStrategyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get PromitionStrategy %q: %w", req.Name, err)
 	}
 
+	// Remove any existing Ready condition so buildReadyConditionApply can distinguish
+	// "caller set a condition" from "stale condition from previous reconciliation".
+	meta.RemoveStatusCondition(ps.GetConditions(), string(promoterConditions.Ready))
+
 	// If the resource is being deleted, stop reconciling immediately without requeuing
 	if !ps.DeletionTimestamp.IsZero() {
 		logger.V(4).Info("PromotionStrategy is being deleted, skipping reconciliation")
 		return ctrl.Result{}, nil
 	}
-
-	// Remove any existing Ready condition. We want to start fresh.
-	meta.RemoveStatusCondition(ps.GetConditions(), string(promoterConditions.Ready))
 
 	// If a ChangeTransferPolicy does not exist, create it otherwise get it and store the ChangeTransferPolicy in a slice with the same order as ps.Spec.Environments.
 	ctps := make([]*promoterv1alpha1.ChangeTransferPolicy, len(ps.Spec.Environments))

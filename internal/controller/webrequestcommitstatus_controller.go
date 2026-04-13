@@ -149,8 +149,21 @@ func (r *WebRequestCommitStatusReconciler) Reconcile(ctx context.Context, req ct
 	startTime := time.Now()
 
 	var wrcs promoterv1alpha1.WebRequestCommitStatus
-	// This function will update the resource status at the end of the reconciliation. don't call .Status().Update manually.
-	defer utils.HandleReconciliationResult(ctx, startTime, &wrcs, r.Client, r.Recorder, &result, &err)
+	// This function will update the resource status at the end of the reconciliation using Server-Side Apply.
+	defer func() {
+		statusApply := utils.WebRequestCommitStatusStatusToApplyConfig(wrcs.Status)
+		applyConfig := acv1alpha1.WebRequestCommitStatus(wrcs.Name, wrcs.Namespace).WithStatus(statusApply)
+		utils.HandleSSAReconciliationResult(ctx, startTime, &wrcs, utils.SSAReconciliationParams{
+			ApplyConfig:      applyConfig,
+			AppendConditions: func(c ...*acmetav1.ConditionApplyConfiguration) { statusApply.WithConditions(c...) },
+			Client:           r.Client,
+			FieldOwner:       constants.WebRequestCommitStatusControllerFieldOwner,
+			Recorder:         r.Recorder,
+			FallbackFactory: func(name, ns string, c ...*acmetav1.ConditionApplyConfiguration) any {
+				return acv1alpha1.WebRequestCommitStatus(name, ns).WithStatus(acv1alpha1.WebRequestCommitStatusStatus().WithConditions(c...))
+			},
+		}, &result, &err)
+	}()
 
 	// 1. Fetch the WebRequestCommitStatus instance
 	err = r.Get(ctx, req.NamespacedName, &wrcs)
@@ -163,7 +176,6 @@ func (r *WebRequestCommitStatusReconciler) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, fmt.Errorf("failed to get WebRequestCommitStatus %q: %w", req.Name, err)
 	}
 
-	// Remove any existing Ready condition. We want to start fresh.
 	meta.RemoveStatusCondition(wrcs.GetConditions(), string(promoterConditions.Ready))
 
 	// 2. Fetch the referenced PromotionStrategy

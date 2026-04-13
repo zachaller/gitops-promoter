@@ -20,10 +20,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
+	acmetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+const (
+	eventTypeNormal  = "Normal"
+	eventTypeWarning = "Warning"
 )
 
 // GetScmProviderFromGitRepository retrieves the ScmProvider from the GitRepository reference.
@@ -344,15 +350,15 @@ func HandleReconciliationResult(
 	if *err == nil {
 		// Success case: set Ready condition if not already set
 		meta.SetStatusCondition(conditions, *readyCondition)
-		eventType := "Normal"
+		eventType := eventTypeNormal
 		if readyCondition.Status == metav1.ConditionFalse {
-			eventType = "Warning"
+			eventType = eventTypeWarning
 		}
 		recorder.Eventf(obj, nil, eventType, readyCondition.Reason, "Reconciling", readyCondition.Message)
 	} else {
 		// Error case: set Ready condition to False
 		if !k8serrors.IsConflict(*err) {
-			recorder.Eventf(obj, nil, "Warning", string(promoterConditions.ReconciliationError), "Reconciling", "Reconciliation failed: %v", *err)
+			recorder.Eventf(obj, nil, eventTypeWarning, string(promoterConditions.ReconciliationError), "Reconciling", "Reconciliation failed: %v", *err)
 		}
 		meta.SetStatusCondition(conditions, metav1.Condition{
 			Type:               string(promoterConditions.Ready),
@@ -433,6 +439,176 @@ func HandleReconciliationResult(
 		//nolint:errorlint // The initial error is intentionally quoted instead of wrapped for clarity.
 		*err = fmt.Errorf("failed to update status with error condition regarding error %q (but updating only the Ready condition succeeded): %w", *err, updateErr)
 	}
+}
+
+// ConditionAppender is a callback that appends conditions to a status apply configuration.
+// Each controller provides its own implementation that calls WithConditions on the correct status apply config type.
+type ConditionAppender func(conditions ...*acmetav1.ConditionApplyConfiguration)
+
+// FallbackApplyConfigFactory creates a minimal apply configuration containing only the status conditions.
+// Used when the full status patch fails -- the fallback patches only the Ready condition.
+type FallbackApplyConfigFactory func(name, namespace string, conditions ...*acmetav1.ConditionApplyConfiguration) any
+
+// SSAReconciliationParams holds the parameters for HandleSSAReconciliationResult.
+type SSAReconciliationParams struct {
+	Client           client.Client
+	Recorder         events.EventRecorder
+	AppendConditions ConditionAppender
+	FallbackFactory  FallbackApplyConfigFactory
+	ApplyConfig      any
+	FieldOwner       string
+}
+
+// HandleSSAReconciliationResult handles reconciliation results using Server-Side Apply for status updates.
+// It builds the Ready condition, appends it to the apply config via params.AppendConditions, and patches the status.
+// If the full status patch fails, it falls back to patching only the Ready condition using params.FallbackFactory.
+func HandleSSAReconciliationResult(
+	ctx context.Context,
+	startTime time.Time,
+	obj StatusConditionUpdater,
+	params SSAReconciliationParams,
+	result *reconcile.Result,
+	err *error,
+) {
+	// Recover from any panic and convert it to an error.
+	//nolint:revive // False positive: recover() works in a deferred function, and this function is always deferred by callers
+	if r := recover(); r != nil {
+		logger := log.FromContext(ctx)
+		logger.Error(nil, "recovered from panic in reconciliation", "panic", r, "trace", string(debug.Stack()))
+		*err = fmt.Errorf("panic in reconciliation: %v", r)
+		if result != nil {
+			*result = reconcile.Result{}
+		}
+	}
+
+	logger := log.FromContext(ctx)
+
+	logger.Info(fmt.Sprintf("Reconciling %s End", obj.GetObjectKind().GroupVersionKind().Kind), "duration", time.Since(startTime))
+	if obj.GetName() == "" && obj.GetNamespace() == "" {
+		logger.V(4).Info(obj.GetObjectKind().GroupVersionKind().Kind + " not found, skipping reconciliation")
+		return
+	}
+
+	if !obj.GetDeletionTimestamp().IsZero() {
+		logger.V(4).Info("resource deleted, skipping handling of the reconciliation result")
+		return
+	}
+
+	// Build the Ready condition as an apply configuration.
+	readyConditionApply, eventType, eventReason, eventMessage := buildReadyConditionApply(obj, err)
+
+	// Record the event (skip conflict errors to avoid noise).
+	if *err == nil || !k8serrors.IsConflict(*err) {
+		params.Recorder.Eventf(obj, nil, eventType, eventReason, "Reconciling", eventMessage)
+	}
+
+	// Append the Ready condition to the apply config via the callback.
+	params.AppendConditions(readyConditionApply)
+
+	// Single status patch using Server-Side Apply.
+	patchErr := params.Client.Status().Patch(ctx, obj, ApplyPatch{ApplyConfig: params.ApplyConfig}, client.FieldOwner(params.FieldOwner), client.ForceOwnership)
+	if patchErr == nil {
+		return
+	}
+
+	// Full status patch failed. Try a fallback: patch only the Ready condition.
+	logger.V(4).Info("Full SSA status patch failed, attempting fallback to patch only status condition", "error", patchErr)
+
+	conditionToWrite := acmetav1.Condition().
+		WithType(string(promoterConditions.Ready)).
+		WithStatus(metav1.ConditionFalse).
+		WithReason(string(promoterConditions.ReconciliationError)).
+		WithObservedGeneration(obj.GetGeneration()).
+		WithLastTransitionTime(metav1.NewTime(time.Now()))
+
+	if *err != nil {
+		conditionToWrite.WithMessage(fmt.Sprintf("Reconciliation failed: %s", *err))
+	} else {
+		conditionToWrite.WithMessage(fmt.Sprintf("Reconciliation succeeded but failed to update status: %s", patchErr))
+	}
+
+	fallbackApplyConfig := params.FallbackFactory(obj.GetName(), obj.GetNamespace(), conditionToWrite)
+	fallbackErr := params.Client.Status().Patch(ctx, obj, ApplyPatch{ApplyConfig: fallbackApplyConfig}, client.FieldOwner(params.FieldOwner), client.ForceOwnership)
+	if fallbackErr != nil {
+		if *err == nil {
+			*err = fmt.Errorf("failed to patch status (original error: %w), and patching only the Ready condition also failed: %w", patchErr, fallbackErr)
+		} else {
+			//nolint:errorlint // The initial error is intentionally quoted instead of wrapped for clarity.
+			*err = fmt.Errorf("failed to patch status with error condition regarding error %q (original status patch error: %w), and patching only the Ready condition also failed: %w", *err, patchErr, fallbackErr)
+		}
+		if result != nil {
+			*result = reconcile.Result{}
+		}
+		return
+	}
+
+	logger.Info("Successfully patched only the Ready condition after full status patch failed")
+	if *err == nil {
+		*err = fmt.Errorf("failed to patch full status (but patching only the Ready condition succeeded): %w", patchErr)
+	} else {
+		//nolint:errorlint // The initial error is intentionally quoted instead of wrapped for clarity.
+		*err = fmt.Errorf("failed to patch status with error condition regarding error %q (but patching only the Ready condition succeeded): %w", *err, patchErr)
+	}
+	if result != nil {
+		*result = reconcile.Result{}
+	}
+}
+
+// buildReadyConditionApply constructs the Ready condition apply config and event metadata based on reconciliation results.
+func buildReadyConditionApply(obj StatusConditionUpdater, err *error) (
+	condApply *acmetav1.ConditionApplyConfiguration, eventType, eventReason, eventMessage string,
+) {
+	conditions := obj.GetConditions()
+	readyCondition := meta.FindStatusCondition(*conditions, string(promoterConditions.Ready))
+
+	if *err != nil {
+		eventType = eventTypeWarning
+		eventReason = string(promoterConditions.ReconciliationError)
+		eventMessage = fmt.Sprintf("Reconciliation failed: %v", *err)
+		condApply = acmetav1.Condition().
+			WithType(string(promoterConditions.Ready)).
+			WithStatus(metav1.ConditionFalse).
+			WithReason(string(promoterConditions.ReconciliationError)).
+			WithMessage(fmt.Sprintf("Reconciliation failed: %s", *err)).
+			WithObservedGeneration(obj.GetGeneration()).
+			WithLastTransitionTime(metav1.NewTime(time.Now()))
+		return condApply, eventType, eventReason, eventMessage
+	}
+
+	// Success case: use caller-set condition or default to success.
+	if readyCondition != nil {
+		condApply = conditionToApplyConfig(*readyCondition)
+		eventReason = readyCondition.Reason
+		eventMessage = readyCondition.Message
+		if readyCondition.Status == metav1.ConditionFalse {
+			eventType = eventTypeWarning
+		} else {
+			eventType = eventTypeNormal
+		}
+	} else {
+		condApply = acmetav1.Condition().
+			WithType(string(promoterConditions.Ready)).
+			WithStatus(metav1.ConditionTrue).
+			WithReason(string(promoterConditions.ReconciliationSuccess)).
+			WithMessage("Reconciliation successful").
+			WithObservedGeneration(obj.GetGeneration()).
+			WithLastTransitionTime(metav1.NewTime(time.Now()))
+		eventType = eventTypeNormal
+		eventReason = string(promoterConditions.ReconciliationSuccess)
+		eventMessage = "Reconciliation successful"
+	}
+	return condApply, eventType, eventReason, eventMessage
+}
+
+// conditionToApplyConfig converts a metav1.Condition to an apply configuration.
+func conditionToApplyConfig(c metav1.Condition) *acmetav1.ConditionApplyConfiguration {
+	return acmetav1.Condition().
+		WithType(c.Type).
+		WithStatus(c.Status).
+		WithReason(c.Reason).
+		WithMessage(c.Message).
+		WithObservedGeneration(c.ObservedGeneration).
+		WithLastTransitionTime(c.LastTransitionTime)
 }
 
 // InheritNotReadyConditionFromObjects sets the Ready condition of the parent to False if any of the child objects are not ready.
