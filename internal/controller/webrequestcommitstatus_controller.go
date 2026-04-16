@@ -728,6 +728,13 @@ func (r *WebRequestCommitStatusReconciler) fireOrCarryForward(
 
 	// Run success.when even without a request, passing Response=nil.
 	exprData := successWhenExprData(td, nil)
+
+	// Evaluate success vars first; merge into exprData so both success.when and success.when.output share them.
+	exprData, err := r.applySuccessVars(ctx, wrcs, exprData)
+	if err != nil {
+		return httpValidationResult{}, err
+	}
+
 	phase, phasePerBranch, err := r.evaluateSuccessPhase(ctx, wrcs, exprData)
 	if err != nil {
 		return httpValidationResult{}, fmt.Errorf("failed to evaluate success.when expression: %w", err)
@@ -776,13 +783,25 @@ func (r *WebRequestCommitStatusReconciler) evaluateTriggerDecision(
 	}
 
 	if mode.Trigger != nil {
-		tr, err := r.evaluateTriggerExpression(ctx, mode.Trigger.When.Expression, td)
+		// Build the expression environment once so vars, expression, and output all share the same base.
+		exprData := td.triggerExprData()
+
+		// Evaluate vars first; merge results into exprData so both expression and output can use them.
+		if mode.Trigger.When.Vars != nil && mode.Trigger.When.Vars.Expression != "" {
+			varsData, err := r.evaluateVarsExpression(ctx, "triggervars", mode.Trigger.When.Vars.Expression, exprData)
+			if err != nil {
+				return triggerDecision{}, fmt.Errorf("failed to evaluate trigger vars expression: %w", err)
+			}
+			exprData = mergeVars(exprData, varsData)
+		}
+
+		tr, err := r.evaluateTriggerExpression(ctx, mode.Trigger.When.Expression, exprData)
 		if err != nil {
 			return triggerDecision{}, fmt.Errorf("failed to evaluate trigger expression: %w", err)
 		}
 		shouldFire = tr.Trigger
 		if mode.Trigger.When.Output != nil && mode.Trigger.When.Output.Expression != "" {
-			newTriggerData, err = r.evaluateTriggerDataExpression(ctx, mode.Trigger.When.Output.Expression, td)
+			newTriggerData, err = r.evaluateTriggerDataExpression(ctx, mode.Trigger.When.Output.Expression, exprData)
 			if err != nil {
 				return triggerDecision{}, fmt.Errorf("failed to evaluate trigger data expression: %w", err)
 			}
@@ -896,6 +915,13 @@ func (r *WebRequestCommitStatusReconciler) handleHTTPRequestAndValidation(ctx co
 	}
 
 	exprData := successWhenExprData(td, &response)
+
+	// Evaluate success vars first; merge into exprData so both success.when and success.when.output share them.
+	exprData, err = r.applySuccessVars(ctx, wrcs, exprData)
+	if err != nil {
+		return httpValidationResult{}, err
+	}
+
 	phase, phasePerBranch, err := r.evaluateSuccessPhase(ctx, wrcs, exprData)
 	if err != nil {
 		return httpValidationResult{}, fmt.Errorf("failed to evaluate validation expression: %w", err)
@@ -935,6 +961,20 @@ func (r *WebRequestCommitStatusReconciler) evaluateSuccessPhase(
 		return promoterv1alpha1.CommitPhaseSuccess, nil, nil
 	}
 	return promoterv1alpha1.CommitPhasePending, nil, nil
+}
+
+// applySuccessVars evaluates success.when.vars (if configured) and merges the resulting keys into
+// exprData, returning the enriched map. Called before evaluateSuccessPhase and evaluateSuccessOutput
+// so both share the same pre-computed variables without duplicating logic.
+func (r *WebRequestCommitStatusReconciler) applySuccessVars(ctx context.Context, wrcs *promoterv1alpha1.WebRequestCommitStatus, exprData map[string]any) (map[string]any, error) {
+	if wrcs.Spec.Success.When.Vars == nil || wrcs.Spec.Success.When.Vars.Expression == "" {
+		return exprData, nil
+	}
+	varsData, err := r.evaluateVarsExpression(ctx, "successvars", wrcs.Spec.Success.When.Vars.Expression, exprData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate success vars expression: %w", err)
+	}
+	return mergeVars(exprData, varsData), nil
 }
 
 // evaluateSuccessOutput evaluates the optional success.when.output expression and returns the

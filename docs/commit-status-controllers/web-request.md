@@ -54,8 +54,10 @@ Uses expressions to dynamically control when HTTP requests are made. Powerful fo
 **Behavior:**
 - Evaluates trigger expression on each reconciliation
 - Only makes HTTP request if trigger expression returns true
+- Can compute shared sub-expressions once via `trigger.when.vars` (available in both `when.expression` and `when.output.expression`)
 - Can store and access custom state via `TriggerOutput` (via `trigger.when.output.expression`)
 - Can access previous HTTP response data via `ResponseOutput` (via `response.output.expression`)
+- Can compute shared sub-expressions once via `success.when.vars` (available in both `success.when.expression` and `success.when.output.expression`)
 - Can store and access custom state from success evaluation via `SuccessOutput` (via `success.when.output.expression`)
 - Always reconciles at `requeueDuration` interval (default: 1 minute)
 
@@ -99,6 +101,44 @@ The `success.when.expression` is evaluated **every reconcile**, regardless of wh
 | `TriggerOutput` | map[string]any | Custom data from the previous `when.output.expression` evaluation (trigger mode only). |
 | `ResponseOutput` | map[string]any | Response data from the previous HTTP request's `response.output.expression` (trigger mode only). |
 | `SuccessOutput` | map[string]any | Custom data from the previous `success.when.output.expression` evaluation. |
+
+### Shared variables with `vars`
+
+Both `trigger.when` and `success.when` support an optional `vars` field — a map expression evaluated **before** the `expression` and `output.expression`. Its keys are injected as top-level variables, so you can compute a value once and reference it in both the condition and the output without duplicating logic.
+
+**`trigger.when.vars`** — variables available to `trigger.when.expression` and `trigger.when.output.expression`:
+
+```yaml
+trigger:
+  when:
+    vars:
+      expression: |
+        { proposedSha: find(PromotionStrategy.Status.Environments, {.Branch == Branch}).Proposed.Hydrated.Sha }
+    expression:  |
+      proposedSha != (TriggerOutput["trackedSha"] ?? "")
+    output:
+      expression: |
+        { trackedSha: proposedSha }
+```
+
+Without `vars`, both expressions would repeat the `find(…).Proposed.Hydrated.Sha` call. With `vars`, it is computed once and referenced as `proposedSha`.
+
+**`success.when.vars`** — variables available to `success.when.expression` and `success.when.output.expression`:
+
+```yaml
+success:
+  when:
+    vars:
+      expression: |
+        { isApproved: Response != nil && Response.StatusCode == 200 && Response.Body.approved == true }
+    expression: |
+      isApproved
+    output:
+      expression: |
+        { capturedApproval: isApproved, reviewer: Response != nil ? Response.Body.reviewer : "" }
+```
+
+The `vars` expression receives the same variables as the `expression` field — including `Response` in the success context.
 
 > [!IMPORTANT]
 > Since the expression runs every reconcile, it must handle `Response` being `nil` (no HTTP request this reconcile). Expressions that only reference `Response.*` will error when `Response` is `nil`, causing the reconcile to return an error and requeue. Guard `Response` access:
@@ -293,7 +333,7 @@ stringData:
 
 ### Trigger Mode - SHA Change Detection
 
-Only make HTTP requests when the SHA changes, avoiding redundant calls:
+Only make HTTP requests when the SHA changes, avoiding redundant calls. Use `trigger.when.vars` to compute the SHA once and reference it from both the trigger expression and the output, instead of duplicating the `find()` call:
 
 ```yaml
 apiVersion: promoter.argoproj.io/v1alpha1
@@ -315,9 +355,12 @@ spec:
     trigger:
       requeueDuration: 1m
       when:
-        expression: 'find(PromotionStrategy.Status.Environments, {.Branch == Branch}).Proposed.Hydrated.Sha != (TriggerOutput["lastCheckedSha"] ?? "")'
+        vars:
+          expression: |
+            { proposedSha: find(PromotionStrategy.Status.Environments, {.Branch == Branch}).Proposed.Hydrated.Sha }
+        expression: 'proposedSha != (TriggerOutput["lastCheckedSha"] ?? "")'
         output:
-          expression: '{ lastCheckedSha: find(PromotionStrategy.Status.Environments, {.Branch == Branch}).Proposed.Hydrated.Sha }'
+          expression: '{ lastCheckedSha: proposedSha }'
 ```
 
 ### Trigger Mode - Only when another commit status is success
@@ -765,11 +808,14 @@ spec:
     trigger:
       requeueDuration: 1m
       when:
+        vars:
+          expression: |
+            { proposedSha: find(PromotionStrategy.Status.Environments, {.Branch == Branch}).Proposed.Hydrated.Sha }
         expression: |
-          find(PromotionStrategy.Status.Environments, {.Branch == Branch}).Proposed.Hydrated.Sha != (TriggerOutput["lastCheckedSha"] ?? "") || Phase != "success"
+          proposedSha != (TriggerOutput["lastCheckedSha"] ?? "") || Phase != "success"
         output:
           expression: |
-            { lastCheckedSha: find(PromotionStrategy.Status.Environments, {.Branch == Branch}).Proposed.Hydrated.Sha }
+            { lastCheckedSha: proposedSha }
 ```
 
 How it works:
