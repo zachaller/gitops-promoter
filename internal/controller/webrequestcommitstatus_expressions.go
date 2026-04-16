@@ -80,6 +80,13 @@ func (r *WebRequestCommitStatusReconciler) getCompiledTriggerDataExpression(expr
 	return r.getCompiledExpression(expressionCacheKey{Prefix: "triggerdata", Expression: expression})
 }
 
+// getCompiledVarsExpression returns a cached or newly compiled vars expression program.
+// Used by evaluateVarsExpression. Compiled without a result type constraint; the expression must return a map.
+// prefix distinguishes trigger vars ("triggervars") from success vars ("successvars") in the cache.
+func (r *WebRequestCommitStatusReconciler) getCompiledVarsExpression(prefix, expression string) (*vm.Program, error) {
+	return r.getCompiledExpression(expressionCacheKey{Prefix: prefix, Expression: expression})
+}
+
 // getCompiledValidationExpression returns a cached or newly compiled validation expression program.
 // Used by evaluateValidationExpression. Compiled with expr.AsBool() so the expression must return a boolean.
 func (r *WebRequestCommitStatusReconciler) getCompiledValidationExpression(expression string) (*vm.Program, error) {
@@ -128,9 +135,45 @@ func successWhenExprData(td templateData, resp *httpResponse) map[string]any {
 	return exprData
 }
 
+// evaluateVarsExpression runs a vars expression (trigger or success) and returns the resulting map.
+// The map keys are subsequently merged into the shared exprData so both the condition expression
+// and the output expression can reference them without duplicating logic.
+// prefix is "triggervars" or "successvars" and is used only for cache namespacing.
+func (r *WebRequestCommitStatusReconciler) evaluateVarsExpression(ctx context.Context, prefix, expression string, exprData map[string]any) (map[string]any, error) {
+	logger := log.FromContext(ctx)
+
+	program, err := r.getCompiledVarsExpression(prefix, expression)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile vars expression: %w", err)
+	}
+
+	output, err := expr.Run(program, exprData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate vars expression: %w", err)
+	}
+
+	result, ok := output.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("vars expression must return a map/object, got %T", output)
+	}
+
+	logger.V(4).Info("Vars expression evaluated", "prefix", prefix, "vars", result)
+	return result, nil
+}
+
+// mergeVars copies every key from vars into base, returning base. Keys in vars shadow same-named
+// base keys, allowing vars to override or extend the standard expression environment.
+func mergeVars(base map[string]any, vars map[string]any) map[string]any {
+	for k, v := range vars {
+		base[k] = v
+	}
+	return base
+}
+
 // evaluateTriggerExpression runs the trigger expression to decide whether to perform the HTTP request.
+// exprData is the pre-built expression environment (from triggerExprData, optionally enriched with vars).
 // Returns true when the controller should issue the request; false keeps the phase from the last reconcile and skips.
-func (r *WebRequestCommitStatusReconciler) evaluateTriggerExpression(ctx context.Context, expression string, td templateData) (triggerResult, error) {
+func (r *WebRequestCommitStatusReconciler) evaluateTriggerExpression(ctx context.Context, expression string, exprData map[string]any) (triggerResult, error) {
 	logger := log.FromContext(ctx)
 
 	program, err := r.getCompiledTriggerExpression(expression)
@@ -138,7 +181,7 @@ func (r *WebRequestCommitStatusReconciler) evaluateTriggerExpression(ctx context
 		return triggerResult{}, fmt.Errorf("failed to compile trigger expression: %w", err)
 	}
 
-	output, err := expr.Run(program, td.triggerExprData())
+	output, err := expr.Run(program, exprData)
 	if err != nil {
 		return triggerResult{}, fmt.Errorf("failed to evaluate trigger expression: %w", err)
 	}
@@ -154,7 +197,8 @@ func (r *WebRequestCommitStatusReconciler) evaluateTriggerExpression(ctx context
 
 // evaluateTriggerDataExpression runs the trigger when.output expression to produce state that is persisted
 // across reconcile cycles in status.triggerOutput. Must return a map[string]any.
-func (r *WebRequestCommitStatusReconciler) evaluateTriggerDataExpression(ctx context.Context, expression string, td templateData) (map[string]any, error) {
+// exprData is the pre-built expression environment (from triggerExprData, optionally enriched with vars).
+func (r *WebRequestCommitStatusReconciler) evaluateTriggerDataExpression(ctx context.Context, expression string, exprData map[string]any) (map[string]any, error) {
 	logger := log.FromContext(ctx)
 
 	program, err := r.getCompiledTriggerDataExpression(expression)
@@ -162,7 +206,7 @@ func (r *WebRequestCommitStatusReconciler) evaluateTriggerDataExpression(ctx con
 		return nil, fmt.Errorf("failed to compile trigger data expression: %w", err)
 	}
 
-	output, err := expr.Run(program, td.triggerExprData())
+	output, err := expr.Run(program, exprData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to evaluate trigger data expression: %w", err)
 	}

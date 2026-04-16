@@ -177,8 +177,24 @@ type TriggerModeSpec struct {
 	Response *ResponseOutputSpec `json:"response,omitempty"`
 }
 
-// WhenWithOutputSpec holds a when condition (boolean expression) and optional output (map expression).
+// WhenWithOutputSpec holds a when condition (boolean expression), optional shared vars, and optional output (map expression).
 type WhenWithOutputSpec struct {
+	// Vars optionally holds an expression that is evaluated first and whose map keys are injected as
+	// additional top-level variables into both Expression and Output.Expression. Use it to compute a
+	// value once and refer to it in both the condition and the output without duplicating logic.
+	//
+	// Available variables are the same as for Expression (see below). Must return a map/object.
+	//
+	// Examples:
+	//   # Compute the proposed SHA once, use in both condition and output
+	//   - "{ proposedSha: find(PromotionStrategy.Status.Environments, {.Branch == Branch}).Proposed.Hydrated.Sha }"
+	//
+	//   # Compute a derived flag and a value together
+	//   - "{ env: find(PromotionStrategy.Status.Environments, {.Branch == Branch}), attempt: (TriggerOutput[\"attempt\"] ?? 0) + 1 }"
+	//
+	// +optional
+	Vars *OutputSpec `json:"vars,omitempty"`
+
 	// Expression is a boolean expr expression that decides whether the HTTP request should be made.
 	// It is evaluated BEFORE each potential HTTP request. When it returns true the request is made;
 	// when false the controller keeps the previous phase and skips the request.
@@ -191,6 +207,7 @@ type WhenWithOutputSpec struct {
 	//   - TriggerOutput (map[string]any): custom data from the previous when.output.expression evaluation
 	//   - ResponseOutput (map[string]any): response data from the previous HTTP request (if any)
 	//   - SuccessOutput (map[string]any): custom data from the previous success.when.output.expression evaluation
+	//   - Any keys returned by Vars.Expression (injected as top-level variables)
 	//
 	// Note: PromotionStrategy.Status.Environments is an ordered array representing the promotion sequence.
 	// Use Branch + filter/find to look up environment-specific data:
@@ -200,8 +217,8 @@ type WhenWithOutputSpec struct {
 	//   # Always trigger (equivalent to polling mode)
 	//   - "true"
 	//
-	//   # Only trigger when SHA changes from what we last tracked
-	//   - "find(PromotionStrategy.Status.Environments, {.Branch == Branch}).Proposed.Hydrated.Sha != (TriggerOutput['lastCheckedSha'] ?? '')"
+	//   # Only trigger when SHA changes from what we last tracked (use Vars to avoid repeating the find())
+	//   - "proposedSha != (TriggerOutput['lastCheckedSha'] ?? '')"
 	//
 	//   # Only trigger when a particular commit status is success (e.g. argocd-health)
 	//   - "let env = find(PromotionStrategy.Status.Environments, {.Branch == Branch}); any(env.Proposed.CommitStatuses, {.Key == 'argocd-health' && .Phase == 'success'})"
@@ -218,11 +235,12 @@ type WhenWithOutputSpec struct {
 	// and is available in the next reconcile as TriggerOutput in when.expression, when.output.expression, and in templates.
 	// Use it to track state such as attempt counts, last-seen SHAs, or timestamps.
 	//
-	// Variables are the same as for Expression (see above). The expression must return a map/object; every key is stored in TriggerOutput.
+	// Variables are the same as for Expression (see above), including any keys from Vars.Expression.
+	// The expression must return a map/object; every key is stored in TriggerOutput.
 	//
 	// Examples:
-	//   # Track SHA to detect changes
-	//   - "{ trackedSha: find(PromotionStrategy.Status.Environments, {.Branch == Branch}).Proposed.Hydrated.Sha }"
+	//   # Track SHA to detect changes (proposedSha comes from Vars.Expression)
+	//   - "{ trackedSha: proposedSha }"
 	//
 	//   # Increment attempt counter
 	//   - "{ attemptCount: (TriggerOutput[\"attemptCount\"] ?? 0) + 1 }"
