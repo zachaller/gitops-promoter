@@ -25,6 +25,16 @@ import (
 
 // ArgoCDCommitStatusSpec defines the desired state of ArgoCDCommitStatus.
 type ArgoCDCommitStatusSpec struct {
+	// Key is the commit status key used to identify this status in PromotionStrategy selectors (CommitStatus label
+	// promoter.argoproj.io/commit-status). Defaults to "argocd-health". Use distinct keys when multiple apps share
+	// the same active branch so commit statuses do not collide on the same commit SHA.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:="argocd-health"
+	// +kubebuilder:validation:MinLength:=1
+	// +kubebuilder:validation:MaxLength:=63
+	// +kubebuilder:validation:Pattern:=([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]
+	Key string `json:"key,omitempty"`
+
 	// PromotionStrategyRef is a reference to the promotion strategy that this commit status applies to.
 	// +kubebuilder:validation:Required
 	PromotionStrategyRef ObjectReference `json:"promotionStrategyRef,omitempty"`

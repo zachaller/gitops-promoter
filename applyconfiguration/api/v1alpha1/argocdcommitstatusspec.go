@@ -28,6 +28,10 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 // ArgoCDCommitStatusSpec defines the desired state of ArgoCDCommitStatus.
 type ArgoCDCommitStatusSpecApplyConfiguration struct {
+	// Key is the commit status key used to identify this status in PromotionStrategy selectors (CommitStatus label
+	// promoter.argoproj.io/commit-status). Defaults to "argocd-health". Use distinct keys when multiple apps share
+	// the same active branch so commit statuses do not collide on the same commit SHA.
+	Key *string `json:"key,omitempty"`
 	// PromotionStrategyRef is a reference to the promotion strategy that this commit status applies to.
 	PromotionStrategyRef *ObjectReferenceApplyConfiguration `json:"promotionStrategyRef,omitempty"`
 	// ApplicationSelector is a label selector that selects the Argo CD applications to which this commit status applies.
@@ -40,6 +44,14 @@ type ArgoCDCommitStatusSpecApplyConfiguration struct {
 // apply.
 func ArgoCDCommitStatusSpec() *ArgoCDCommitStatusSpecApplyConfiguration {
 	return &ArgoCDCommitStatusSpecApplyConfiguration{}
+}
+
+// WithKey sets the Key field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Key field is set to the value of the last call.
+func (b *ArgoCDCommitStatusSpecApplyConfiguration) WithKey(value string) *ArgoCDCommitStatusSpecApplyConfiguration {
+	b.Key = &value
+	return b
 }
 
 // WithPromotionStrategyRef sets the PromotionStrategyRef field in the declarative configuration to the given value

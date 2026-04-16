@@ -26,6 +26,11 @@ package v1alpha1
 type PromotionStrategySpecApplyConfiguration struct {
 	// RepositoryReference indicates what repository to promote commits in.
 	RepositoryReference *ObjectReferenceApplyConfiguration `json:"gitRepositoryRef,omitempty"`
+	// ActivePath is the directory path within the active branch that holds this app's hydrated state.
+	// When set, multiple PromotionStrategies can share the same environment branch (e.g. staging) with each app's
+	// content under a distinct path (e.g. apps/myapp/). hydrator.metadata is read from <activePath>/hydrator.metadata.
+	// Must be a relative path without ".." or a leading slash.
+	ActivePath *string `json:"activePath,omitempty"`
 	// ActiveCommitStatuses are commit statuses describing an actively running dry commit. If an active commit status
 	// is failing for an environment, subsequent environments will not deploy the failing commit.
 	//
@@ -54,6 +59,14 @@ func PromotionStrategySpec() *PromotionStrategySpecApplyConfiguration {
 // If called multiple times, the RepositoryReference field is set to the value of the last call.
 func (b *PromotionStrategySpecApplyConfiguration) WithRepositoryReference(value *ObjectReferenceApplyConfiguration) *PromotionStrategySpecApplyConfiguration {
 	b.RepositoryReference = value
+	return b
+}
+
+// WithActivePath sets the ActivePath field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ActivePath field is set to the value of the last call.
+func (b *PromotionStrategySpecApplyConfiguration) WithActivePath(value string) *PromotionStrategySpecApplyConfiguration {
+	b.ActivePath = &value
 	return b
 }
 

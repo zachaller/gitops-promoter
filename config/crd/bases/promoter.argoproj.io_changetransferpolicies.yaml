@@ -79,6 +79,16 @@ spec:
                 x-kubernetes-list-map-keys:
                 - key
                 x-kubernetes-list-type: map
+              activePath:
+                description: |-
+                  ActivePath is the directory path within the active branch that holds this app's hydrated state.
+                  When set, hydrator.metadata is read from <activePath>/hydrator.metadata instead of the repository root.
+                  Must be a relative path without ".." or a leading slash.
+                maxLength: 1024
+                type: string
+                x-kubernetes-validations:
+                - message: must be a relative path without '..' or a leading slash
+                  rule: self == '' || (!self.startsWith('/') && !self.contains('..'))
               autoMerge:
                 default: true
                 type: boolean

@@ -95,6 +95,16 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-map-type: atomic
+              key:
+                default: argocd-health
+                description: |-
+                  Key is the commit status key used to identify this status in PromotionStrategy selectors (CommitStatus label
+                  promoter.argoproj.io/commit-status). Defaults to "argocd-health". Use distinct keys when multiple apps share
+                  the same active branch so commit statuses do not collide on the same commit SHA.
+                maxLength: 63
+                minLength: 1
+                pattern: ([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]
+                type: string
               promotionStrategyRef:
                 description: PromotionStrategyRef is a reference to the promotion
                   strategy that this commit status applies to.

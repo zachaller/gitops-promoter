@@ -32,6 +32,15 @@ type PromotionStrategySpec struct {
 	// +kubebuilder:validation:Required
 	RepositoryReference ObjectReference `json:"gitRepositoryRef"`
 
+	// ActivePath is the directory path within the active branch that holds this app's hydrated state.
+	// When set, multiple PromotionStrategies can share the same environment branch (e.g. staging) with each app's
+	// content under a distinct path (e.g. apps/myapp/). hydrator.metadata is read from <activePath>/hydrator.metadata.
+	// Must be a relative path without ".." or a leading slash.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength:=1024
+	// +kubebuilder:validation:XValidation:rule="self == '' || (!self.startsWith('/') && !self.contains('..'))",message="must be a relative path without '..' or a leading slash"
+	ActivePath string `json:"activePath,omitempty"`
+
 	// ActiveCommitStatuses are commit statuses describing an actively running dry commit. If an active commit status
 	// is failing for an environment, subsequent environments will not deploy the failing commit.
 	//

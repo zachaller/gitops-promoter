@@ -42,6 +42,14 @@ type ChangeTransferPolicySpec struct {
 	// +kubebuilder:validation:MinLength=1
 	ActiveBranch string `json:"activeBranch"`
 
+	// ActivePath is the directory path within the active branch that holds this app's hydrated state.
+	// When set, hydrator.metadata is read from <activePath>/hydrator.metadata instead of the repository root.
+	// Must be a relative path without ".." or a leading slash.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength:=1024
+	// +kubebuilder:validation:XValidation:rule="self == '' || (!self.startsWith('/') && !self.contains('..'))",message="must be a relative path without '..' or a leading slash"
+	ActivePath string `json:"activePath,omitempty"`
+
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:=true
 	AutoMerge *bool `json:"autoMerge,omitempty"`

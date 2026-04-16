@@ -66,6 +66,17 @@ spec:
                 x-kubernetes-list-map-keys:
                 - key
                 x-kubernetes-list-type: map
+              activePath:
+                description: |-
+                  ActivePath is the directory path within the active branch that holds this app's hydrated state.
+                  When set, multiple PromotionStrategies can share the same environment branch (e.g. staging) with each app's
+                  content under a distinct path (e.g. apps/myapp/). hydrator.metadata is read from <activePath>/hydrator.metadata.
+                  Must be a relative path without ".." or a leading slash.
+                maxLength: 1024
+                type: string
+                x-kubernetes-validations:
+                - message: must be a relative path without '..' or a leading slash
+                  rule: self == '' || (!self.startsWith('/') && !self.contains('..'))
               environments:
                 description: Environments is the sequence of environments that a dry
                   commit will be promoted through.
