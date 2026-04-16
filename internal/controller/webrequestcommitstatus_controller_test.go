@@ -4134,6 +4134,230 @@ var _ = Describe("WebRequestCommitStatus Controller - Dry SHA Guard (PromotionSt
 	})
 })
 
+// WebRequestCommitStatus Controller - Vars Expression
+// Tests for the Vars field on WhenWithOutputSpec that lets users compute a value once and reference
+// it from both the when.expression and the when.output.expression without duplicating logic.
+var _ = Describe("WebRequestCommitStatus Controller - Vars Expression", Ordered, func() {
+	var (
+		varsCtx               context.Context
+		varsName              string
+		varsScmSecret         *corev1.Secret
+		varsScmProvider       *promoterv1alpha1.ScmProvider
+		varsGitRepo           *promoterv1alpha1.GitRepository
+		varsPromotionStrategy *promoterv1alpha1.PromotionStrategy
+		varsTestServer        *httptest.Server
+		varsWRCS              *promoterv1alpha1.WebRequestCommitStatus
+	)
+
+	const varsBranch = "environment/development"
+
+	BeforeAll(func() {
+		varsCtx = context.Background()
+		varsName, varsScmSecret, varsScmProvider, varsGitRepo, _, _, varsPromotionStrategy = promotionStrategyResource(varsCtx, "webrequest-vars", "default")
+
+		varsPromotionStrategy.Spec.Environments = []promoterv1alpha1.Environment{
+			{Branch: varsBranch},
+		}
+		varsPromotionStrategy.Spec.ActiveCommitStatuses = []promoterv1alpha1.CommitStatusSelector{
+			{Key: "vars-test"},
+		}
+
+		setupInitialTestGitRepoOnServer(varsCtx, varsGitRepo)
+
+		Expect(k8sClient.Create(varsCtx, varsScmSecret)).To(Succeed())
+		Expect(k8sClient.Create(varsCtx, varsScmProvider)).To(Succeed())
+		Expect(k8sClient.Create(varsCtx, varsGitRepo)).To(Succeed())
+		Expect(k8sClient.Create(varsCtx, varsPromotionStrategy)).To(Succeed())
+	})
+
+	AfterAll(func() {
+		if varsPromotionStrategy != nil {
+			_ = k8sClient.Delete(varsCtx, varsPromotionStrategy)
+		}
+		if varsGitRepo != nil {
+			_ = k8sClient.Delete(varsCtx, varsGitRepo)
+		}
+		if varsScmProvider != nil {
+			_ = k8sClient.Delete(varsCtx, varsScmProvider)
+		}
+		if varsScmSecret != nil {
+			_ = k8sClient.Delete(varsCtx, varsScmSecret)
+		}
+	})
+
+	AfterEach(func() {
+		if varsTestServer != nil {
+			varsTestServer.Close()
+			varsTestServer = nil
+		}
+		if varsWRCS != nil {
+			_ = k8sClient.Delete(varsCtx, varsWRCS)
+			varsWRCS = nil
+		}
+	})
+
+	It("trigger.when.vars injects variables into both the trigger expression and trigger output", func() {
+		// trigger.when.vars computes proposedSha once; trigger.when.expression and
+		// trigger.when.output both reference proposedSha instead of duplicating the find() call.
+		var (
+			requestCount int
+			requestMu    sync.Mutex
+		)
+
+		By("Creating a server that returns approved=true")
+		varsTestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestMu.Lock()
+			requestCount++
+			requestMu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"approved": true})
+		}))
+
+		By("Creating WRCS with trigger.when.vars that computes proposedSha once")
+		varsWRCS = &promoterv1alpha1.WebRequestCommitStatus{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      varsName + "-trigger-vars",
+				Namespace: "default",
+			},
+			Spec: promoterv1alpha1.WebRequestCommitStatusSpec{
+				PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: varsName},
+				Key:                  "vars-test",
+				ReportOn:             constants.CommitRefActive,
+				HTTPRequest: promoterv1alpha1.HTTPRequestSpec{
+					URLTemplate: varsTestServer.URL + "/validate",
+					Method:      "GET",
+					Timeout:     metav1.Duration{Duration: 10 * time.Second},
+				},
+				Success: promoterv1alpha1.SuccessSpec{
+					When: promoterv1alpha1.WhenWithOutputSpec{
+						Expression: `Response != nil ? Response.StatusCode == 200 && Response.Body.approved == true : Phase == "success"`,
+					},
+				},
+				Mode: promoterv1alpha1.ModeSpec{
+					Trigger: &promoterv1alpha1.TriggerModeSpec{
+						RequeueDuration: metav1.Duration{Duration: 5 * time.Second},
+						When: promoterv1alpha1.WhenWithOutputSpec{
+							// vars computes proposedSha once — both expression and output reference it.
+							Vars: &promoterv1alpha1.OutputSpec{
+								Expression: `{ proposedSha: find(PromotionStrategy.Status.Environments, {.Branch == Branch}).Active.Hydrated.Sha }`,
+							},
+							Expression: `proposedSha != (TriggerOutput["trackedSha"] ?? "")`,
+							Output: &promoterv1alpha1.OutputSpec{
+								Expression: `{ trackedSha: proposedSha }`,
+							},
+						},
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(varsCtx, varsWRCS)).To(Succeed())
+
+		By("Waiting for the first trigger to fire and store trackedSha via vars")
+		Eventually(func(g Gomega) {
+			var wrcs promoterv1alpha1.WebRequestCommitStatus
+			g.Expect(k8sClient.Get(varsCtx, types.NamespacedName{Name: varsWRCS.Name, Namespace: "default"}, &wrcs)).To(Succeed())
+			g.Expect(wrcs.Status.Environments).To(HaveLen(1))
+
+			env := wrcs.Status.Environments[0]
+			g.Expect(env.Phase).To(Equal(promoterv1alpha1.CommitPhaseSuccess))
+			g.Expect(env.TriggerOutput).NotTo(BeNil(), "trigger output should be populated via vars")
+
+			var trigData map[string]any
+			g.Expect(json.Unmarshal(env.TriggerOutput.Raw, &trigData)).To(Succeed())
+			trackedSha, ok := trigData["trackedSha"].(string)
+			g.Expect(ok).To(BeTrue(), "trackedSha should be a string")
+			g.Expect(trackedSha).NotTo(BeEmpty(), "trackedSha should be the active SHA computed by vars")
+		}, constants.EventuallyTimeout).Should(Succeed())
+
+		By("Verifying the trigger does not fire again for the same SHA")
+		requestMu.Lock()
+		countAfterFirstFire := requestCount
+		requestMu.Unlock()
+		Consistently(func(g Gomega) {
+			requestMu.Lock()
+			c := requestCount
+			requestMu.Unlock()
+			// Allow up to two extra requests per environment to account for startup races,
+			// but confirm the trigger is suppressed for the unchanged SHA.
+			g.Expect(c).To(BeNumerically("<=", countAfterFirstFire+2),
+				"trigger should not fire again when SHA is unchanged")
+		}, 10*time.Second, 2*time.Second).Should(Succeed())
+	})
+
+	It("success.when.vars injects variables into both the success expression and success output", func() {
+		// success.when.vars computes isApproved once; success.when.expression and
+		// success.when.output both reference it instead of duplicating the boolean check.
+		By("Creating a server that returns approved=true with a reviewer field")
+		varsTestServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"approved": true,
+				"reviewer": "alice",
+			})
+		}))
+
+		By("Creating WRCS with success.when.vars that computes isApproved once")
+		varsWRCS = &promoterv1alpha1.WebRequestCommitStatus{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      varsName + "-success-vars",
+				Namespace: "default",
+			},
+			Spec: promoterv1alpha1.WebRequestCommitStatusSpec{
+				PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: varsName},
+				Key:                  "vars-test",
+				ReportOn:             constants.CommitRefActive,
+				HTTPRequest: promoterv1alpha1.HTTPRequestSpec{
+					URLTemplate: varsTestServer.URL + "/validate",
+					Method:      "GET",
+					Timeout:     metav1.Duration{Duration: 10 * time.Second},
+				},
+				Success: promoterv1alpha1.SuccessSpec{
+					When: promoterv1alpha1.WhenWithOutputSpec{
+						// vars computes isApproved once — both expression and output reference it.
+						Vars: &promoterv1alpha1.OutputSpec{
+							Expression: `{ isApproved: Response != nil && Response.StatusCode == 200 && Response.Body.approved == true }`,
+						},
+						Expression: `isApproved`,
+						Output: &promoterv1alpha1.OutputSpec{
+							Expression: `{ capturedApproval: isApproved, reviewer: Response != nil ? Response.Body.reviewer : "" }`,
+						},
+					},
+				},
+				Mode: promoterv1alpha1.ModeSpec{
+					Trigger: &promoterv1alpha1.TriggerModeSpec{
+						RequeueDuration: metav1.Duration{Duration: 5 * time.Second},
+						When: promoterv1alpha1.WhenWithOutputSpec{
+							Expression: `true`,
+						},
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(varsCtx, varsWRCS)).To(Succeed())
+
+		By("Waiting for phase to become success and SuccessOutput to be populated via vars")
+		Eventually(func(g Gomega) {
+			var wrcs promoterv1alpha1.WebRequestCommitStatus
+			g.Expect(k8sClient.Get(varsCtx, types.NamespacedName{Name: varsWRCS.Name, Namespace: "default"}, &wrcs)).To(Succeed())
+			g.Expect(wrcs.Status.Environments).To(HaveLen(1))
+
+			env := wrcs.Status.Environments[0]
+			g.Expect(env.Phase).To(Equal(promoterv1alpha1.CommitPhaseSuccess),
+				"isApproved var should make success.when.expression return true")
+			g.Expect(env.SuccessOutput).NotTo(BeNil(), "success.when.output should be populated via vars")
+
+			var successData map[string]any
+			g.Expect(json.Unmarshal(env.SuccessOutput.Raw, &successData)).To(Succeed())
+			g.Expect(successData["capturedApproval"]).To(Equal(true),
+				"capturedApproval should be the isApproved value from vars")
+			g.Expect(successData["reviewer"]).To(Equal("alice"),
+				"reviewer should be extracted from response alongside the vars variable")
+		}, constants.EventuallyTimeout).Should(Succeed())
+	})
+})
+
 func wrcsPhaseForBranch(items []promoterv1alpha1.WebRequestCommitStatusPhasePerBranchItem, branch string) promoterv1alpha1.CommitStatusPhase {
 	for _, it := range items {
 		if it.Branch == branch {
