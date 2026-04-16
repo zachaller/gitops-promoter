@@ -89,6 +89,10 @@ Argo provides an example repository: [https://github.com/argoproj/argocd-example
 > Settings > Automatically delete head branches) or by adding a branch protection rule for a matching pattern such as
 > `environment/*-next` (`/` characters are separators in GitHub's glob implementation, so `*-next` will not work).
 
+> [!NOTE]
+> For [monorepo `activePath`](custom-hydrator.md#2-push-to-proposed-branches) setups, proposed branches include an extra path
+> segment (for example `environment/staging/myapp-next`). Add branch protection patterns such as `environment/*/*-next` as needed.
+
 ### Create a GitHub application
 
 In your GitHub account, go to Settings > Developer settings > GitHub Apps.

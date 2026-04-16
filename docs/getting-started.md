@@ -124,6 +124,11 @@ spec:
 > `environment/*-next` (`/` characters are separators in GitHub's glob implementation, so `*-next` will not work).
 
 > [!NOTE]
+> If you use [monorepo mode](custom-hydrator.md#2-push-to-proposed-branches) (`PromotionStrategy.spec.activePath`), proposed
+> branches look like `environment/staging/myapp-next`. Protect those as well (for example add a pattern such as
+> `environment/*/*-next` alongside `environment/*-next`).
+
+> [!NOTE]
 > The GitRepository and ScmProvider also need to be installed to the same namespace that you plan on creating PromotionStrategy
 > resources in, and it also needs to be in the same namespace of the secret it references.
 

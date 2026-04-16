@@ -35,6 +35,15 @@ spec:
     - key: timer          # Matches the label value
 ```
 
+### Monorepo and shared active branches
+
+When multiple applications share one **live** branch ([`PromotionStrategy.spec.activePath`](../crd-specs.md#promotionstrategy)),
+the same hydrated commit SHA can represent more than one app’s promotion state. Each app’s commit status controller must
+use a **different label value** (`promoter.argoproj.io/commit-status`) so `CommitStatus` objects do not collide—for
+example `argocd-health-app-a` vs `argocd-health-app-b`. Match those strings in each PromotionStrategy’s
+`activeCommitStatuses` / `proposedCommitStatuses`. [ArgoCDCommitStatus](argocd.md#monorepo-shared-active-branch-and-per-app-keys)
+documents the `spec.key` field; [WebRequestCommitStatus](web-request.md#monorepo-activepath-and-commit-status-keys) uses `spec.key` the same way.
+
 ### 2. Environment Label
 
 ```go

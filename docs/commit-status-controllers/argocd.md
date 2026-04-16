@@ -39,8 +39,30 @@ spec:
 
 To configure the PromotionStrategy, we need to specify the active commit statuses that are required for the promotion to proceed.
 You can see this in the example below with the `activeCommitStatuses` field. The CommitStatuses managed by an ArgoCDCommitStatus
-always have a key of `argocd-health`, so that exact key must be used in the PromotionStrategy.
+use the key from `spec.key` on the ArgoCDCommitStatus resource (default: `argocd-health`). That same key must appear in the
+PromotionStrategy `activeCommitStatuses` selectors.
 
+The SCM-facing status name is `{key}/{environmentBranch}` (for example `argocd-health/environments/staging`).
+
+### Monorepo: shared active branch and per-app keys
+
+When multiple applications share one active branch (see [PromotionStrategy `activePath`](../crd-specs.md#promotionstrategy)),
+each application should use its **own** `ArgoCDCommitStatus` with a **distinct** `spec.key` (for example `argocd-health-myapp1`
+and `argocd-health-myapp2`). Otherwise commit statuses on the same hydrated commit SHA would collide.
+
+```yaml
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: ArgoCDCommitStatus
+metadata:
+  name: myapp-health
+spec:
+  key: argocd-health-myapp
+  promotionStrategyRef:
+    name: myapp-promotion
+  applicationSelector:
+    matchLabels:
+      app: myapp
+```
 
 ```yaml
 apiVersion: promoter.argoproj.io/v1alpha1
@@ -49,7 +71,6 @@ metadata:
   name: argocon-demo
 spec:
   activeCommitStatuses:
-    # This is the hard-coded key that is always used by the ArgoCDCommitStatus controller.
     - key: argocd-health
   environments:
     - branch: environments/development

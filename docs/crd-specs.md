@@ -8,11 +8,19 @@ configure the checks which must pass between promotion steps.
 {!internal/controller/testdata/PromotionStrategy.yaml!}
 ```
 
+Optional field **`spec.activePath`** scopes promotion to a directory inside each environment’s live branch (monorepo
+pattern: many apps sharing one branch). When set, the PromotionStrategy controller creates ChangeTransferPolicies whose
+proposed branch is `{environment.branch}/{activePath}-next` instead of `{environment.branch}-next`, and hydrator metadata
+is read from `{activePath}/hydrator.metadata`. See [Building a Custom Hydrator](custom-hydrator.md).
+
 ### ChangeTransferPolicy
 
 A ChangeTransferPolicy represents a pair hydrated environment branch pair: the proposed environment branch and the live
 environment branch. When a new commit appears in the proposed branch, the ChangeTransferPolicy will open a PR against 
 the live branch. When all the configured checks pass, the ChangeTransferPolicy will merge the PR.
+
+Optional field **`spec.activePath`** matches `PromotionStrategy.spec.activePath` when the policy is owned by a PromotionStrategy:
+it selects the `hydrator.metadata` path and path-scoped conflict resolution for that app’s directory.
 
 A PromotionStrategy will create a ChangeTransferPolicy for each configured environment. For each environment besides the
 first one, the PromotionStrategy controller will inject a `proposedCommitStatus` to represent the active status of the

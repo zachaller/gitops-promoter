@@ -103,7 +103,7 @@ var _ = Describe("GetBranchShas", func() {
 				},
 			}
 			gap := &fakeGitProvider{tempDirPath: tempRepoDir}
-			g := git.NewEnvironmentOperations(repo, gap, defaultBranch)
+			g := git.NewEnvironmentOperations(repo, gap, defaultBranch, "")
 			Expect(g.CloneRepo(GinkgoT().Context())).To(Succeed())
 
 			// Call GetBranchShas with a non-existent branch
@@ -114,6 +114,82 @@ var _ = Describe("GetBranchShas", func() {
 			// Having a missing branch is a common error, so we're ensuring the error message is clear.
 			Expect(err.Error()).To(ContainSubstring("couldn't find remote ref"))
 		})
+	})
+})
+
+var _ = Describe("GetBranchShas with activePath", func() {
+	var tempRepoDir string
+
+	BeforeEach(func() {
+		var err error
+		tempRepoDir, err = os.MkdirTemp("", "git-test-*")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		if tempRepoDir != "" {
+			Expect(os.RemoveAll(tempRepoDir)).To(Succeed())
+		}
+	})
+
+	It("reads drySha from <activePath>/hydrator.metadata", func() {
+		By("Setting up a bare git repository")
+		_, err := runGitCmd(tempRepoDir, "init", "--bare")
+		Expect(err).NotTo(HaveOccurred())
+
+		workDir, err := os.MkdirTemp("", "git-work-*")
+		Expect(err).NotTo(HaveOccurred())
+		defer func() {
+			Expect(os.RemoveAll(workDir)).To(Succeed())
+		}()
+
+		_, err = runGitCmd(workDir, "clone", tempRepoDir, ".")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "user.name", "Test User")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "user.email", "test@example.com")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "commit.gpgsign", "false")
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(os.MkdirAll(filepath.Join(workDir, "apps", "myapp"), 0o755)).To(Succeed())
+		err = os.WriteFile(filepath.Join(workDir, "apps", "myapp", "hydrator.metadata"), []byte(`{"drySha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}`), 0o644)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "add", "apps/myapp/hydrator.metadata")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "commit", "-m", "Initial commit")
+		Expect(err).NotTo(HaveOccurred())
+
+		defaultBranch, err := runGitCmd(workDir, "rev-parse", "--abbrev-ref", "HEAD")
+		Expect(err).NotTo(HaveOccurred())
+		defaultBranch = strings.TrimSpace(defaultBranch)
+		_, err = runGitCmd(workDir, "push", "origin", defaultBranch)
+		Expect(err).NotTo(HaveOccurred())
+
+		repo := &v1alpha1.GitRepository{
+			Spec: v1alpha1.GitRepositorySpec{
+				GitHub: &v1alpha1.GitHubRepo{
+					Owner: "test-owner",
+					Name:  "testrepo",
+				},
+				ScmProviderRef: v1alpha1.ScmProviderObjectReference{
+					Kind: "ScmProvider",
+					Name: "testprovider",
+				},
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "testrepo",
+				Namespace: "default",
+			},
+		}
+		gap := &fakeGitProvider{tempDirPath: tempRepoDir}
+		g := git.NewEnvironmentOperations(repo, gap, defaultBranch, "apps/myapp")
+		Expect(g.CloneRepo(GinkgoT().Context())).To(Succeed())
+
+		shas, err := g.GetBranchShas(GinkgoT().Context(), defaultBranch)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(shas.Dry).To(Equal("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"))
+		Expect(shas.Hydrated).NotTo(BeEmpty())
 	})
 })
 

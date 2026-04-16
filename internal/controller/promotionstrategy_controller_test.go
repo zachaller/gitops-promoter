@@ -63,6 +63,32 @@ var _ = Describe("PromotionStrategy Controller", func() {
 		})
 	})
 
+	Context("When activePath is set (monorepo)", func() {
+		It("creates ChangeTransferPolicies with scoped proposed branch and activePath", func() {
+			ctx := context.Background()
+			_, scmSecret, scmProvider, gitRepo, _, _, ps := promotionStrategyResource(ctx, "promotion-strategy-activepath", "default")
+			ps.Spec.ActivePath = "myapp"
+
+			Expect(k8sClient.Create(ctx, scmSecret)).To(Succeed())
+			Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
+			Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
+			Expect(k8sClient.Create(ctx, ps)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, ps)
+			}()
+
+			ctpName := utils.KubeSafeUniqueName(ctx, utils.GetChangeTransferPolicyName(ps.Name, testBranchDevelopment))
+			Eventually(func(g Gomega) {
+				ctp := promoterv1alpha1.ChangeTransferPolicy{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: ctpName, Namespace: "default"}, &ctp)
+				g.Expect(err).To(Succeed())
+				g.Expect(ctp.Spec.ActivePath).To(Equal("myapp"))
+				g.Expect(ctp.Spec.ProposedBranch).To(Equal("environment/development/myapp-next"))
+				g.Expect(ctp.Spec.ActiveBranch).To(Equal(testBranchDevelopment))
+			}, constants.EventuallyTimeout).Should(Succeed())
+		})
+	})
+
 	Context("When reconciling a resource with no commit statuses", func() {
 		Context("When git repo is not initialized", func() {
 			var name string
@@ -2026,7 +2052,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				// Expect(err).To(Succeed())
 				for _, environment := range promotionStrategy.Spec.Environments {
 					commitStatus := promoterv1alpha1.CommitStatus{}
-					commitStatusName := environment.Branch + "/health"
+					commitStatusName := "argocd-health/" + environment.Branch
 					resourceName := strings.ReplaceAll(commitStatusName, "/", "-") + "-" + hash([]byte(argocdCommitStatus.Name))
 					Eventually(func(g Gomega) {
 						err := k8sClient.Get(ctx, types.NamespacedName{
@@ -2270,7 +2296,7 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				// Expect(err).To(Succeed())
 				for _, environment := range promotionStrategy.Spec.Environments {
 					commitStatus := promoterv1alpha1.CommitStatus{}
-					commitStatusName := environment.Branch + "/health"
+					commitStatusName := "argocd-health/" + environment.Branch
 					resourceName := strings.ReplaceAll(commitStatusName, "/", "-") + "-" + hash([]byte(argocdCommitStatus.Name))
 					Eventually(func(g Gomega) {
 						err := k8sClient.Get(ctx, types.NamespacedName{

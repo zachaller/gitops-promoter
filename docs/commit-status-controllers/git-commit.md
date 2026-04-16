@@ -81,6 +81,10 @@ To use GitCommitStatus-based gating, configure your PromotionStrategy to check f
 
 > **Important:** GitCommitStatus must always be configured as a `proposedCommitStatuses` in your PromotionStrategy, regardless of whether it validates the active or proposed commit. This is because the CommitStatus is always reported on the **proposed** commit SHA, which is what gates the promotion.
 
+> **Monorepo:** When [`PromotionStrategy.spec.activePath`](../crd-specs.md#promotionstrategy) is set, use a **distinct**
+> `spec.key` per app if several apps share one live branch, so commit statuses do not collide. See
+> [Commit status best practices](development-best-practices.md#monorepo-and-shared-active-branches).
+
 #### As Proposed Commit Status
 
 ```yaml

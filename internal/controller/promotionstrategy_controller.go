@@ -232,12 +232,20 @@ func (r *PromotionStrategyReconciler) upsertChangeTransferPolicy(ctx context.Con
 	}
 
 	// Build the spec
+	proposedBranch := fmt.Sprintf("%s-%s", environment.Branch, "next")
+	if ps.Spec.ActivePath != "" {
+		proposedBranch = fmt.Sprintf("%s/%s-next", environment.Branch, ps.Spec.ActivePath)
+	}
 	ctpSpec := acv1alpha1.ChangeTransferPolicySpec().
 		WithRepositoryReference(acv1alpha1.ObjectReference().WithName(ps.Spec.RepositoryReference.Name)).
-		WithProposedBranch(fmt.Sprintf("%s-%s", environment.Branch, "next")).
+		WithProposedBranch(proposedBranch).
 		WithActiveBranch(environment.Branch).
 		WithActiveCommitStatuses(activeCommitStatuses...).
 		WithProposedCommitStatuses(proposedCommitStatuses...)
+
+	if ps.Spec.ActivePath != "" {
+		ctpSpec = ctpSpec.WithActivePath(ps.Spec.ActivePath)
+	}
 
 	if environment.AutoMerge != nil {
 		ctpSpec = ctpSpec.WithAutoMerge(*environment.AutoMerge)

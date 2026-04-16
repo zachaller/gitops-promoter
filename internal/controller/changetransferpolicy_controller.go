@@ -142,7 +142,7 @@ func (r *ChangeTransferPolicyReconciler) Reconcile(ctx context.Context, req ctrl
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get GitRepository: %w", err)
 	}
-	gitOperations := git.NewEnvironmentOperations(gitRepo, gitAuthProvider, ctp.Spec.ActiveBranch)
+	gitOperations := git.NewEnvironmentOperations(gitRepo, gitAuthProvider, ctp.Spec.ActiveBranch, ctp.Spec.ActivePath)
 
 	// TODO: could probably short circuit the clone and use an ls-remote to compare the sha's of the current ctp status,
 	// this would help with slamming the git provider with clone requests on controller restarts.
@@ -1266,10 +1266,14 @@ func (r *ChangeTransferPolicyReconciler) gitMergeStrategyOurs(ctx context.Contex
 		return nil // No conflict, nothing to do
 	}
 
-	// If we have a conflict, perform a merge with "ours" strategy
-	logger.Info("Conflicts detected, performing merge with 'ours' strategy", "proposed", ctp.Spec.ProposedBranch, "active", ctp.Spec.ActiveBranch)
+	// If we have a conflict, perform a merge with "ours" strategy (path-scoped when activePath is set)
+	logger.Info("Conflicts detected, performing merge with 'ours' strategy", "proposed", ctp.Spec.ProposedBranch, "active", ctp.Spec.ActiveBranch, "activePath", ctp.Spec.ActivePath)
 
-	err = gitOperations.MergeWithOursStrategy(ctx, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch)
+	if ctp.Spec.ActivePath != "" {
+		err = gitOperations.MergeWithPathScopedOursStrategy(ctx, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch)
+	} else {
+		err = gitOperations.MergeWithOursStrategy(ctx, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to merge branches %q and %q with 'ours' strategy: %w", ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch, err)
 	}

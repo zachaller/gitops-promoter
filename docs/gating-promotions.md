@@ -13,6 +13,17 @@ An "active commit status" is a check which must be passing on an active (already
 merged for the next environment. To set a CommitStatus to be used as an active commit status, set the `spec.sha` field 
 to the commit hash of the active change in the live environment branch.
 
+### Monorepo (`activePath`)
+
+When [`PromotionStrategy.spec.activePath`](crd-specs.md#promotionstrategy) is set, the **proposed** branch for each
+environment is `{branch}/{activePath}-next` (not `{branch}-next`). Commit status SHAs are still the **hydrated** tips of
+those branches for proposed checks, and the live branch tips for active checks.
+
+If several apps share the same live branch, their hydrated tips can match; **each app must use distinct commit status
+`key` values** in `activeCommitStatuses` / `proposedCommitStatuses` (and in controllers that emit `CommitStatus` labels)
+so gates do not overwrite each other on the same SCM commit. See [Argo CD Commit Status](commit-status-controllers/argocd.md#monorepo-shared-active-branch-and-per-app-keys)
+and [Commit status best practices](commit-status-controllers/development-best-practices.md#monorepo-and-shared-active-branches).
+
 ## Example
 
 The following example demonstrates how to configure a PromotionStrategy to use CommitStatuses for both a proposed and

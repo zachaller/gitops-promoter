@@ -13,9 +13,11 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	stdpath "path"
 	"strconv"
 	"strings"
 	"time"
@@ -34,9 +36,11 @@ import (
 type EnvironmentOperations struct {
 	gap     scms.GitOperationsProvider
 	gitRepo *v1alpha1.GitRepository
-	// activeBranch is used as part of the git path key to make sure there's one clone "per environment". Since there
-	// should be only one CTP for each unique active branch, we shouldn't run into concurrency issues between clones.
+	// activeBranch is used as part of the git path key to make sure there's one clone "per environment".
 	activeBranch string
+	// activePath scopes hydrator.metadata and conflict resolution to a directory when multiple apps share activeBranch.
+	// It is part of the clone cache key so concurrent CTPs for the same branch use separate working copies.
+	activePath string
 }
 
 // HydratorMetadata is an alias to v1alpha1.HydratorMetadata for convenience.
@@ -47,18 +51,32 @@ const HydratorNotesRef = "refs/notes/hydrator.metadata"
 
 // NewEnvironmentOperations creates a new EnvironmentOperations instance. The activeBranch parameter is used to differentiate
 // between different environments that might use the same GitRepository and avoid conflicts between concurrent
-// operations.
-func NewEnvironmentOperations(gitRepo *v1alpha1.GitRepository, gap scms.GitOperationsProvider, activeBranch string) *EnvironmentOperations {
+// operations. activePath is optional; when set, hydrator.metadata is read from <activePath>/hydrator.metadata and the
+// clone cache key includes it so multiple ChangeTransferPolicies can share the same activeBranch safely.
+func NewEnvironmentOperations(gitRepo *v1alpha1.GitRepository, gap scms.GitOperationsProvider, activeBranch, activePath string) *EnvironmentOperations {
 	return &EnvironmentOperations{
 		gap:          gap,
 		gitRepo:      gitRepo,
 		activeBranch: activeBranch,
+		activePath:   activePath,
 	}
+}
+
+func (g *EnvironmentOperations) cloneCacheKey() string {
+	return g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch + g.activePath
+}
+
+// metadataFilePath returns the path to hydrator.metadata in the repository tree.
+func (g *EnvironmentOperations) metadataFilePath() string {
+	if g.activePath == "" {
+		return "hydrator.metadata"
+	}
+	return stdpath.Join(g.activePath, "hydrator.metadata")
 }
 
 // CloneRepo clones the gitRepo to a temporary directory if needed. Does nothing if the repo is already cloned.
 func (g *EnvironmentOperations) CloneRepo(ctx context.Context) error {
-	if gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo)+g.activeBranch) != "" {
+	if gitpaths.Get(g.cloneCacheKey()) != "" {
 		// Already cloned
 		return nil
 	}
@@ -98,7 +116,7 @@ func (g *EnvironmentOperations) CloneRepo(ctx context.Context) error {
 
 	logger.V(4).Info("Cloned repo successful", "repo", g.gap.GetGitHttpsRepoUrl(*g.gitRepo))
 
-	gitpaths.Set(g.gap.GetGitHttpsRepoUrl(*g.gitRepo)+g.activeBranch, path)
+	gitpaths.Set(g.cloneCacheKey(), path)
 
 	return nil
 }
@@ -114,7 +132,7 @@ type BranchShas struct {
 // GetBranchShas checks out the given branch, pulls the latest changes, and returns the hydrated and dry SHAs.
 func (g *EnvironmentOperations) GetBranchShas(ctx context.Context, branch string) (BranchShas, error) {
 	logger := log.FromContext(ctx)
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return BranchShas{}, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
@@ -143,7 +161,8 @@ func (g *EnvironmentOperations) GetBranchShas(ctx context.Context, branch string
 	logger.V(4).Info("Got hydrated branch sha", "branch", branch, "sha", shas.Hydrated)
 
 	// Get the metadata file contents directly from the remote branch
-	metadataFileStdout, stderr, err := g.runCmd(ctx, gitPath, "show", "origin/"+branch+":hydrator.metadata")
+	metaPath := g.metadataFilePath()
+	metadataFileStdout, stderr, err := g.runCmd(ctx, gitPath, "show", "origin/"+branch+":"+metaPath)
 	if err != nil {
 		if strings.Contains(stderr, "does not exist") || strings.Contains(stderr, "Path not in") {
 			logger.Info("hydrator.metadata file not found", "branch", branch)
@@ -169,12 +188,12 @@ func (g *EnvironmentOperations) GetBranchShas(ctx context.Context, branch string
 func (g *EnvironmentOperations) GetShaMetadataFromFile(ctx context.Context, sha string) (v1alpha1.CommitShaState, error) {
 	logger := log.FromContext(ctx)
 
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return v1alpha1.CommitShaState{}, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
 
-	metadataFileStdout, stderr, err := g.runCmd(ctx, gitPath, "show", sha+":hydrator.metadata")
+	metadataFileStdout, stderr, err := g.runCmd(ctx, gitPath, "show", sha+":"+g.metadataFilePath())
 	if err != nil {
 		logger.V(4).Info("could not git show file", "sha", sha, "gitError", stderr, "err", err)
 		return v1alpha1.CommitShaState{}, nil
@@ -208,7 +227,7 @@ func (g *EnvironmentOperations) GetShaMetadataFromFile(ctx context.Context, sha 
 
 // GetShaMetadataFromGit retrieves commit metadata by running git commands for a given SHA.
 func (g *EnvironmentOperations) GetShaMetadataFromGit(ctx context.Context, sha string) (v1alpha1.CommitShaState, error) {
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return v1alpha1.CommitShaState{}, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
@@ -248,7 +267,7 @@ func (g *EnvironmentOperations) GetShaMetadataFromGit(ctx context.Context, sha s
 func (g *EnvironmentOperations) GetShaBody(ctx context.Context, sha string) (string, error) {
 	logger := log.FromContext(ctx)
 
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return "", fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
@@ -266,7 +285,7 @@ func (g *EnvironmentOperations) GetShaBody(ctx context.Context, sha string) (str
 // GetShaAuthor retrieves the author of a commit given its SHA.
 func (g *EnvironmentOperations) GetShaAuthor(ctx context.Context, sha string) (string, error) {
 	logger := log.FromContext(ctx)
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return "", fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
@@ -284,7 +303,7 @@ func (g *EnvironmentOperations) GetShaAuthor(ctx context.Context, sha string) (s
 // GetShaSubject retrieves the subject of a commit given its SHA.
 func (g *EnvironmentOperations) GetShaSubject(ctx context.Context, sha string) (string, error) {
 	logger := log.FromContext(ctx)
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return "", fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
@@ -302,7 +321,7 @@ func (g *EnvironmentOperations) GetShaSubject(ctx context.Context, sha string) (
 // GetShaTime retrieves the commit time of a commit given its SHA.
 func (g *EnvironmentOperations) GetShaTime(ctx context.Context, sha string) (v1.Time, error) {
 	logger := log.FromContext(ctx)
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return v1.Time{}, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
@@ -426,7 +445,7 @@ func runCmd(ctx context.Context, gap scms.GitOperationsProvider, directory strin
 // currently fetched and updated in the local repository. This should happen via GetBranchShas function earlier in the reconcile.
 func (g *EnvironmentOperations) HasConflict(ctx context.Context, proposedBranch, activeBranch string) (bool, error) {
 	logger := log.FromContext(ctx)
-	repoPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	repoPath := gitpaths.Get(g.cloneCacheKey())
 
 	// Use git merge-tree --write-tree to perform a stateless merge check
 	// With --write-tree, git exits with code 1 if conflicts exist, and writes conflict info to stdout
@@ -452,7 +471,7 @@ func (g *EnvironmentOperations) HasConflict(ctx context.Context, proposedBranch,
 // ensuring we merge the exact same refs that were checked for conflicts.
 func (g *EnvironmentOperations) MergeWithOursStrategy(ctx context.Context, proposedBranch, activeBranch string) error {
 	logger := log.FromContext(ctx)
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 
 	// Checkout the proposed branch from the already-fetched origin ref
 	// We use the origin ref to ensure we're working with the same commits that were checked for conflicts
@@ -480,11 +499,63 @@ func (g *EnvironmentOperations) MergeWithOursStrategy(ctx context.Context, propo
 	return nil
 }
 
+// MergeWithPathScopedOursStrategy resolves merge conflicts when multiple apps share one active branch: the resulting
+// proposed branch tree matches origin/active outside activePath, and origin/proposed inside activePath.
+func (g *EnvironmentOperations) MergeWithPathScopedOursStrategy(ctx context.Context, proposedBranch, activeBranch string) error {
+	logger := log.FromContext(ctx)
+	if g.activePath == "" {
+		return errors.New("MergeWithPathScopedOursStrategy requires a non-empty activePath")
+	}
+	gitPath := gitpaths.Get(g.cloneCacheKey())
+	if gitPath == "" {
+		return fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
+	}
+
+	_, stderr, err := g.runCmd(ctx, gitPath, "checkout", "-B", proposedBranch, "origin/"+proposedBranch)
+	if err != nil {
+		logger.Error(err, "Failed to checkout branch", "branch", proposedBranch, "stderr", stderr)
+		return fmt.Errorf("failed to checkout branch %q: %w", proposedBranch, err)
+	}
+
+	_, stderr, err = g.runCmd(ctx, gitPath, "merge", "-s", "ours", "--no-commit", "origin/"+activeBranch)
+	if err != nil {
+		logger.Error(err, "Failed to start merge with ours strategy", "proposedBranch", proposedBranch, "activeBranch", activeBranch, "stderr", stderr)
+		return fmt.Errorf("failed to merge branch %q into %q with 'ours' strategy (no-commit): %w", activeBranch, proposedBranch, err)
+	}
+
+	_, stderr, err = g.runCmd(ctx, gitPath, "read-tree", "-u", "--reset", "origin/"+activeBranch)
+	if err != nil {
+		logger.Error(err, "Failed to read-tree from active branch", "activeBranch", activeBranch, "stderr", stderr)
+		return fmt.Errorf("failed to read-tree from active branch %q: %w", activeBranch, err)
+	}
+
+	_, stderr, err = g.runCmd(ctx, gitPath, "checkout", "origin/"+proposedBranch, "--", g.activePath)
+	if err != nil {
+		logger.Error(err, "Failed to checkout app path from proposed", "path", g.activePath, "stderr", stderr)
+		return fmt.Errorf("failed to checkout path %q from proposed branch %q: %w", g.activePath, proposedBranch, err)
+	}
+
+	_, stderr, err = g.runCmd(ctx, gitPath, "commit", "--no-edit")
+	if err != nil {
+		logger.Error(err, "Failed to commit path-scoped merge", "stderr", stderr)
+		return fmt.Errorf("failed to commit path-scoped merge for proposed branch %q: %w", proposedBranch, err)
+	}
+
+	_, stderr, err = g.runCmd(ctx, gitPath, "push", "origin", proposedBranch)
+	if err != nil {
+		logger.Error(err, "Failed to push merged branch", "proposedBranch", proposedBranch, "stderr", stderr)
+		return fmt.Errorf("failed to push merged branch %q: %w", proposedBranch, err)
+	}
+
+	logger.Info("Successfully merged branches with path-scoped 'ours' strategy", "proposedBranch", proposedBranch, "activeBranch", activeBranch, "activePath", g.activePath)
+	return nil
+}
+
 // GetRevListFirstParent retrieves the first parent commit SHAs for the given branch using git rev-list.
 func (g *EnvironmentOperations) GetRevListFirstParent(ctx context.Context, branch string, maxCount int) ([]string, error) {
 	logger := log.FromContext(ctx)
 
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return nil, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
@@ -535,7 +606,7 @@ func AddTrailerToCommitMessage(ctx context.Context, commitMessage, trailerKey, t
 // FetchNotes fetches the git notes from the remote repository.
 func (g *EnvironmentOperations) FetchNotes(ctx context.Context) error {
 	logger := log.FromContext(ctx)
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
@@ -564,7 +635,7 @@ func (g *EnvironmentOperations) FetchNotes(ctx context.Context) error {
 // Returns an empty HydratorMetadata if no note exists for the commit.
 func (g *EnvironmentOperations) GetHydratorNote(ctx context.Context, sha string) (HydratorMetadata, error) {
 	logger := log.FromContext(ctx)
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return HydratorMetadata{}, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
@@ -638,7 +709,7 @@ func ParseTrailersFromMessage(ctx context.Context, commitMessage string) (map[st
 func (g *EnvironmentOperations) GetTrailers(ctx context.Context, sha string) (map[string][]string, error) {
 	logger := log.FromContext(ctx)
 	// run git interpret-trailers to get the trailers from the last commit
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return nil, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
@@ -661,7 +732,7 @@ func (g *EnvironmentOperations) GetTrailers(ctx context.Context, sha string) (ma
 // See https://git-scm.com/docs/git-show#_pretty_formats for available format options.
 func (g *EnvironmentOperations) GitShow(ctx context.Context, sha, format string) (string, error) {
 	logger := log.FromContext(ctx)
-	gitPath := gitpaths.Get(g.gap.GetGitHttpsRepoUrl(*g.gitRepo) + g.activeBranch)
+	gitPath := gitpaths.Get(g.cloneCacheKey())
 	if gitPath == "" {
 		return "", fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}

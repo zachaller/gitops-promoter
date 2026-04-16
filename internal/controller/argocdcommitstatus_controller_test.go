@@ -47,6 +47,25 @@ var _ = Describe("ArgoCDCommitStatus Controller", func() {
 			err := unmarshalYamlStrict(testArgoCDCommitStatusYAML, &promoterv1alpha1.ArgoCDCommitStatus{})
 			Expect(err).ToNot(HaveOccurred())
 		})
+
+		It("should unmarshal spec.key for per-app commit status keys", func() {
+			yaml := `apiVersion: promoter.argoproj.io/v1alpha1
+kind: ArgoCDCommitStatus
+metadata:
+  name: myapp-health
+  namespace: default
+spec:
+  key: argocd-health-myapp
+  promotionStrategyRef:
+    name: myapp-ps
+  applicationSelector:
+    matchLabels:
+      app: myapp
+`
+			var acs promoterv1alpha1.ArgoCDCommitStatus
+			Expect(unmarshalYamlStrict(yaml, &acs)).To(Succeed())
+			Expect(acs.Spec.Key).To(Equal("argocd-health-myapp"))
+		})
 	})
 
 	Context("When reconciling a resource", func() {

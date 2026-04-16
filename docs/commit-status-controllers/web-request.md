@@ -21,6 +21,15 @@ For each applicable environment (after resolving context):
 5. The controller creates/updates a **CommitStatus per environment**, each with that environment’s SHA and its own phase when using per-branch results.
 6. The PromotionStrategy checks the CommitStatus before allowing promotion
 
+### Monorepo (`activePath`) and commit status keys
+
+When [`PromotionStrategy.spec.activePath`](../crd-specs.md#promotionstrategy) is set, several apps can share one environment
+branch; proposed branches become `{branch}/{activePath}-next` (see [Custom hydrator](../custom-hydrator.md#2-push-to-proposed-branches)).
+Use a **distinct** `spec.key` per `WebRequestCommitStatus` per app (for example `my-check-app-a`, `my-check-app-b`) so
+commit statuses on the same SCM commit SHA remain distinguishable. See [Field reference](#field-reference) for the key field.
+The same applies to any other commit status controller when gating shared branches; see
+[Commit status best practices](development-best-practices.md#monorepo-and-shared-active-branches).
+
 ### Operating Modes
 
 WebRequestCommitStatus supports two distinct operating modes:

@@ -31,12 +31,18 @@ the environment's active branch name with a `-next` suffix.
 | `environment/staging` | `environment/staging-next` |
 | `environment/production` | `environment/production-next` |
 
-> **Important**: The `-next` suffix convention is hard-coded in GitOps Promoter and cannot be changed.
+> **Important**: The `-next` suffix convention is used when [PromotionStrategy `activePath`](../crd-specs.md#promotionstrategy)
+> is unset. When `activePath` is set (monorepo mode: many apps on one active branch), the proposed branch is
+> `{activeBranch}/{activePath}-next` instead of `{activeBranch}-next`.
 
 ### 3. Include `hydrator.metadata` File
 
-Each hydrated commit **must** include a `hydrator.metadata` file at the root of the repository. This JSON file tells
-GitOps Promoter which DRY commit was used to produce the hydrated content.
+Each hydrated commit **must** include a `hydrator.metadata` file. By default it lives at the **repository root**. When
+`PromotionStrategy.spec.activePath` is set, GitOps Promoter reads **`{activePath}/hydrator.metadata`** instead.
+
+The hydrator must write metadata for **each app** at that path and must **not** delete other apps' directories when
+hydrating one app (Argo CD's Source Hydrator follows this behavior). Other hydrators should implement the same rule to
+support the single active branch pattern.
 
 #### Required Fields
 
