@@ -61,6 +61,13 @@ var _ = Describe("TimedCommitStatus Controller", Ordered, func() {
 		Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
 		Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
 		Expect(k8sClient.Create(ctx, promotionStrategy)).To(Succeed())
+
+		// Seed the previous-environment gate via a DagCommitStatus mirroring the
+		// PromotionStrategy as a linear chain. PromotionStrategy itself no longer
+		// synthesises this gate. The "Time Gate Transition with Open PR" test
+		// requires staging to stay pending behind dev; without this gate, staging
+		// would auto-merge as soon as dev catches up.
+		seedLinearDag(ctx, promotionStrategy)
 	})
 
 	AfterAll(func() {

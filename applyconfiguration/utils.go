@@ -89,6 +89,20 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.ControllerConfigurationApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ControllerConfigurationSpec"):
 		return &apiv1alpha1.ControllerConfigurationSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DagCommitStatus"):
+		return &apiv1alpha1.DagCommitStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DagCommitStatusConfiguration"):
+		return &apiv1alpha1.DagCommitStatusConfigurationApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DagCommitStatusSpec"):
+		return &apiv1alpha1.DagCommitStatusSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DagCommitStatusStatus"):
+		return &apiv1alpha1.DagCommitStatusStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DagEnvironment"):
+		return &apiv1alpha1.DagEnvironmentApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DagEnvironmentStatus"):
+		return &apiv1alpha1.DagEnvironmentStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DagParentStatus"):
+		return &apiv1alpha1.DagParentStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Environment"):
 		return &apiv1alpha1.EnvironmentApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("EnvironmentStatus"):

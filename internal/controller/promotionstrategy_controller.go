@@ -23,7 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	"k8s.io/client-go/tools/events"
@@ -130,10 +129,11 @@ func (r *PromotionStrategyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Calculate the status of the PromotionStrategy. Updates ps in place.
 	r.calculateStatus(&ps, ctps)
 
-	err = r.updatePreviousEnvironmentCommitStatus(ctx, &ps, ctps)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to merge PRs: %w", err)
-	}
+	// Note: as of the introduction of the DagCommitStatus CR, this controller no
+	// longer synthesises the "promoter-previous-environment" CommitStatus. Users
+	// who want a previous-environment gate must create a DagCommitStatus that
+	// references this PromotionStrategy and list its Key in proposedCommitStatuses
+	// on the gated environments.
 
 	// Check if any environments need to refresh their git notes.
 	// SCM's do not send webhooks when git notes are pushed, so we need to
@@ -214,22 +214,9 @@ func (r *PromotionStrategyReconciler) upsertChangeTransferPolicy(ctx context.Con
 		proposedCommitStatuses = append(proposedCommitStatuses, acv1alpha1.CommitStatusSelector().WithKey(cs.Key))
 	}
 
-	// Add previous environment commit status if needed
-	environmentIndex, _ := utils.GetEnvironmentByBranch(*ps, environment.Branch)
-	previousEnvironmentIndex := environmentIndex - 1
-	if environmentIndex > 0 && len(ps.Spec.ActiveCommitStatuses) != 0 || (previousEnvironmentIndex >= 0 && len(ps.Spec.Environments[previousEnvironmentIndex].ActiveCommitStatuses) != 0) {
-		// Check if already present
-		found := false
-		for _, cs := range proposedCommitStatuses {
-			if cs.Key != nil && *cs.Key == promoterv1alpha1.PreviousEnvironmentCommitStatusKey {
-				found = true
-				break
-			}
-		}
-		if !found {
-			proposedCommitStatuses = append(proposedCommitStatuses, acv1alpha1.CommitStatusSelector().WithKey(promoterv1alpha1.PreviousEnvironmentCommitStatusKey))
-		}
-	}
+	// Note: PromotionStrategy no longer auto-injects the "promoter-previous-environment"
+	// key into proposedCommitStatuses. Users who want a previous-environment gate must
+	// reference the DagCommitStatus's Key in proposedCommitStatuses themselves.
 
 	// Build the spec
 	ctpSpec := acv1alpha1.ChangeTransferPolicySpec().
@@ -549,158 +536,6 @@ func (r *PromotionStrategyReconciler) handleRateLimitedEnqueue(
 	if r.EnqueueCTP != nil {
 		r.EnqueueCTP(key.Namespace, key.Name)
 	}
-}
-
-func (r *PromotionStrategyReconciler) createOrUpdatePreviousEnvironmentCommitStatus(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy, phase promoterv1alpha1.CommitStatusPhase, pendingReason string, previousEnvironmentBranch string, previousCRPCSPhases []promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase) (*promoterv1alpha1.CommitStatus, error) {
-	logger := log.FromContext(ctx)
-
-	// TODO: do we like this name proposed-<name>?
-	csName := utils.KubeSafeUniqueName(ctx, promoterv1alpha1.PreviousEnvProposedCommitPrefixNameLabel+ctp.Name)
-
-	kind := reflect.TypeOf(promoterv1alpha1.ChangeTransferPolicy{}).Name()
-	gvk := promoterv1alpha1.GroupVersion.WithKind(kind)
-
-	// If there is only one commit status, use the URL from that commit status.
-	var url string
-	if len(previousCRPCSPhases) == 1 {
-		url = previousCRPCSPhases[0].Url
-	}
-
-	statusMap := make(map[string]string)
-	for _, status := range previousCRPCSPhases {
-		statusMap[status.Key] = status.Phase
-	}
-	yamlStatusMap, err := yaml.Marshal(statusMap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal previous environment commit statuses: %w", err)
-	}
-
-	description := previousEnvironmentBranch + " - synced and healthy"
-	if phase == promoterv1alpha1.CommitPhasePending && pendingReason != "" {
-		description = pendingReason
-	}
-
-	// Build the apply configuration
-	commitStatusApply := acv1alpha1.CommitStatus(csName, ctp.Namespace).
-		WithLabels(map[string]string{
-			promoterv1alpha1.CommitStatusLabel: promoterv1alpha1.PreviousEnvironmentCommitStatusKey,
-		}).
-		WithAnnotations(map[string]string{
-			promoterv1alpha1.CommitStatusPreviousEnvironmentStatusesAnnotation: string(yamlStatusMap),
-		}).
-		WithOwnerReferences(acmetav1.OwnerReference().
-			WithAPIVersion(gvk.GroupVersion().String()).
-			WithKind(gvk.Kind).
-			WithName(ctp.Name).
-			WithUID(ctp.UID).
-			WithController(true).
-			WithBlockOwnerDeletion(true)).
-		WithSpec(acv1alpha1.CommitStatusSpec().
-			WithRepositoryReference(acv1alpha1.ObjectReference().
-				WithName(ctp.Spec.RepositoryReference.Name)).
-			WithSha(ctp.Status.Proposed.Hydrated.Sha).
-			WithName(previousEnvironmentBranch + " - synced and healthy").
-			WithDescription(description).
-			WithPhase(phase).
-			WithUrl(url))
-
-	// Apply using Server-Side Apply with Patch to get the result directly
-	commitStatus := &promoterv1alpha1.CommitStatus{}
-	commitStatus.Name = csName
-	commitStatus.Namespace = ctp.Namespace
-	if err = r.Patch(ctx, commitStatus, utils.ApplyPatch{ApplyConfig: commitStatusApply}, client.FieldOwner(constants.PromotionStrategyControllerFieldOwner), client.ForceOwnership); err != nil {
-		return nil, fmt.Errorf("failed to apply previous environments CommitStatus: %w", err)
-	}
-
-	logger.V(4).Info("Applied previous environment CommitStatus")
-
-	return commitStatus, nil
-}
-
-// updatePreviousEnvironmentCommitStatus checks if any environment is ready to be merged and if so, merges the pull request. It does this by looking at any active and proposed commit statuses.
-// ps.Spec.Environments and ps.Status.Environments must be the same length and in the same order as ctps.
-func (r *PromotionStrategyReconciler) updatePreviousEnvironmentCommitStatus(ctx context.Context, ps *promoterv1alpha1.PromotionStrategy, ctps []*promoterv1alpha1.ChangeTransferPolicy) error {
-	logger := log.FromContext(ctx)
-	// Go through each environment and copy any commit statuses from the previous environment if the previous environment's running dry commit is the same as the
-	// currently processing environments proposed dry sha.
-	// We then look at the status of the current environment and if all checks have passed and the environment is set to auto merge, we merge the pull request.
-	commitStatuses := make([]*promoterv1alpha1.CommitStatus, 0, len(ctps))
-	for i, ctp := range ctps {
-		if i == 0 {
-			// Skip, there's no previous environment.
-			continue
-		}
-
-		if len(ps.Spec.ActiveCommitStatuses) == 0 && len(ps.Spec.Environments[i-1].ActiveCommitStatuses) == 0 {
-			// Skip, there aren't any active commit statuses configured for the PromotionStrategy or the previous environment.
-			continue
-		}
-
-		previousEnvironmentStatus := ps.Status.Environments[i-1]
-		currentEnvironmentStatus := ps.Status.Environments[i]
-
-		// Skip if there's no proposed change in the current environment (i.e., active and proposed are the same).
-		// In this case, there's no PR to put a commit status on, so we shouldn't create/update one.
-		// This prevents updating commit status on already-merged PRs when the previous environment state changes.
-		if ctp.Status.Active.Dry.Sha == ctp.Status.Proposed.Dry.Sha {
-			logger.V(4).Info("Skipping previous environment commit status update - no proposed change in current environment",
-				"activeBranch", ctp.Spec.ActiveBranch,
-				"activeDrySha", ctp.Status.Active.Dry.Sha,
-				"proposedDrySha", ctp.Status.Proposed.Dry.Sha,
-				"previousEnvironmentActiveDrySha", previousEnvironmentStatus.Active.Dry.Sha,
-				"currentEnvironmentActiveDrySha", ctp.Status.Proposed.Dry.Sha,
-			)
-			continue
-		}
-
-		// Determine which dry SHA the current environment's hydrator has processed.
-		// The Note.DrySha (from git note) is the authoritative source because when manifests don't change
-		// between dry commits, the hydrator may only update the git note without creating a new commit.
-		// For legacy hydrators that don't use git notes, fall back to Proposed.Dry.Sha.
-		currentEnvHydratedForDrySha := getEffectiveHydratedDrySha(currentEnvironmentStatus)
-
-		// Pass all preceding environment statuses so we can look back past no-op hydrations
-		precedingEnvStatuses := ps.Status.Environments[:i]
-
-		// Recursively check ALL preceding environments to:
-		// 1. Check that each has been hydrated for the same dry SHA
-		// 2. Find the first environment that actually deployed this change (not a no-op)
-		// 3. Check that environment's commit statuses
-		//
-		// This handles cases like dev -> staging -> prod where:
-		// - A change affects dev and prod but staging is a no-op
-		// - We need to ensure dev has been hydrated, promoted, AND is healthy before prod can promote
-		isPending, pendingReason := isPreviousEnvironmentPending(precedingEnvStatuses, currentEnvHydratedForDrySha, currentEnvironmentStatus.Active.Dry.CommitTime)
-
-		commitStatusPhase := promoterv1alpha1.CommitPhaseSuccess
-		if isPending {
-			commitStatusPhase = promoterv1alpha1.CommitPhasePending
-		}
-
-		logger.V(4).Info("Setting previous environment CommitStatus phase",
-			"phase", commitStatusPhase,
-			"pendingReason", pendingReason,
-			"activeBranch", ctp.Spec.ActiveBranch,
-			"proposedDrySha", ctp.Status.Proposed.Dry.Sha,
-			"proposedHydratedSha", ctp.Status.Proposed.Hydrated.Sha,
-			"previousEnvironmentActiveDrySha", previousEnvironmentStatus.Active.Dry.Sha,
-			"previousEnvironmentActiveHydratedSha", previousEnvironmentStatus.Active.Hydrated.Sha,
-			"previousEnvironmentProposedDrySha", previousEnvironmentStatus.Proposed.Dry.Sha,
-			"previousEnvironmentProposedNoteSha", getNoteDrySha(previousEnvironmentStatus.Proposed.Note),
-			"previousEnvironmentActiveBranch", previousEnvironmentStatus.Branch)
-
-		// Since there is at least one configured active check, and since this is not the first environment,
-		// we should not create a commit status for the previous environment.
-		cs, err := r.createOrUpdatePreviousEnvironmentCommitStatus(ctx, ctp, commitStatusPhase, pendingReason, previousEnvironmentStatus.Branch, ctps[i-1].Status.Active.CommitStatuses)
-		if err != nil {
-			return fmt.Errorf("failed to create or update previous environment commit status for branch %s: %w", ctp.Spec.ActiveBranch, err)
-		}
-		commitStatuses = append(commitStatuses, cs)
-	}
-
-	utils.InheritNotReadyConditionFromObjects(ps, promoterConditions.PreviousEnvironmentCommitStatusNotReady, commitStatuses...)
-
-	return nil
 }
 
 // getNoteDrySha safely returns the DrySha from a HydratorMetadata pointer, or empty string if nil.

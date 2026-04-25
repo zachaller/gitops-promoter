@@ -1129,6 +1129,11 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
 				Expect(k8sClient.Create(ctx, promotionStrategy)).To(Succeed())
 
+				// Seed the previous-environment gate via a DagCommitStatus mirroring the
+				// PromotionStrategy as a linear chain. PromotionStrategy itself no longer
+				// synthesises this gate.
+				seedLinearDag(ctx, promotionStrategy)
+
 				// Initialize empty structs for use in tests
 				ctpDev = promoterv1alpha1.ChangeTransferPolicy{}
 				ctpStaging = promoterv1alpha1.ChangeTransferPolicy{}
@@ -1347,6 +1352,11 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
 				Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
 				Expect(k8sClient.Create(ctx, promotionStrategy)).To(Succeed())
+
+				// Seed the previous-environment gate via a DagCommitStatus mirroring the
+				// PromotionStrategy as a linear chain. PromotionStrategy itself no longer
+				// synthesises this gate.
+				seedLinearDag(ctx, promotionStrategy)
 
 				// Initialize empty structs for use in tests
 				ctpDev = promoterv1alpha1.ChangeTransferPolicy{}
@@ -1993,6 +2003,11 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				Expect(k8sClient.Create(ctx, &argoCDAppDev)).To(Succeed())
 				Expect(k8sClient.Create(ctx, &argoCDAppStaging)).To(Succeed())
 				Expect(k8sClient.Create(ctx, &argoCDAppProduction)).To(Succeed())
+
+				// Seed the previous-environment gate via a DagCommitStatus mirroring the
+				// PromotionStrategy as a linear chain. PromotionStrategy itself no longer
+				// synthesises this gate.
+				seedLinearDag(ctx, promotionStrategy)
 			})
 
 			AfterEach(func() {
@@ -2253,6 +2268,11 @@ var _ = Describe("PromotionStrategy Controller", func() {
 				Expect(k8sClientDev.Create(ctx, &argoCDAppDev)).To(Succeed())
 				Expect(k8sClientStaging.Create(ctx, &argoCDAppStaging)).To(Succeed())
 				Expect(k8sClient.Create(ctx, &argoCDAppProduction)).To(Succeed())
+
+				// Seed the previous-environment gate via a DagCommitStatus mirroring the
+				// PromotionStrategy as a linear chain. PromotionStrategy itself no longer
+				// synthesises this gate.
+				seedLinearDag(ctx, promotionStrategy)
 			})
 
 			AfterEach(func() {
@@ -2986,6 +3006,11 @@ var _ = Describe("PromotionStrategy Bug Tests", func() {
 				Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
 				Expect(k8sClient.Create(ctx, promotionStrategy)).To(Succeed())
 
+				// Seed the previous-environment gate via a DagCommitStatus mirroring the
+				// PromotionStrategy as a linear chain. PromotionStrategy itself no longer
+				// synthesises this gate.
+				seedLinearDag(ctx, promotionStrategy)
+
 				// Initialize empty structs for use in tests
 				ctpDev = promoterv1alpha1.ChangeTransferPolicy{}
 				ctpStaging = promoterv1alpha1.ChangeTransferPolicy{}
@@ -3549,6 +3574,11 @@ var _ = Describe("PromotionStrategy Bug Tests", func() {
 			Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
 			Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
 			Expect(k8sClient.Create(ctx, promotionStrategy)).To(Succeed())
+
+			// Seed the previous-environment gate via a DagCommitStatus mirroring the
+			// PromotionStrategy as a linear chain. PromotionStrategy itself no longer
+			// synthesises this gate.
+			seedLinearDag(ctx, promotionStrategy)
 
 			ctpDev = promoterv1alpha1.ChangeTransferPolicy{}
 			ctpStaging = promoterv1alpha1.ChangeTransferPolicy{}
