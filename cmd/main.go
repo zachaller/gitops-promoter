@@ -320,6 +320,15 @@ func runController(
 		setupLog.Error(err, "unable to create controller", "controller", "WebRequestCommitStatus")
 		panic(fmt.Errorf("unable to create WebRequestCommitStatus controller: %w", err))
 	}
+	if err := (&controller.DagCommitStatusReconciler{
+		Client:      localManager.GetClient(),
+		Scheme:      localManager.GetScheme(),
+		Recorder:    localManager.GetEventRecorder("DagCommitStatus"),
+		SettingsMgr: settingsMgr,
+	}).SetupWithManager(processSignalsCtx, localManager); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DagCommitStatus")
+		panic(fmt.Errorf("unable to create DagCommitStatus controller: %w", err))
+	}
 	//+kubebuilder:scaffold:builder
 
 	if err := localManager.AddHealthzCheck("healthz", healthz.Ping); err != nil {

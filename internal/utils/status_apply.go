@@ -77,6 +77,8 @@ func statusApplyConfig(obj client.Object, conditionsOnly bool) (any, error) {
 		return scmProviderStatusApply(o, conditionsOnly)
 	case *promoterv1alpha1.ClusterScmProvider:
 		return clusterScmProviderStatusApply(o, conditionsOnly)
+	case *promoterv1alpha1.DagCommitStatus:
+		return dagCommitStatusStatusApply(o, conditionsOnly)
 	default:
 		return nil, fmt.Errorf("unsupported object type for status SSA: %T", obj)
 	}
@@ -190,6 +192,16 @@ func clusterScmProviderStatusApply(o *promoterv1alpha1.ClusterScmProvider, condi
 		return nil, err
 	}
 	return acv1alpha1.ClusterScmProvider(o.Name, "").WithStatus(statusAC), nil
+}
+
+func dagCommitStatusStatusApply(o *promoterv1alpha1.DagCommitStatus, conditionsOnly bool) (any, error) {
+	statusAC := acv1alpha1.DagCommitStatusStatus()
+	if conditionsOnly {
+		statusAC = statusAC.WithConditions(ConditionsToApply(o.Status.Conditions)...)
+	} else if err := jsonRoundTrip(&o.Status, statusAC); err != nil {
+		return nil, err
+	}
+	return acv1alpha1.DagCommitStatus(o.Name, o.Namespace).WithStatus(statusAC), nil
 }
 
 // jsonRoundTrip copies all JSON-tagged fields from src into dst by marshaling src and

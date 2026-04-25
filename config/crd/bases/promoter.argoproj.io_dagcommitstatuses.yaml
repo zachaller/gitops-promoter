@@ -1,0 +1,308 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: dagcommitstatuses.promoter.argoproj.io
+spec:
+  group: promoter.argoproj.io
+  names:
+    kind: DagCommitStatus
+    listKind: DagCommitStatusList
+    plural: dagcommitstatuses
+    singular: dagcommitstatus
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.promotionStrategyRef.name
+      name: PromotionStrategy
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: DagCommitStatus is the Schema for the dagcommitstatuses API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              DagCommitStatusSpec defines the desired state of DagCommitStatus.
+
+              A DagCommitStatus declares a directed-acyclic dependency graph over the
+              environments of a referenced PromotionStrategy. For each non-root environment
+              in the graph, the controller produces one CommitStatus on that environment's
+              proposed hydrated SHA, whose phase aggregates the active CommitStatuses on the
+              parent (dependsOn) environments. Users opt in to gating by referencing the
+              produced CommitStatus's Key in the PromotionStrategy's proposedCommitStatuses.
+            properties:
+              environments:
+                description: |-
+                  Environments declares the dependency graph. Every branch named here must
+                  exist in the referenced PromotionStrategy's spec.environments. Every entry
+                  in dependsOn must also appear in this list. Cycles are rejected.
+                items:
+                  description: DagEnvironment is one node in the DAG.
+                  properties:
+                    branch:
+                      description: Branch is the active branch of the environment
+                        in the referenced PromotionStrategy.
+                      minLength: 1
+                      type: string
+                    dependsOn:
+                      description: |-
+                        DependsOn lists the parent branches that must be healthy before this
+                        environment's promotion is gated as successful. An empty (or absent)
+                        DependsOn means this is a root environment in the graph and no
+                        CommitStatus is produced for it.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: set
+                  required:
+                  - branch
+                  type: object
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - branch
+                x-kubernetes-list-type: map
+              key:
+                default: promoter-previous-environment
+                description: |-
+                  Key is the CommitStatus key produced on each non-root environment's proposed
+                  hydrated SHA, and the key users reference in proposedCommitStatuses to gate
+                  promotion. Defaults to "promoter-previous-environment" for back-compat with
+                  the synthesised gate that PromotionStrategy used to produce.
+                maxLength: 63
+                minLength: 1
+                pattern: ([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]
+                type: string
+              promotionStrategyRef:
+                description: |-
+                  PromotionStrategyRef is a reference to the PromotionStrategy whose environments
+                  are being graphed. Must live in the same namespace as this DagCommitStatus.
+                properties:
+                  name:
+                    description: Name is the name of the object to refer to.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - environments
+            - promotionStrategyRef
+            type: object
+          status:
+            description: DagCommitStatusStatus defines the observed state of DagCommitStatus.
+            properties:
+              conditions:
+                description: Conditions Represents the observations of the current
+                  state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              environments:
+                description: |-
+                  Environments mirrors, for each non-root env in the graph, the disaggregated
+                  per-parent active commit statuses that fed into the env's gate. This is the
+                  canonical place to observe what the DAG saw.
+                items:
+                  description: DagEnvironmentStatus is the per-non-root-env aggregation
+                    result.
+                  properties:
+                    aggregatePhase:
+                      description: |-
+                        AggregatePhase is the phase written to the produced CommitStatus on this env's
+                        proposed hydrated SHA (success only when all parent chains are success).
+                      enum:
+                      - pending
+                      - success
+                      - failure
+                      type: string
+                    branch:
+                      description: Branch is the gated (child) environment.
+                      minLength: 1
+                      type: string
+                    drySha:
+                      description: |-
+                        DrySha is the dry SHA that the parents were evaluated against, i.e. the
+                        gated environment's effective hydrated dry SHA.
+                      type: string
+                    parents:
+                      description: |-
+                        Parents carries the per-parent disaggregated view: for each dependsOn branch,
+                        which active CommitStatuses contributed and their individual phases.
+                      items:
+                        description: DagParentStatus is the per-parent disaggregated
+                          view of contributing active commit statuses.
+                        properties:
+                          branch:
+                            description: Branch is the dependsOn parent.
+                            minLength: 1
+                            type: string
+                          commitStatuses:
+                            description: |-
+                              CommitStatuses is the disaggregated list of active CommitStatuses on this parent
+                              for the matched dry SHA.
+                            items:
+                              description: ChangeRequestPolicyCommitStatusPhase defines
+                                the phase of a commit status in a ChangeTransferPolicy.
+                              properties:
+                                description:
+                                  description: Description is the description of the
+                                    commit status
+                                  type: string
+                                key:
+                                  description: Key staging hydrated branch
+                                  maxLength: 63
+                                  minLength: 1
+                                  pattern: ([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]
+                                  type: string
+                                phase:
+                                  description: Phase what phase is the status in
+                                  enum:
+                                  - pending
+                                  - success
+                                  - failure
+                                  type: string
+                                url:
+                                  description: Url is the URL of the commit status
+                                  pattern: ^(https?://.*)?$
+                                  type: string
+                                  x-kubernetes-validations:
+                                  - message: must be a valid URL
+                                    rule: self == '' || isURL(self)
+                              required:
+                              - key
+                              - phase
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - key
+                            x-kubernetes-list-type: map
+                          phase:
+                            description: Phase is this parent's rolled-up phase (worst
+                              over its CommitStatuses + chain).
+                            enum:
+                            - pending
+                            - success
+                            - failure
+                            type: string
+                        required:
+                        - branch
+                        - phase
+                        type: object
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - branch
+                      x-kubernetes-list-type: map
+                  required:
+                  - aggregatePhase
+                  - branch
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - branch
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the .metadata.generation that this status was reconciled from.
+                  Because status is written via Server-Side Apply with ForceOwnership (which has no
+                  optimistic-concurrency check), this field is the canonical way to detect stale
+                  status writes: compare status.observedGeneration with metadata.generation.
+                format: int64
+                type: integer
+              unreferencedEnvironments:
+                description: |-
+                  UnreferencedEnvironments is the list of non-root branches in the graph whose
+                  PromotionStrategy environment does not reference this DagCommitStatus's Key
+                  in its proposedCommitStatuses (env-level or spec-level). Those environments
+                  will promote ungated. Informational only — the controller does not raise a
+                  condition for this.
+                items:
+                  type: string
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

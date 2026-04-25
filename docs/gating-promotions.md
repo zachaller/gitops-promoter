@@ -95,53 +95,73 @@ the respective environments' proposed (`-next`) environment branches.
 
 ### How Active Commit Statuses Work (Implementation Details)
 
-The PromotionStrategy controller will create a ChangeTransferPolicy for each environment. The ChangeTransferPolicy 
-controller does not actually "look back" at previous environments to enforce active commit status checks. Instead, the
-PromotionStrategy controller will inject a `proposedCommitStatus` to represent the active status of the previous
-environment. The PromotionStrategy controller will also create and maintain a `CommitStatus` for each non-zero-index
-environment, based on the aggregate active commit status check of the previous environment.
+Active commit statuses are not enforced by the `ChangeTransferPolicy` directly. Instead, a separate
+[`DagCommitStatus`](crd-specs.md#dagcommitstatus) resource declares the dependency graph between environments and produces
+a per-environment "previous environment" gate that aggregates the active commit statuses of upstream environments. Users
+opt their environments into the gate by listing its key in `proposedCommitStatuses`.
 
-So for the above example, the stg environment's ChangeTransferPolicy CR will look like this:
+> **Breaking change (v0.x → v0.y):** Earlier versions of GitOps Promoter automatically synthesised this gate inside the
+> `PromotionStrategy` controller. That auto-injection has been removed. To preserve the previous-environment gate after
+> upgrading, create a `DagCommitStatus` per `PromotionStrategy` (linear `dependsOn` for the existing array order, or a real
+> DAG if you want parallel environments) and add `proposedCommitStatuses: [{key: promoter-previous-environment}]` to each
+> non-root environment in your `PromotionStrategy.spec.environments`.
+
+For the example above, the linear gate is configured like this:
 
 ```yaml
-kind: ChangeTransferPolicy
+kind: DagCommitStatus
 spec:
-  sourceBranch: environment/test-next
-  targetBranch: environment/test
-  activeCommitStatuses:
-    # The controller will monitor this CommitStatus for the active commit SHA, but it will not enforce it. The status 
-    # will be stored on the 
-    - key: healthy
-  proposedCommitStatuses:
-    - key: healthy
-    - key: promoter-previous-environment
+  promotionStrategyRef:
+    name: example-promotion-strategy
+  # key defaults to "promoter-previous-environment"; override it if you want a different gate name.
+  environments:
+    - branch: environment/dev
+    - branch: environment/test
+      dependsOn: [environment/dev]
+    - branch: environment/prod
+      dependsOn: [environment/test]
+---
+kind: PromotionStrategy
+spec:
+  environments:
+    - branch: environment/dev
+    - branch: environment/test
+      proposedCommitStatuses:
+        - key: promoter-previous-environment
+    - branch: environment/prod
+      proposedCommitStatuses:
+        - key: promoter-previous-environment
+        - key: deployment-freeze
 ```
 
-Assuming the `environment/dev` environment has a `healthy` active commit status check, the `promoter-previous-environment`
-CommitStatus will look like this:
+The DAG controller produces one `CommitStatus` per non-root environment whose `spec.sha` is that environment's
+proposed (`-next`) hydrated SHA, and whose phase aggregates the active commit statuses of every `dependsOn` parent.
+With multiple parents (a true DAG) the phase is `success` only when **every** parent chain is healthy.
+
+So for `environment/test`, the produced `CommitStatus` looks like this:
 
 ```yaml
 kind: CommitStatus
 metadata:
   labels:
     promoter.argoproj.io/commit-status: promoter-previous-environment
+    promoter.argoproj.io/dag-commit-status: example-promotion-strategy-dag
 spec:
   sha: d0e1f2  # environment/test-next
   phase: success
 ```
 
-Even though the CommitStatus is "about" the `environment/dev` branch, the SHA is the SHA of the `environment/test-next` branch. This is
-how the PromotionStrategy controller expresses its opinion of the proposed commit on the stg environment, i.e. that it
-is acceptable because the previous environment is healthy.
+The disaggregated per-parent contributing statuses are mirrored on `DagCommitStatus.status.environments[].parents[]` for
+observability; the legacy `promoter.argoproj.io/previous-environment-statuses` annotation on the produced `CommitStatus`
+is preserved as a flat key→phase map for back-compat readers.
 
 #### Previous Environment CommitStatus URL
 
-Since the previous environment CommitStatus aggregates the active commit status checks of the previous environment, it
+Since the previous environment CommitStatus aggregates the active commit status checks of the parent environment(s), it
 is nontrivial to determine what URL to use for the aggregate CommitStatus.
 
-For now, the previous environment CommitStatus will only be set if there is only one active commit status. Its URL will
-be set to the URL of the previous environment's active commit status. If there are multiple active commit statuses, no
-URL will be set. This behavior may change in the future.
+If exactly one parent contributes exactly one commit status, the gate's URL is set to that status's URL. Otherwise, no
+URL is set. This behavior may change in the future.
 
 ## Built-in CommitStatus Controllers
 

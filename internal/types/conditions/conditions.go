@@ -42,3 +42,14 @@ const (
 	// PreviousEnvironmentCommitStatusNotReady is the condition type for a previous environment commit status not being ready.
 	PreviousEnvironmentCommitStatusNotReady CommonReason = "PreviousEnvironmentCommitStatusNotReady"
 )
+
+// Reasons that apply to DagCommitStatus.
+const (
+	// InvalidDependencyGraph indicates that the configured environment graph is invalid
+	// (cycle, self-reference, unknown branch, or branch missing from the referenced
+	// PromotionStrategy).
+	InvalidDependencyGraph CommonReason = "InvalidDependencyGraph"
+	// PromotionStrategyNotFound indicates that the referenced PromotionStrategy could
+	// not be found in the same namespace as the DagCommitStatus.
+	PromotionStrategyNotFound CommonReason = "PromotionStrategyNotFound"
+)
