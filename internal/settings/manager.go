@@ -30,6 +30,7 @@ const (
 //   - TimedCommitStatusConfiguration
 //   - GitCommitStatusConfiguration
 //   - WebRequestCommitStatusConfiguration
+//   - DagCommitStatusConfiguration
 type ControllerConfigurationTypes interface {
 	promoterv1alpha1.PromotionStrategyConfiguration |
 		promoterv1alpha1.ChangeTransferPolicyConfiguration |
@@ -38,7 +39,8 @@ type ControllerConfigurationTypes interface {
 		promoterv1alpha1.ArgoCDCommitStatusConfiguration |
 		promoterv1alpha1.TimedCommitStatusConfiguration |
 		promoterv1alpha1.GitCommitStatusConfiguration |
-		promoterv1alpha1.WebRequestCommitStatusConfiguration
+		promoterv1alpha1.WebRequestCommitStatusConfiguration |
+		promoterv1alpha1.DagCommitStatusConfiguration
 }
 
 // ControllerResultTypes is a constraint that defines the set of result types returned by controller
@@ -285,6 +287,8 @@ func getWorkQueueForController[T ControllerConfigurationTypes](ctx context.Conte
 		return config.Spec.GitCommitStatus.WorkQueue, nil
 	case promoterv1alpha1.WebRequestCommitStatusConfiguration:
 		return config.Spec.WebRequestCommitStatus.WorkQueue, nil
+	case promoterv1alpha1.DagCommitStatusConfiguration:
+		return config.Spec.DagCommitStatus.WorkQueue, nil
 	default:
 		return promoterv1alpha1.WorkQueue{}, fmt.Errorf("unsupported configuration type: %T", cfg)
 	}

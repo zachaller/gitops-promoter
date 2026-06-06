@@ -289,6 +289,14 @@ var _ = BeforeSuite(func() {
 	}).SetupWithManager(ctx, k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
+	err = (&DagCommitStatusReconciler{
+		Client:      k8sManager.GetClient(),
+		Scheme:      k8sManager.GetScheme(),
+		Recorder:    k8sManager.GetEventRecorder("DagCommitStatus"),
+		SettingsMgr: settingsMgr,
+	}).SetupWithManager(ctx, k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
 	webhookReceiverPort = constants.WebhookReceiverPort + GinkgoParallelProcess()
 	whr := webhookreceiver.NewWebhookReceiver(k8sManager, webhookreceiver.EnqueueFunc(ctpReconciler.GetEnqueueFunc()))
 	go func() {
@@ -734,6 +742,66 @@ func randomString(length int) string {
 	}
 
 	return string(result)
+}
+
+// seedLinearDag creates a DagCommitStatus that mirrors a PromotionStrategy's environments
+// as a linear chain (env[i] depends on env[i-1]) using the default
+// "promoter-previous-environment" key, AND patches the PromotionStrategy so that every
+// non-root environment references that key in its proposedCommitStatuses (matching the
+// migration step a user must perform after the auto-injection was removed). This is the
+// test-only equivalent of the auto-injected gate that PromotionStrategy used to synthesise
+// before the DagCommitStatus CR existed.
+func seedLinearDag(ctx context.Context, ps *promoterv1alpha1.PromotionStrategy) *promoterv1alpha1.DagCommitStatus {
+	envs := make([]promoterv1alpha1.DagEnvironment, len(ps.Spec.Environments))
+	for i, env := range ps.Spec.Environments {
+		d := promoterv1alpha1.DagEnvironment{Branch: env.Branch}
+		if i > 0 {
+			d.DependsOn = []string{ps.Spec.Environments[i-1].Branch}
+		}
+		envs[i] = d
+	}
+	dag := &promoterv1alpha1.DagCommitStatus{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ps.Name + "-dag",
+			Namespace: ps.Namespace,
+		},
+		Spec: promoterv1alpha1.DagCommitStatusSpec{
+			PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: ps.Name},
+			Environments:         envs,
+		},
+	}
+	Expect(k8sClient.Create(ctx, dag)).To(Succeed())
+
+	// Patch the PromotionStrategy to opt every non-root env into the gate, matching what a
+	// user would do after the auto-injection migration.
+	Eventually(func(g Gomega) {
+		fresh := &promoterv1alpha1.PromotionStrategy{}
+		err := k8sClient.Get(ctx, client.ObjectKeyFromObject(ps), fresh)
+		g.Expect(err).To(Succeed())
+		patch := client.MergeFrom(fresh.DeepCopy())
+		for i := range fresh.Spec.Environments {
+			if i == 0 {
+				continue
+			}
+			already := false
+			for _, sel := range fresh.Spec.Environments[i].ProposedCommitStatuses {
+				if sel.Key == promoterv1alpha1.PreviousEnvironmentCommitStatusKey {
+					already = true
+					break
+				}
+			}
+			if !already {
+				fresh.Spec.Environments[i].ProposedCommitStatuses = append(
+					fresh.Spec.Environments[i].ProposedCommitStatuses,
+					promoterv1alpha1.CommitStatusSelector{Key: promoterv1alpha1.PreviousEnvironmentCommitStatusKey},
+				)
+			}
+		}
+		err = k8sClient.Patch(ctx, fresh, patch)
+		g.Expect(err).To(Succeed())
+	}, constants.EventuallyTimeout).Should(Succeed())
+
+	return dag
 }
 
 // buildGitHubWebhookPayload constructs a GitHub webhook payload for push events

@@ -22,6 +22,9 @@ const TimedCommitStatusLabel = "promoter.argoproj.io/timed-commit-status"
 // WebRequestCommitStatusLabel the web request commit status which the commit status is associated with.
 const WebRequestCommitStatusLabel = "promoter.argoproj.io/web-request-commit-status"
 
+// DagCommitStatusLabel the DagCommitStatus which produced this CommitStatus resource.
+const DagCommitStatusLabel = "promoter.argoproj.io/dag-commit-status"
+
 // PreviousEnvironmentCommitStatusKey the commit status key name used to indicate the previous environment health
 const PreviousEnvironmentCommitStatusKey = "promoter-previous-environment"
 

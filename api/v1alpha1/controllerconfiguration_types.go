@@ -69,6 +69,11 @@ type ControllerConfigurationSpec struct {
 	// including WorkQueue settings that control reconciliation behavior.
 	// +required
 	WebRequestCommitStatus WebRequestCommitStatusConfiguration `json:"webRequestCommitStatus"`
+
+	// DagCommitStatus contains the configuration for the DagCommitStatus controller,
+	// including WorkQueue settings that control reconciliation behavior.
+	// +optional
+	DagCommitStatus DagCommitStatusConfiguration `json:"dagCommitStatus,omitempty"`
 }
 
 // PromotionStrategyConfiguration defines the configuration for the PromotionStrategy controller.
@@ -167,6 +172,17 @@ type GitCommitStatusConfiguration struct {
 // requests, including requeue intervals, concurrency limits, and rate limiting behavior.
 type WebRequestCommitStatusConfiguration struct {
 	// WorkQueue contains the work queue configuration for the WebRequestCommitStatus controller.
+	// This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.
+	// +required
+	WorkQueue WorkQueue `json:"workQueue"`
+}
+
+// DagCommitStatusConfiguration defines the configuration for the DagCommitStatus controller.
+//
+// This configuration controls how the DagCommitStatus controller processes reconciliation
+// requests, including requeue intervals, concurrency limits, and rate limiting behavior.
+type DagCommitStatusConfiguration struct {
+	// WorkQueue contains the work queue configuration for the DagCommitStatus controller.
 	// This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.
 	// +required
 	WorkQueue WorkQueue `json:"workQueue"`
