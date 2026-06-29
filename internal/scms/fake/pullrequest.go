@@ -31,14 +31,17 @@ var (
 
 	// findOpenCallCount is incremented on every FindOpen call (for tests).
 	findOpenCallCount atomic.Uint64
+	// updateCallCount is incremented on every Update call (for tests).
+	updateCallCount atomic.Uint64
 	// mergeShaMismatchCount is incremented every time Merge is called with a PR
 	// whose Spec.MergeSha does not match origin/<sourceBranch> (for tests).
 	mergeShaMismatchCount atomic.Uint64
 )
 
 type pullRequestProviderState struct {
-	id    string
-	state v1alpha1.PullRequestState
+	createdAt time.Time
+	id        string
+	state     v1alpha1.PullRequestState
 }
 
 // PullRequest implements the scms.PullRequestProvider interface for testing purposes.
@@ -85,8 +88,9 @@ func (pr *PullRequest) Create(ctx context.Context, title, head, base, descriptio
 
 	id = strconv.Itoa(len(pullRequests) + 1)
 	pullRequests[pr.getMapKey(*pullRequestCopy, gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name)] = pullRequestProviderState{
-		id:    id,
-		state: v1alpha1.PullRequestOpen,
+		id:        id,
+		state:     v1alpha1.PullRequestOpen,
+		createdAt: time.Now(),
 	}
 
 	recordFakeSCMCall(ctx, gitRepo, metrics.SCMAPIPullRequest, metrics.SCMOperationCreate, start, scmStatusFromError(nil))
@@ -95,6 +99,7 @@ func (pr *PullRequest) Create(ctx context.Context, title, head, base, descriptio
 
 // Update updates an existing pull request with the specified title and description.
 func (pr *PullRequest) Update(ctx context.Context, title, description string, pullRequest v1alpha1.PullRequest) error {
+	updateCallCount.Add(1)
 	start := time.Now()
 	gitRepo, err := utils.GetGitRepositoryFromObjectKey(ctx, pr.k8sClient, client.ObjectKey{Namespace: pullRequest.Namespace, Name: pullRequest.Spec.RepositoryReference.Name})
 	if err != nil {
@@ -130,9 +135,11 @@ func (pr *PullRequest) Close(ctx context.Context, pullRequest v1alpha1.PullReque
 		recordFakeSCMCall(ctx, gitRepo, metrics.SCMAPIPullRequest, metrics.SCMOperationClose, start, scmStatusFromError(err))
 		return err
 	}
+	prev := pullRequests[prKey]
 	pullRequests[prKey] = pullRequestProviderState{
-		id:    pullRequests[prKey].id,
-		state: v1alpha1.PullRequestClosed,
+		id:        prev.id,
+		state:     v1alpha1.PullRequestClosed,
+		createdAt: prev.createdAt,
 	}
 	recordFakeSCMCall(ctx, gitRepo, metrics.SCMAPIPullRequest, metrics.SCMOperationClose, start, scmStatusFromError(nil))
 	return nil
@@ -234,9 +241,11 @@ func (pr *PullRequest) Merge(ctx context.Context, pullRequest v1alpha1.PullReque
 	if _, ok := pullRequests[prKey]; !ok {
 		return errors.New("pull request not found")
 	}
+	prev := pullRequests[prKey]
 	pullRequests[prKey] = pullRequestProviderState{
-		id:    pullRequests[prKey].id,
-		state: v1alpha1.PullRequestMerged,
+		id:        prev.id,
+		state:     v1alpha1.PullRequestMerged,
+		createdAt: prev.createdAt,
 	}
 	return nil
 }
@@ -246,9 +255,30 @@ func ResetFindOpenCallCount() {
 	findOpenCallCount.Store(0)
 }
 
+// ResetUpdateCallCount resets the test-only counter of Update invocations.
+func ResetUpdateCallCount() {
+	updateCallCount.Store(0)
+}
+
+// ResetPullRequestSCMCallCounts resets both FindOpen and Update test counters.
+func ResetPullRequestSCMCallCounts() {
+	ResetFindOpenCallCount()
+	ResetUpdateCallCount()
+}
+
 // FindOpenCallCount returns how many times FindOpen has been invoked since the last reset.
 func FindOpenCallCount() uint64 {
 	return findOpenCallCount.Load()
+}
+
+// UpdateCallCount returns how many times Update has been invoked since the last reset.
+func UpdateCallCount() uint64 {
+	return updateCallCount.Load()
+}
+
+// PullRequestSCMCallCount returns FindOpen plus Update invocations since the last reset.
+func PullRequestSCMCallCount() uint64 {
+	return FindOpenCallCount() + UpdateCallCount()
 }
 
 // ResetMergeShaMismatchCount resets the test-only counter of Merge calls that hit the
@@ -297,27 +327,30 @@ func (pr *PullRequest) FindOpen(ctx context.Context, pullRequest v1alpha1.PullRe
 	}
 
 	mutexPR.RLock()
-	found, id := pr.findOpen(ctx, pullRequest)
+	found, id, createdAt := pr.findOpen(ctx, pullRequest)
 	mutexPR.RUnlock()
 
 	recordFakeSCMCall(ctx, gitRepo, metrics.SCMAPIPullRequest, metrics.SCMOperationList, start, scmStatusFromError(nil))
-	return found, id, time.Now(), nil
+	return found, id, createdAt, nil
 }
 
-func (pr *PullRequest) findOpen(ctx context.Context, pullRequest v1alpha1.PullRequest) (bool, string) {
+func (pr *PullRequest) findOpen(ctx context.Context, pullRequest v1alpha1.PullRequest) (bool, string, time.Time) {
 	log.FromContext(ctx).Info("Finding open pull request", "pullRequest", pullRequest)
 	if pullRequests == nil {
-		return false, ""
+		return false, "", time.Time{}
 	}
 
 	gitRepo, err := utils.GetGitRepositoryFromObjectKey(ctx, pr.k8sClient, client.ObjectKey{Namespace: pullRequest.Namespace, Name: pullRequest.Spec.RepositoryReference.Name})
 	if err != nil {
 		log.FromContext(ctx).Error(err, "failed to get GitRepository")
-		return false, ""
+		return false, "", time.Time{}
 	}
 
 	pullRequestState, ok := pullRequests[pr.getMapKey(pullRequest, gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name)]
-	return ok && pullRequestState.state == v1alpha1.PullRequestOpen, pullRequestState.id
+	if !ok || pullRequestState.state != v1alpha1.PullRequestOpen {
+		return false, "", time.Time{}
+	}
+	return true, pullRequestState.id, pullRequestState.createdAt
 }
 
 func (pr *PullRequest) getMapKey(pullRequest v1alpha1.PullRequest, owner, name string) string {
