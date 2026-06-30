@@ -41,8 +41,8 @@ Specs run **serially** (`Serial`) because they share one in-process gitkit serve
 | `single_env_no_gates` | `collects git CLI metrics for single_env_no_gates` | dev only | none | Minimal CTP baseline |
 | `three_env_no_gates` | `collects git CLI metrics for three_env_no_gates` | dev → staging → prod | none | Multi-env promotion without gates |
 | `full_gate_stack_three_env` | `collects git CLI metrics for full_gate_stack_three_env` | dev → staging → prod | all types | Flagship integration (full promotion) |
-| `full_gate_three_env_open_prs_soak` | `collects git CLI metrics for full_gate_three_env_open_prs_soak` | dev → staging → prod | all types | Full gate stack; **3 open PRs**; fixed soak (default **5m**) with **15s** requeue |
-| `full_gate_three_env_closed_prs_soak` | `collects git CLI metrics for full_gate_three_env_closed_prs_soak` | dev → staging → prod | all types | Full gate stack; **no PRs** (no promotion push); fixed soak (default **5m**) with **15s** requeue |
+| `full_gate_three_env_open_prs_soak_15s_requeue` | `collects git CLI metrics for full_gate_three_env_open_prs_soak_15s_requeue` | dev → staging → prod | all types | Full gate stack; **3 open PRs**; fixed soak (default **5m**) with **15s** requeue |
+| `full_gate_three_env_closed_prs_soak_15s_requeue` | `collects git CLI metrics for full_gate_three_env_closed_prs_soak_15s_requeue` | dev → staging → prod | all types | Full gate stack; **no PRs** (no promotion push); fixed soak (default **5m**) with **15s** requeue |
 | `full_gate_three_env_open_prs_soak_60m_requeue` | `collects git CLI metrics for full_gate_three_env_open_prs_soak_60m_requeue` | dev → staging → prod | all types | Same as open PR soak but **60m** requeue (event-driven during soak; matches suite default) |
 | `full_gate_three_env_closed_prs_soak_60m_requeue` | `collects git CLI metrics for full_gate_three_env_closed_prs_soak_60m_requeue` | dev → staging → prod | all types | Same as closed PR soak but **60m** requeue |
 
@@ -86,7 +86,7 @@ Phase snapshots store **cumulative deltas since `gitBefore`**, not increments be
 make test-api-call-metrics
 ```
 
-Each subprocess gets its own git port (`5101`–`5107`) and webhook port (`3401`–`3407`) via `PROMOTER_API_METRICS_GIT_PORT` / `PROMOTER_API_METRICS_WEBHOOK_PORT` (read by both the apicallmetrics gitkit server and `internal/scms/fake` clone URLs). Ginkgo `--focus` uses a `$` suffix so `open_prs_soak` does not also run `open_prs_soak_60m_requeue`.
+Each subprocess gets its own git port (`5101`–`5107`) and webhook port (`3401`–`3407`) via `PROMOTER_API_METRICS_GIT_PORT` / `PROMOTER_API_METRICS_WEBHOOK_PORT` (read by both the apicallmetrics gitkit server and `internal/scms/fake` clone URLs). Ginkgo `--focus` uses a `$` suffix so `open_prs_soak_15s_requeue` does not also run `open_prs_soak_60m_requeue`.
 
 Per-scenario logs: `/tmp/api-metrics-test.d/<scenario>.log`. Combined log: `/tmp/api-metrics-test.log`.
 
@@ -163,7 +163,7 @@ ArgoCDCommitStatus also enforces a fixed **5s** post-`LastTransitionTime` thresh
 
 These specs use the **full gate stack** but do **not** complete promotion. They establish a PR posture across all three environments, then sleep for a fixed soak window.
 
-**15s requeue variants** (`*_open_prs_soak`, `*_closed_prs_soak`) patch `ControllerConfiguration` to **15s** requeue for that spec only (restored afterward) so controllers poll aggressively during soak.
+**15s requeue variants** (`*_15s_requeue`) patch `ControllerConfiguration` to **15s** requeue for that spec only (restored afterward) so controllers poll aggressively during soak.
 
 **60m requeue variants** (`*_60m_requeue`) keep the suite default **60m** requeue — no CC patch — so soak traffic is mostly event-driven (webhooks, watches, gate CR updates) rather than periodic timer requeues.
 
@@ -180,12 +180,14 @@ These specs use the **full gate stack** but do **not** complete promotion. They 
 
 **No PRs (closed soak):** same full gate stack but **no** `makeChangeAndHydrateRepo` push — CTP proposed/active dry SHAs stay in sync so PullRequest CRs are never created and the SCM never sees open/close PR traffic during soak.
 
+**Soak phase snapshots** (when `PhaseSnapshots` is true): `soak_start` is recorded after PR posture is established (right before the sleep); `soak_end` is recorded after the sleep completes. Both are cumulative from scenario start — subtract `soak_start` from `soak_end` to measure traffic during the soak window only.
+
 Quick local run:
 
 ```bash
 PROMOTER_API_METRICS_SOAK_DURATION=30s \
 PROMOTER_API_METRICS_SOAK_REQUEUE=15s \
-  go tool ginkgo -v --timeout 15m --focus=full_gate_three_env_open_prs_soak ./internal/controller/apicallmetrics/
+  go tool ginkgo -v --timeout 15m --focus=full_gate_three_env_open_prs_soak_15s_requeue ./internal/controller/apicallmetrics/
 ```
 
 ### Timeouts

@@ -183,8 +183,8 @@ API_CALL_METRICS_SCENARIOS := \
 	single_env_no_gates \
 	three_env_no_gates \
 	full_gate_stack_three_env \
-	full_gate_three_env_open_prs_soak \
-	full_gate_three_env_closed_prs_soak \
+	full_gate_three_env_open_prs_soak_15s_requeue \
+	full_gate_three_env_closed_prs_soak_15s_requeue \
 	full_gate_three_env_open_prs_soak_60m_requeue \
 	full_gate_three_env_closed_prs_soak_60m_requeue
 

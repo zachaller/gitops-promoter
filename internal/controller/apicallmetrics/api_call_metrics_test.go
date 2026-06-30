@@ -146,13 +146,16 @@ var _ = Describe("APICallMetrics", Serial, func() {
 		waitCTPsReady(ctx, psName, scenario.EnvironmentCount, promotionWaitTimeout)
 
 		if scenario.SoakDuration > 0 {
+			var snap func(string)
 			if scenario.PhaseSnapshots {
-				collector.addPhase("soak_start",
-					gitOperationDelta(gitBefore, gitOperationSnapshot(gitRepo)),
-					scmCallDelta(scmBefore, scmCallSnapshot(gitRepo)),
-				)
+				snap = func(phase string) {
+					collector.addPhase(phase,
+						gitOperationDelta(gitBefore, gitOperationSnapshot(gitRepo)),
+						scmCallDelta(scmBefore, scmCallSnapshot(gitRepo)),
+					)
+				}
 			}
-			runSoakPhase(ctx, psName, scenario, promotionWaitTimeout)
+			runSoakPhase(ctx, psName, scenario, promotionWaitTimeout, snap)
 		} else if scenario.FullGateStack {
 			waitProposedGatesSuccess(ctx, promotionWaitTimeout,
 				[]*promoterv1alpha1.GitCommitStatus{devGCS},
@@ -235,12 +238,12 @@ var _ = Describe("APICallMetrics", Serial, func() {
 		runScenario(scenario)
 	}, SpecTimeout(scenarioSpecTimeout(defaultFullGateScenario())))
 
-	It("collects git CLI metrics for full_gate_three_env_open_prs_soak", func(_ context.Context) {
+	It("collects git CLI metrics for full_gate_three_env_open_prs_soak_15s_requeue", func(_ context.Context) {
 		scenario := defaultFullGateOpenPRsSoakScenario()
 		runScenario(scenario)
 	}, SpecTimeout(soakSpecTimeout(defaultFullGateOpenPRsSoakScenario().SoakDuration)))
 
-	It("collects git CLI metrics for full_gate_three_env_closed_prs_soak", func(_ context.Context) {
+	It("collects git CLI metrics for full_gate_three_env_closed_prs_soak_15s_requeue", func(_ context.Context) {
 		scenario := defaultFullGateClosedPRsSoakScenario()
 		runScenario(scenario)
 	}, SpecTimeout(soakSpecTimeout(defaultFullGateClosedPRsSoakScenario().SoakDuration)))

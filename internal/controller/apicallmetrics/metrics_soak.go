@@ -66,7 +66,7 @@ func soakSpecTimeout(soak time.Duration) time.Duration {
 
 func defaultFullGateOpenPRsSoakScenario() APICallMetricsScenario {
 	return APICallMetricsScenario{
-		Name:                     "full_gate_three_env_open_prs_soak",
+		Name:                     "full_gate_three_env_open_prs_soak_15s_requeue",
 		EnvironmentCount:         3,
 		RequeueDuration:          soakRequeueDurationFromEnv(),
 		SoakDuration:             soakDurationFromEnv(),
@@ -82,7 +82,7 @@ func defaultFullGateOpenPRsSoakScenario() APICallMetricsScenario {
 
 func defaultFullGateClosedPRsSoakScenario() APICallMetricsScenario {
 	s := defaultFullGateOpenPRsSoakScenario()
-	s.Name = "full_gate_three_env_closed_prs_soak"
+	s.Name = "full_gate_three_env_closed_prs_soak_15s_requeue"
 	s.PRPosture = prPostureClosed
 	// No dry→hydrated promotion push: CTPs stay in sync so no PullRequest CRs are created.
 	s.TriggerChange = false
@@ -178,12 +178,18 @@ func pullRequestForCTP(ctx context.Context, g Gomega, psName, psLabel, branch st
 	return &list.Items[0]
 }
 
-func runSoakPhase(ctx context.Context, psName string, scenario APICallMetricsScenario, promotionWaitTimeout time.Duration) {
+func runSoakPhase(ctx context.Context, psName string, scenario APICallMetricsScenario, promotionWaitTimeout time.Duration, snap func(phase string)) {
 	establishPRPosture(ctx, psName, scenario.PRPosture, scenario.EnvironmentCount, promotionWaitTimeout)
 	GinkgoLogr.Info("PR posture ready for soak",
 		"posture", scenario.PRPosture,
 		"soak_duration", scenario.SoakDuration,
 		"requeue_duration", scenario.RequeueDuration,
 	)
+	if snap != nil {
+		snap("soak_start")
+	}
 	time.Sleep(scenario.SoakDuration)
+	if snap != nil {
+		snap("soak_end")
+	}
 }
