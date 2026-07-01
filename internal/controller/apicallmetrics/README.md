@@ -170,6 +170,7 @@ These specs use the **full gate stack** but do **not** complete promotion. They 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PROMOTER_API_METRICS_SOAK_DURATION` | `5m` | Wall-clock soak after PR posture is ready |
+| `PROMOTER_API_METRICS_SOAK_SETTLE` | `5s` | Pause after PR posture is ready and before `soak_start` is snapshotted, so in-flight gate/PR reconciles can finish without counting toward the soak window |
 | `PROMOTER_API_METRICS_SOAK_REQUEUE` | `15s` | Per-spec `requeueDuration` for **15s requeue soak specs only** |
 | `PROMOTER_API_METRICS_SOAK_TCS_DURATION` | `30m` | Timed gate duration during soak (longer than soak so timers stay pending) |
 | `PROMOTER_API_METRICS_SOAK_TCS_DURATION_DEV` | inherits global | Per-env override |
@@ -180,7 +181,7 @@ These specs use the **full gate stack** but do **not** complete promotion. They 
 
 **No PRs (closed soak):** same full gate stack but **no** `makeChangeAndHydrateRepo` push — CTP proposed/active dry SHAs stay in sync so PullRequest CRs are never created and the SCM never sees open/close PR traffic during soak.
 
-**Soak phase snapshots** (when `PhaseSnapshots` is true): `soak_start` is recorded after PR posture is established (right before the sleep); `soak_end` is recorded after the sleep completes. Both are cumulative from scenario start — subtract `soak_start` from `soak_end` to measure traffic during the soak window only.
+**Soak phase snapshots** (when `PhaseSnapshots` is true): after PR posture is established the runner waits `PROMOTER_API_METRICS_SOAK_SETTLE` (default `5s`) so setup tail traffic (gate CommitStatus pushes, PR metadata sync) can drain; `soak_start` is recorded after that settle pause and immediately before the soak sleep; `soak_end` is recorded after the soak sleep completes. Both snapshots are cumulative from scenario start — subtract `soak_start` from `soak_end` to measure traffic during the soak window only.
 
 Quick local run:
 
