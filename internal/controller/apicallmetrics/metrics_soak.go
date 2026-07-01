@@ -39,6 +39,10 @@ const (
 	defaultSoakRequeueDuration     = 15 * time.Second
 	defaultSoakLongRequeueDuration = 60 * time.Minute
 	defaultSoakDuration            = 5 * time.Minute
+	// Wall-clock pause after PR posture is established and before soak_start is
+	// snapshotted, so in-flight gate/PR reconciles can finish without counting
+	// toward the soak window.
+	defaultSoakSettleDuration = 5 * time.Second
 	// Longer than default soak so timed gates stay pending for the whole soak window.
 	defaultSoakTCSGateDuration = 30 * time.Minute
 )
@@ -51,6 +55,10 @@ func soakDurationFromEnv() time.Duration {
 	return durationFromEnv("PROMOTER_API_METRICS_SOAK_DURATION", defaultSoakDuration)
 }
 
+func soakSettleDurationFromEnv() time.Duration {
+	return durationFromEnv("PROMOTER_API_METRICS_SOAK_SETTLE", defaultSoakSettleDuration)
+}
+
 func loadSoakTimedGateByBranchFromEnv() map[string]time.Duration {
 	defaultDur := durationFromEnv("PROMOTER_API_METRICS_SOAK_TCS_DURATION", defaultSoakTCSGateDuration)
 	return map[string]time.Duration{
@@ -61,7 +69,7 @@ func loadSoakTimedGateByBranchFromEnv() map[string]time.Duration {
 }
 
 func soakSpecTimeout(soak time.Duration) time.Duration {
-	return soak + constants.EventuallyTimeout*2 + 5*time.Minute
+	return soak + soakSettleDurationFromEnv() + constants.EventuallyTimeout*2 + 5*time.Minute
 }
 
 func defaultFullGateOpenPRsSoakScenario() APICallMetricsScenario {
@@ -180,11 +188,16 @@ func pullRequestForCTP(ctx context.Context, g Gomega, psName, psLabel, branch st
 
 func runSoakPhase(ctx context.Context, psName string, scenario APICallMetricsScenario, promotionWaitTimeout time.Duration, snap func(phase string)) {
 	establishPRPosture(ctx, psName, scenario.PRPosture, scenario.EnvironmentCount, promotionWaitTimeout)
+	settle := soakSettleDurationFromEnv()
 	GinkgoLogr.Info("PR posture ready for soak",
 		"posture", scenario.PRPosture,
 		"soak_duration", scenario.SoakDuration,
+		"soak_settle_duration", settle,
 		"requeue_duration", scenario.RequeueDuration,
 	)
+	if settle > 0 {
+		time.Sleep(settle)
+	}
 	if snap != nil {
 		snap("soak_start")
 	}

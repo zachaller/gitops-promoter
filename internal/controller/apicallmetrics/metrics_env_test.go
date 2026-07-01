@@ -85,6 +85,13 @@ func TestSoakDurationFromEnv_default(t *testing.T) {
 	}
 }
 
+func TestSoakSettleDurationFromEnv_default(t *testing.T) {
+	t.Setenv("PROMOTER_API_METRICS_SOAK_SETTLE", "")
+	if got := soakSettleDurationFromEnv(); got != defaultSoakSettleDuration {
+		t.Fatalf("soakSettleDurationFromEnv() = %v, want %v", got, defaultSoakSettleDuration)
+	}
+}
+
 func TestSoakRequeueFromEnv_default(t *testing.T) {
 	t.Setenv("PROMOTER_API_METRICS_SOAK_REQUEUE", "")
 	if got := soakRequeueDurationFromEnv(); got != defaultSoakRequeueDuration {
@@ -93,9 +100,10 @@ func TestSoakRequeueFromEnv_default(t *testing.T) {
 }
 
 func TestSoakSpecTimeout(t *testing.T) {
+	t.Setenv("PROMOTER_API_METRICS_SOAK_SETTLE", "")
 	soak := 5 * time.Minute
 	got := soakSpecTimeout(soak)
-	want := soak + 2*constants.EventuallyTimeout + 5*time.Minute
+	want := soak + defaultSoakSettleDuration + 2*constants.EventuallyTimeout + 5*time.Minute
 	if got != want {
 		t.Fatalf("soakSpecTimeout() = %v, want %v", got, want)
 	}
