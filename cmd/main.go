@@ -31,6 +31,7 @@ import (
 
 	viewv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/view/v1alpha1"
 	"github.com/argoproj-labs/gitops-promoter/cmd/demo"
+	"github.com/argoproj-labs/gitops-promoter/cmd/loadtest"
 	"github.com/argoproj-labs/gitops-promoter/internal/apiserver"
 	"github.com/argoproj-labs/gitops-promoter/internal/controller"
 	"github.com/argoproj-labs/gitops-promoter/internal/metrics"
@@ -510,6 +511,7 @@ func newCommand() *cobra.Command {
 	cmd.AddCommand(newDashboardCommand(clientConfig))
 	cmd.AddCommand(newAPIServerCommand(clientConfig))
 	cmd.AddCommand(demo.NewDemoCommand())
+	cmd.AddCommand(loadtest.NewLoadTestCommand(clientConfig))
 	return cmd
 }
 

@@ -3,12 +3,9 @@ package demo
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/fatih/color"
-	"github.com/google/go-github/v88/github"
 	"github.com/spf13/cobra"
-	"golang.org/x/oauth2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -57,19 +54,10 @@ func NewDemoCommand() *cobra.Command {
 				return fmt.Errorf("failed to prompt for credentials: %w", err)
 			}
 
-			ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: credentials.Token})
-			tc := oauth2.NewClient(ctx, ts)
-			client, err := github.NewClient(github.WithHTTPClient(tc))
+			client, username, err := NewGitHubClient(ctx, credentials.Token)
 			if err != nil {
 				return fmt.Errorf("failed to create GitHub client: %w", err)
 			}
-
-			// Get current user
-			user, _, err := client.Users.Get(ctx, "")
-			if err != nil {
-				return fmt.Errorf("failed to get current user: %w", err)
-			}
-			username := user.GetLogin()
 			color.Green("Current github user: %s\n", username)
 
 			if err := installer.SetupCluster(ctx); err != nil {
@@ -78,22 +66,9 @@ func NewDemoCommand() *cobra.Command {
 
 			// 3. Create the repository
 			color.Green("Creating repository %s/%s...\n", username, repoName)
-			repo, _, err := client.Repositories.Create(ctx, "", &github.Repository{
-				Name:        new(repoName),
-				Description: new("GitOps Promoter demo repository"),
-				Private:     new(true),
-				AutoInit:    new(true), // Creates with README
-			})
+			repo, err := CreateOrGetRepository(ctx, client, username, repoName)
 			if err != nil {
-				// Check if repo already exists
-				if !strings.Contains(err.Error(), "already exists") {
-					return fmt.Errorf("failed to create repository: %w", err)
-				}
-				setupLog.Info("Repository already exists, fetching...")
-				repo, _, err = client.Repositories.Get(ctx, username, repoName)
-				if err != nil {
-					return fmt.Errorf("failed to get existing repository: %w", err)
-				}
+				return err
 			}
 
 			color.Green("Repository available at: %s\n", repo.GetHTMLURL())
