@@ -257,6 +257,16 @@ var _ = Describe("APICallMetrics", Serial, func() {
 		scenario := defaultFullGateClosedPRsSoak60mRequeueScenario()
 		runScenario(scenario)
 	}, SpecTimeout(soakSpecTimeout(defaultFullGateClosedPRsSoak60mRequeueScenario().SoakDuration)))
+
+	It("collects git CLI metrics for full_gate_three_env_open_prs_soak_60m_requeue_10m", func(_ context.Context) {
+		scenario := defaultFullGateOpenPRsSoak60mRequeue10mScenario()
+		runScenario(scenario)
+	}, SpecTimeout(soakSpecTimeout(defaultFullGateOpenPRsSoak60mRequeue10mScenario().SoakDuration)))
+
+	It("collects git CLI metrics for full_gate_three_env_closed_prs_soak_60m_requeue_10m", func(_ context.Context) {
+		scenario := defaultFullGateClosedPRsSoak60mRequeue10mScenario()
+		runScenario(scenario)
+	}, SpecTimeout(soakSpecTimeout(defaultFullGateClosedPRsSoak60mRequeue10mScenario().SoakDuration)))
 })
 
 func proposedGatesForEnv(branch string, dev, staging, prod *promoterv1alpha1.GitCommitStatus) []*promoterv1alpha1.GitCommitStatus {

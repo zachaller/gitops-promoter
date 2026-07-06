@@ -39,6 +39,7 @@ const (
 	defaultSoakRequeueDuration     = 15 * time.Second
 	defaultSoakLongRequeueDuration = 60 * time.Minute
 	defaultSoakDuration            = 5 * time.Minute
+	defaultSoakDurationLong        = 10 * time.Minute
 	// Wall-clock pause after PR posture is established and before soak_start is
 	// snapshotted, so in-flight gate/PR reconciles can finish without counting
 	// toward the soak window.
@@ -108,6 +109,20 @@ func defaultFullGateClosedPRsSoak60mRequeueScenario() APICallMetricsScenario {
 	s := defaultFullGateClosedPRsSoakScenario()
 	s.Name = "full_gate_three_env_closed_prs_soak_60m_requeue"
 	s.RequeueDuration = defaultSoakLongRequeueDuration
+	return s
+}
+
+func defaultFullGateOpenPRsSoak60mRequeue10mScenario() APICallMetricsScenario {
+	s := defaultFullGateOpenPRsSoak60mRequeueScenario()
+	s.Name = "full_gate_three_env_open_prs_soak_60m_requeue_10m"
+	s.SoakDuration = defaultSoakDurationLong
+	return s
+}
+
+func defaultFullGateClosedPRsSoak60mRequeue10mScenario() APICallMetricsScenario {
+	s := defaultFullGateClosedPRsSoak60mRequeueScenario()
+	s.Name = "full_gate_three_env_closed_prs_soak_60m_requeue_10m"
+	s.SoakDuration = defaultSoakDurationLong
 	return s
 }
 

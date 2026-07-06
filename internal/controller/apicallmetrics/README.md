@@ -43,8 +43,10 @@ Specs run **serially** (`Serial`) because they share one in-process gitkit serve
 | `full_gate_stack_three_env` | `collects git CLI metrics for full_gate_stack_three_env` | dev → staging → prod | all types | Flagship integration (full promotion) |
 | `full_gate_three_env_open_prs_soak_15s_requeue` | `collects git CLI metrics for full_gate_three_env_open_prs_soak_15s_requeue` | dev → staging → prod | all types | Full gate stack; **3 open PRs**; fixed soak (default **5m**) with **15s** requeue |
 | `full_gate_three_env_closed_prs_soak_15s_requeue` | `collects git CLI metrics for full_gate_three_env_closed_prs_soak_15s_requeue` | dev → staging → prod | all types | Full gate stack; **no PRs** (no promotion push); fixed soak (default **5m**) with **15s** requeue |
-| `full_gate_three_env_open_prs_soak_60m_requeue` | `collects git CLI metrics for full_gate_three_env_open_prs_soak_60m_requeue` | dev → staging → prod | all types | Same as open PR soak but **60m** requeue (event-driven during soak; matches suite default) |
-| `full_gate_three_env_closed_prs_soak_60m_requeue` | `collects git CLI metrics for full_gate_three_env_closed_prs_soak_60m_requeue` | dev → staging → prod | all types | Same as closed PR soak but **60m** requeue |
+| `full_gate_three_env_open_prs_soak_60m_requeue` | `collects git CLI metrics for full_gate_three_env_open_prs_soak_60m_requeue` | dev → staging → prod | all types | Same as open PR soak but **60m** requeue (event-driven during soak; matches suite default); **5m** soak window |
+| `full_gate_three_env_closed_prs_soak_60m_requeue` | `collects git CLI metrics for full_gate_three_env_closed_prs_soak_60m_requeue` | dev → staging → prod | all types | Same as closed PR soak but **60m** requeue; **5m** soak window |
+| `full_gate_three_env_open_prs_soak_60m_requeue_10m` | `collects git CLI metrics for full_gate_three_env_open_prs_soak_60m_requeue_10m` | dev → staging → prod | all types | Same as open PR **60m** requeue soak but **10m** soak window (fixed; ignores `PROMOTER_API_METRICS_SOAK_DURATION`) |
+| `full_gate_three_env_closed_prs_soak_60m_requeue_10m` | `collects git CLI metrics for full_gate_three_env_closed_prs_soak_60m_requeue_10m` | dev → staging → prod | all types | Same as closed PR **60m** requeue soak but **10m** soak window |
 
 ### `full_gate_stack_three_env` (flagship)
 
@@ -86,7 +88,7 @@ Phase snapshots store **cumulative deltas since `gitBefore`**, not increments be
 make test-api-call-metrics
 ```
 
-Each subprocess gets its own git port (`5101`–`5107`) and webhook port (`3401`–`3407`) via `PROMOTER_API_METRICS_GIT_PORT` / `PROMOTER_API_METRICS_WEBHOOK_PORT` (read by both the apicallmetrics gitkit server and `internal/scms/fake` clone URLs). Ginkgo `--focus` uses a `$` suffix so `open_prs_soak_15s_requeue` does not also run `open_prs_soak_60m_requeue`.
+Each subprocess gets its own git port (`5101`–`5109`) and webhook port (`3401`–`3409`) via `PROMOTER_API_METRICS_GIT_PORT` / `PROMOTER_API_METRICS_WEBHOOK_PORT` (read by both the apicallmetrics gitkit server and `internal/scms/fake` clone URLs). Ginkgo `--focus` uses a `$` suffix so `open_prs_soak_60m_requeue` does not also run `open_prs_soak_60m_requeue_10m` or `open_prs_soak_15s_requeue`.
 
 Per-scenario logs: `/tmp/api-metrics-test.d/<scenario>.log`. Combined log: `/tmp/api-metrics-test.log`.
 
@@ -196,7 +198,7 @@ PROMOTER_API_METRICS_SOAK_REQUEUE=15s \
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PROMOTER_API_METRICS_WAIT_TIMEOUT` | auto (~23m with 5m TCS) | `Eventually` timeout for full-gate wait helpers |
-| `PROMOTER_API_METRICS_GINKGO_TIMEOUT` | `45m` | Ginkgo `--timeout` for the whole suite (`make test-api-call-metrics` passes this through; 7 specs with two 5m soaks) |
+| `PROMOTER_API_METRICS_GINKGO_TIMEOUT` | `55m` | Ginkgo `--timeout` for the whole suite (`make test-api-call-metrics` passes this through; 9 specs including two 5m and two 10m soaks) |
 
 Baseline scenarios (`single_env_no_gates`, `three_env_no_gates`) use the standard controller `EventuallyTimeout` (90s).
 

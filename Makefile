@@ -186,14 +186,16 @@ API_CALL_METRICS_SCENARIOS := \
 	full_gate_three_env_open_prs_soak_15s_requeue \
 	full_gate_three_env_closed_prs_soak_15s_requeue \
 	full_gate_three_env_open_prs_soak_60m_requeue \
-	full_gate_three_env_closed_prs_soak_60m_requeue
+	full_gate_three_env_closed_prs_soak_60m_requeue \
+	full_gate_three_env_open_prs_soak_60m_requeue_10m \
+	full_gate_three_env_closed_prs_soak_60m_requeue_10m
 
 API_CALL_METRICS_LOG_DIR := /tmp/api-metrics-test.d
 
 .PHONY: test-api-call-metrics-serial
 test-api-call-metrics-serial: test-deps ## Run API call metrics Ginkgo suite serially (one process, all specs)
 	@PROMOTER_API_METRICS_REQUEUE=$${PROMOTER_API_METRICS_REQUEUE:-60m}; \
-	PROMOTER_API_METRICS_GINKGO_TIMEOUT=$${PROMOTER_API_METRICS_GINKGO_TIMEOUT:-45m}; \
+	PROMOTER_API_METRICS_GINKGO_TIMEOUT=$${PROMOTER_API_METRICS_GINKGO_TIMEOUT:-55m}; \
 	KUBEBUILDER_ASSETS="$$(./bin/setup-envtest-release-0.24 use 1.31.0 --bin-dir $$PWD/bin -p path)"; \
 	go tool ginkgo -v --timeout $$PROMOTER_API_METRICS_GINKGO_TIMEOUT ./internal/controller/apicallmetrics/ \
 	> /tmp/api-metrics-test.log 2>&1; \
@@ -207,7 +209,7 @@ test-api-call-metrics-serial: test-deps ## Run API call metrics Ginkgo suite ser
 test-api-call-metrics: test-deps ## Run API call metrics scenarios in parallel (one ginkgo process each); combined summary
 	@rm -rf $(API_CALL_METRICS_LOG_DIR); mkdir -p $(API_CALL_METRICS_LOG_DIR); \
 	PROMOTER_API_METRICS_REQUEUE=$${PROMOTER_API_METRICS_REQUEUE:-60m}; \
-	PROMOTER_API_METRICS_GINKGO_TIMEOUT=$${PROMOTER_API_METRICS_GINKGO_TIMEOUT:-45m}; \
+	PROMOTER_API_METRICS_GINKGO_TIMEOUT=$${PROMOTER_API_METRICS_GINKGO_TIMEOUT:-55m}; \
 	export PROMOTER_API_METRICS_REQUEUE PROMOTER_API_METRICS_GINKGO_TIMEOUT; \
 	KUBEBUILDER_ASSETS="$$(./bin/setup-envtest-release-0.24 use 1.31.0 --bin-dir $$PWD/bin -p path)"; \
 	export KUBEBUILDER_ASSETS; \

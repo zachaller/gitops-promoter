@@ -124,6 +124,9 @@ func TestDefaultFullGateSoak60mRequeueScenarios(t *testing.T) {
 	if open.RequeueDuration != defaultSoakLongRequeueDuration {
 		t.Fatalf("open 60m soak requeue = %v, want %v", open.RequeueDuration, defaultSoakLongRequeueDuration)
 	}
+	if open.SoakDuration != defaultSoakDuration {
+		t.Fatalf("open 60m soak duration = %v, want %v", open.SoakDuration, defaultSoakDuration)
+	}
 	if open.PRPosture != prPostureOpen || !open.TriggerChange {
 		t.Fatal("open 60m soak must match open PR soak posture and trigger change")
 	}
@@ -132,7 +135,26 @@ func TestDefaultFullGateSoak60mRequeueScenarios(t *testing.T) {
 	if closed.RequeueDuration != defaultSoakLongRequeueDuration {
 		t.Fatalf("closed 60m soak requeue = %v, want %v", closed.RequeueDuration, defaultSoakLongRequeueDuration)
 	}
+	if closed.SoakDuration != defaultSoakDuration {
+		t.Fatalf("closed 60m soak duration = %v, want %v", closed.SoakDuration, defaultSoakDuration)
+	}
 	if closed.PRPosture != prPostureClosed || closed.TriggerChange {
 		t.Fatal("closed 60m soak must match closed PR soak posture and not trigger change")
+	}
+
+	open10m := defaultFullGateOpenPRsSoak60mRequeue10mScenario()
+	if open10m.SoakDuration != defaultSoakDurationLong {
+		t.Fatalf("open 60m 10m soak duration = %v, want %v", open10m.SoakDuration, defaultSoakDurationLong)
+	}
+	if open10m.RequeueDuration != defaultSoakLongRequeueDuration {
+		t.Fatalf("open 60m 10m soak requeue = %v, want %v", open10m.RequeueDuration, defaultSoakLongRequeueDuration)
+	}
+
+	closed10m := defaultFullGateClosedPRsSoak60mRequeue10mScenario()
+	if closed10m.SoakDuration != defaultSoakDurationLong {
+		t.Fatalf("closed 60m 10m soak duration = %v, want %v", closed10m.SoakDuration, defaultSoakDurationLong)
+	}
+	if closed10m.RequeueDuration != defaultSoakLongRequeueDuration {
+		t.Fatalf("closed 60m 10m soak requeue = %v, want %v", closed10m.RequeueDuration, defaultSoakLongRequeueDuration)
 	}
 }
