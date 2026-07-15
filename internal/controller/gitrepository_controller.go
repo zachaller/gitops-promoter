@@ -64,7 +64,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	var gitRepo promoterv1alpha1.GitRepository
 	// This function applies the resource status via Server-Side Apply at the end of the reconciliation. Don't write status manually.
 	var previousReady *metav1.Condition
-	defer utils.HandleReconciliationResult(ctx, startTime, &gitRepo, r.Client, r.Recorder, constants.GitRepositoryControllerFieldOwner, &result, &err, &previousReady, r.SettingsMgr.StartupInstanceID())
+	defer utils.HandleReconciliationResult(ctx, startTime, &gitRepo, r.Client, r.Recorder, constants.GitRepositoryControllerFieldOwner, &result, &err, &previousReady)
 
 	if err := r.Get(ctx, req.NamespacedName, &gitRepo); err != nil {
 		if k8serrors.IsNotFound(err) {

@@ -45,13 +45,13 @@ func CommitStatusGateLabelKeyForParent(parent client.Object) string {
 
 // CommitStatusStandardLabels returns the labels gate controllers set on each CommitStatus:
 // parent gate, environment branch, commit-status key (spec.key), and promoter.argoproj.io/instance-id
-// when instanceID (the controller's startup instance ID, settings.Manager.StartupInstanceID) is non-nil.
-func CommitStatusStandardLabels(parent client.Object, branch, commitStatusKey string, instanceID *string) map[string]string {
+// when the process-wide startup instance ID (settings.StartupInstanceID) is non-nil.
+func CommitStatusStandardLabels(parent client.Object, branch, commitStatusKey string) map[string]string {
 	return StampInstanceIDLabel(map[string]string{
 		CommitStatusGateLabelKeyForParent(parent): KubeSafeLabel(parent.GetName()),
 		promoterv1alpha1.EnvironmentLabel:         KubeSafeLabel(branch),
 		promoterv1alpha1.CommitStatusLabel:        commitStatusKey,
-	}, instanceID)
+	})
 }
 
 func pascalCaseNeedsDashBefore(s string, i int) bool {

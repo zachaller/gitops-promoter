@@ -98,7 +98,7 @@ func (r *PromotionStrategyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if skipStatusWrite {
 			return
 		}
-		utils.HandleReconciliationResult(ctx, startTime, &ps, r.Client, r.Recorder, constants.PromotionStrategyControllerFieldOwner, &result, &err, &previousReady, r.SettingsMgr.StartupInstanceID())
+		utils.HandleReconciliationResult(ctx, startTime, &ps, r.Client, r.Recorder, constants.PromotionStrategyControllerFieldOwner, &result, &err, &previousReady)
 	}()
 
 	err = r.Get(ctx, req.NamespacedName, &ps, &client.GetOptions{})
@@ -281,7 +281,7 @@ func (r *PromotionStrategyReconciler) upsertChangeTransferPolicy(ctx context.Con
 	ctpLabels := utils.StampInstanceIDLabel(map[string]string{
 		promoterv1alpha1.PromotionStrategyLabel: utils.KubeSafeLabel(ps.Name),
 		promoterv1alpha1.EnvironmentLabel:       utils.KubeSafeLabel(environment.Branch),
-	}, r.SettingsMgr.StartupInstanceID())
+	})
 	ctpApply := acv1alpha1.ChangeTransferPolicy(ctpName, ps.Namespace).
 		WithLabels(ctpLabels).
 		WithOwnerReferences(acmetav1.OwnerReference().
@@ -623,7 +623,7 @@ func (r *PromotionStrategyReconciler) createOrUpdatePreviousEnvironmentCommitSta
 	// Build the apply configuration
 	commitStatusLabels := utils.StampInstanceIDLabel(map[string]string{
 		promoterv1alpha1.CommitStatusLabel: promoterv1alpha1.PreviousEnvironmentCommitStatusKey,
-	}, r.SettingsMgr.StartupInstanceID())
+	})
 	commitStatusApply := acv1alpha1.CommitStatus(csName, ctp.Namespace).
 		WithLabels(commitStatusLabels).
 		WithAnnotations(map[string]string{

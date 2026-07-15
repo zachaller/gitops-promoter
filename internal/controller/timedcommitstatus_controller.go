@@ -75,7 +75,7 @@ func (r *TimedCommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	var tcs promoterv1alpha1.TimedCommitStatus
 	// This function applies the resource status via Server-Side Apply at the end of the reconciliation. Don't write status manually.
 	var previousReady *metav1.Condition
-	defer utils.HandleReconciliationResult(ctx, startTime, &tcs, r.Client, r.Recorder, constants.TimedCommitStatusControllerFieldOwner, &result, &err, &previousReady, r.SettingsMgr.StartupInstanceID())
+	defer utils.HandleReconciliationResult(ctx, startTime, &tcs, r.Client, r.Recorder, constants.TimedCommitStatusControllerFieldOwner, &result, &err, &previousReady)
 
 	// 1. Fetch the TimedCommitStatus instance
 	err = r.Get(ctx, req.NamespacedName, &tcs, &client.GetOptions{})
@@ -293,7 +293,7 @@ func (r *TimedCommitStatusReconciler) upsertCommitStatus(ctx context.Context, tc
 	key := tcs.Spec.CommitStatusKey() //nolint:staticcheck // SA1019: #1465 use spec.Key directly in v1.0
 
 	// Build the apply configuration
-	commitStatusLabels := utils.CommitStatusStandardLabels(tcs, branch, key, r.SettingsMgr.StartupInstanceID())
+	commitStatusLabels := utils.CommitStatusStandardLabels(tcs, branch, key)
 	commitStatusApply := acv1alpha1.CommitStatus(commitStatusName, tcs.Namespace).
 		WithLabels(commitStatusLabels).
 		WithOwnerReferences(acmetav1.OwnerReference().

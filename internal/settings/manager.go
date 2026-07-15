@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
@@ -21,11 +22,20 @@ const (
 	ControllerConfigurationName = "promoter-controller-configuration"
 )
 
-// ReadInstanceIDFromAPI reads ControllerConfiguration.spec.instanceID via direct API
-// (rest.Config, not informer). It is called at process startup, before the manager cache
-// exists, to determine the instance-id partition the informer cache is built with. The
-// returned value should be passed to NewManager via ManagerConfig.StartupInstanceID.
-func ReadInstanceIDFromAPI(ctx context.Context, cfg *rest.Config, namespace string) (*string, error) {
+// startupInstanceIDMu guards startupInstanceID. In production the only write happens at process
+// startup (InitStartupInstanceID in cmd/main.go) before the manager starts, but tests swap the
+// value while reconciler goroutines from a running manager read it concurrently.
+var (
+	startupInstanceIDMu sync.RWMutex
+	startupInstanceID   *string
+)
+
+// InitStartupInstanceID reads ControllerConfiguration.spec.instanceID via direct API
+// (rest.Config, not informer) and stores it as the process-wide startup instance ID.
+// It is called once at process startup, before the manager cache exists, to determine the
+// instance-id partition the informer cache is built with; the value is also returned so the
+// caller can wire it into the cache options. Consumers read it via StartupInstanceID.
+func InitStartupInstanceID(ctx context.Context, cfg *rest.Config, namespace string) (*string, error) {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(promoterv1alpha1.AddToScheme(scheme))
 
@@ -42,7 +52,37 @@ func ReadInstanceIDFromAPI(ctx context.Context, cfg *rest.Config, namespace stri
 		return nil, fmt.Errorf("failed to get ControllerConfiguration %q: %w", ControllerConfigurationName, err)
 	}
 
+	startupInstanceIDMu.Lock()
+	defer startupInstanceIDMu.Unlock()
+	startupInstanceID = cc.Spec.InstanceID
 	return cc.Spec.InstanceID, nil
+}
+
+// StartupInstanceID returns the ControllerConfiguration.spec.instanceID value the process was
+// started with (stored by InitStartupInstanceID). Nil means the default install — including
+// before initialization, since the informer cache partition defaults to unlabeled resources.
+// The cache partition is built from this value, so it is immutable for the process lifetime;
+// EnsureInstanceIDStable detects drift against the live spec.
+func StartupInstanceID() *string {
+	startupInstanceIDMu.RLock()
+	defer startupInstanceIDMu.RUnlock()
+	return startupInstanceID
+}
+
+// SetStartupInstanceIDForTest sets the process-wide startup instance ID for tests. It returns a
+// restore function that reinstates the previous value; tests that share the process with a
+// running manager (whose reconcilers read StartupInstanceID) must call it when done so the
+// swapped value does not leak into other specs.
+func SetStartupInstanceIDForTest(id *string) (restore func()) {
+	startupInstanceIDMu.Lock()
+	prev := startupInstanceID
+	startupInstanceID = id
+	startupInstanceIDMu.Unlock()
+	return func() {
+		startupInstanceIDMu.Lock()
+		defer startupInstanceIDMu.Unlock()
+		startupInstanceID = prev
+	}
 }
 
 // GetInstanceID returns the live ControllerConfiguration.spec.instanceID from the informer cache.
@@ -54,13 +94,6 @@ func (m *Manager) GetInstanceID(ctx context.Context) (*string, error) {
 	return cc.Spec.InstanceID, nil
 }
 
-// StartupInstanceID returns the ControllerConfiguration.spec.instanceID value the process was
-// started with (ManagerConfig.StartupInstanceID). Nil means the default install. The informer
-// cache partition is built from this value, so it is immutable for the manager's lifetime.
-func (m *Manager) StartupInstanceID() *string {
-	return m.config.StartupInstanceID
-}
-
 // EnsureInstanceIDStable returns an error when the live ControllerConfiguration.spec.instanceID
 // no longer matches the startup value the informer cache partition was built with.
 func (m *Manager) EnsureInstanceIDStable(ctx context.Context) error {
@@ -68,7 +101,7 @@ func (m *Manager) EnsureInstanceIDStable(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read live ControllerConfiguration instanceID: %w", err)
 	}
-	cached := m.StartupInstanceID()
+	cached := StartupInstanceID()
 	if ptr.Equal(cached, live) {
 		return nil
 	}
@@ -128,12 +161,6 @@ type ControllerResultTypes interface {
 // dynamically-fetched ControllerConfiguration resource to provide complete configuration
 // information for the controller.
 type ManagerConfig struct {
-	// StartupInstanceID is the ControllerConfiguration.spec.instanceID value read at process
-	// startup (see ReadInstanceIDFromAPI). The informer cache partition is built from it, so it
-	// must not change for the manager's lifetime; EnsureInstanceIDStable detects drift against
-	// the live spec. Nil means the default install (only unlabeled resources are reconciled).
-	StartupInstanceID *string
-
 	// ControllerNamespace is the namespace where the promoter controller is running.
 	// This namespace is used when fetching the ControllerConfiguration resource from the cluster.
 	ControllerNamespace string

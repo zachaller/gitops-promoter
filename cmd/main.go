@@ -174,7 +174,7 @@ func runController(
 	restConfig := ctrl.GetConfigOrDie()
 	processSignalsCtx := ctrl.SetupSignalHandler()
 
-	instanceID, err := settings.ReadInstanceIDFromAPI(processSignalsCtx, restConfig, controllerNamespace)
+	instanceID, err := settings.InitStartupInstanceID(processSignalsCtx, restConfig, controllerNamespace)
 	if err != nil {
 		return fmt.Errorf("read controller instance ID: %w", err)
 	}
@@ -227,7 +227,6 @@ func runController(
 
 	settingsMgr := settings.NewManager(localManager.GetClient(), localManager.GetAPIReader(), settings.ManagerConfig{
 		ControllerNamespace: controllerNamespace,
-		StartupInstanceID:   instanceID,
 	})
 
 	prReconciler := &controller.PullRequestReconciler{

@@ -118,7 +118,7 @@ func (r *ArgoCDCommitStatusReconciler) Reconcile(ctx context.Context, req mcreco
 	var argoCDCommitStatus promoterv1alpha1.ArgoCDCommitStatus
 	// This function applies the resource status via Server-Side Apply at the end of the reconciliation. Don't write status manually.
 	var previousReady *metav1.Condition
-	defer utils.HandleReconciliationResult(ctx, startTime, &argoCDCommitStatus, r.localClient, r.Recorder, constants.ArgoCDCommitStatusControllerFieldOwner, &result, &err, &previousReady, r.SettingsMgr.StartupInstanceID())
+	defer utils.HandleReconciliationResult(ctx, startTime, &argoCDCommitStatus, r.localClient, r.Recorder, constants.ArgoCDCommitStatusControllerFieldOwner, &result, &err, &previousReady)
 
 	err = r.localClient.Get(ctx, req.NamespacedName, &argoCDCommitStatus, &client.GetOptions{})
 	if err != nil {
@@ -734,7 +734,7 @@ func (r *ArgoCDCommitStatusReconciler) updateAggregatedCommitStatus(ctx context.
 	}
 
 	// Build the apply configuration
-	commitStatusLabels := utils.CommitStatusStandardLabels(&argoCDCommitStatus, targetBranch, key, r.SettingsMgr.StartupInstanceID())
+	commitStatusLabels := utils.CommitStatusStandardLabels(&argoCDCommitStatus, targetBranch, key)
 	commitStatusApply := acv1alpha1.CommitStatus(resourceName, argoCDCommitStatus.Namespace).
 		WithLabels(commitStatusLabels).
 		WithOwnerReferences(acmetav1.OwnerReference().

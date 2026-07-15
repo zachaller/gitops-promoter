@@ -13,6 +13,7 @@ import (
 	"time"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+	"github.com/argoproj-labs/gitops-promoter/internal/settings"
 	promoterConditions "github.com/argoproj-labs/gitops-promoter/internal/types/conditions"
 	v1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -374,9 +375,6 @@ func readyConditionTransitioned(prev, current *metav1.Condition) bool {
 // transitions relative to *previousReady; pass nil to always emit (e.g. when no previous
 // condition is available).
 //
-// instanceID is the controller's startup instance ID (settings.Manager.StartupInstanceID); it is
-// stamped into status.instanceID on every reconcile attempt, including when Ready=False.
-//
 //nolint:revive // argument-limit: the trailing previousReady pointer mirrors result/err; folding the late-bound pointers into a struct would obscure the defer idiom at every call site.
 func HandleReconciliationResult(
 	ctx context.Context,
@@ -388,7 +386,6 @@ func HandleReconciliationResult(
 	result *reconcile.Result,
 	err *error,
 	previousReady **metav1.Condition,
-	instanceID *string,
 ) {
 	// Recover from any panic and convert it to an error.
 	// This function is always called as a defer from the Reconcile function, which means recover() will work correctly here.
@@ -480,7 +477,7 @@ func HandleReconciliationResult(
 
 	// Stamp status.instanceID on every reconcile attempt so consumers can see which controller
 	// instance is actively reconciling this resource, including when Ready=False.
-	obj.SetStatusInstanceID(instanceID)
+	obj.SetStatusInstanceID(settings.StartupInstanceID())
 	// Stamp status.observedGeneration before building the apply configuration so the SSA
 	// patch records which spec generation produced this status. SSA with ForceOwnership
 	// has no optimistic-concurrency guard, so observedGeneration is the only signal a

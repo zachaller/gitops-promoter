@@ -65,7 +65,7 @@ func (r *ScmProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	var scmProvider promoterv1alpha1.ScmProvider
 	// This function applies the resource status via Server-Side Apply at the end of the reconciliation. Don't write status manually.
 	var previousReady *metav1.Condition
-	defer utils.HandleReconciliationResult(ctx, startTime, &scmProvider, r.Client, r.Recorder, constants.ScmProviderControllerFieldOwner, &result, &err, &previousReady, r.SettingsMgr.StartupInstanceID())
+	defer utils.HandleReconciliationResult(ctx, startTime, &scmProvider, r.Client, r.Recorder, constants.ScmProviderControllerFieldOwner, &result, &err, &previousReady)
 
 	if err := r.Get(ctx, req.NamespacedName, &scmProvider); err != nil {
 		if k8serrors.IsNotFound(err) {

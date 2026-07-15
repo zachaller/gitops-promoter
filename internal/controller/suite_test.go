@@ -183,15 +183,14 @@ var _ = BeforeSuite(func() {
 	controllerConfiguration, err := loadShippedControllerConfigurationForTests(settings.ControllerConfigurationName)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient.Create(ctx, controllerConfiguration)).To(Succeed())
-	// Mirror cmd/main.go: read the startup instance ID via direct API before wiring the
-	// settings manager. The shipped configuration leaves spec.instanceID unset.
-	startupInstanceID, err := settings.ReadInstanceIDFromAPI(ctx, cfg, "default")
+	// Mirror cmd/main.go: initialize the process-wide startup instance ID via direct API before
+	// wiring the settings manager. The shipped configuration leaves spec.instanceID unset.
+	startupInstanceID, err := settings.InitStartupInstanceID(ctx, cfg, "default")
 	Expect(err).NotTo(HaveOccurred())
 	Expect(startupInstanceID).To(BeNil())
 
 	settingsMgr := settings.NewManager(k8sManager.GetClient(), k8sManager.GetAPIReader(), settings.ManagerConfig{
 		ControllerNamespace: "default",
-		StartupInstanceID:   startupInstanceID,
 	})
 
 	// PullRequest controller is set up before ChangeTransferPolicy so CTP can enqueue PR reconciles.

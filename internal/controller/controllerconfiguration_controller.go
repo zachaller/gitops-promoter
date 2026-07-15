@@ -71,7 +71,7 @@ func (r *ControllerConfigurationReconciler) Reconcile(ctx context.Context, req c
 			r.Shutdown()
 		}
 	}()
-	defer utils.HandleReconciliationResult(ctx, startTime, &cc, r.Client, r.Recorder, constants.ControllerConfigurationControllerFieldOwner, &result, &err, &previousReady, r.StartupInstanceID)
+	defer utils.HandleReconciliationResult(ctx, startTime, &cc, r.Client, r.Recorder, constants.ControllerConfigurationControllerFieldOwner, &result, &err, &previousReady)
 
 	if err := r.Get(ctx, req.NamespacedName, &cc); err != nil {
 		if errors.IsNotFound(err) {

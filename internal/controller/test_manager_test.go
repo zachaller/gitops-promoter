@@ -40,6 +40,12 @@ import (
 // startPartitionedManager builds a multicluster manager with instance-id cache
 // partitioning matching cmd/main.go and registers controllers needed for migration tests.
 func startPartitionedManager(ctx context.Context, cfg *rest.Config, namespace string, instanceID *string) context.CancelFunc {
+	// The startup instance ID is process-global state also read by the main suite's managers
+	// (started in BeforeSuite against the primary envtest). Swap it for this partitioned
+	// manager's lifetime and restore it in stop(), otherwise every reconcile in later specs on
+	// this ginkgo process fails ensureControllerInstanceIDStable with a drift error.
+	restoreInstanceID := settings.SetStartupInstanceIDForTest(instanceID)
+
 	mgrCtx, cancel := context.WithCancel(ctx)
 	stopped := make(chan struct{})
 	skipNameValidation := true
@@ -75,7 +81,6 @@ func startPartitionedManager(ctx context.Context, cfg *rest.Config, namespace st
 
 	settingsMgr := settings.NewManager(localMgr.GetClient(), localMgr.GetAPIReader(), settings.ManagerConfig{
 		ControllerNamespace: namespace,
-		StartupInstanceID:   instanceID,
 	})
 
 	ctpReconciler := &ChangeTransferPolicyReconciler{
@@ -169,6 +174,9 @@ func startPartitionedManager(ctx context.Context, cfg *rest.Config, namespace st
 	stop := func() {
 		cancel()
 		Eventually(stopped).WithTimeout(constants.EventuallyTimeout).Should(BeClosed())
+		// Restore only after the manager has fully stopped so its own reconcilers never observe
+		// the restored (foreign) instance ID.
+		restoreInstanceID()
 	}
 
 	return stop

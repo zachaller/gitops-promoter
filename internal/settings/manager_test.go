@@ -22,7 +22,7 @@ func TestSettings(t *testing.T) {
 	RunSpecs(t, "Settings Suite")
 }
 
-func newManagerWithInstanceID(startup, live *string) *settings.Manager {
+func newManagerWithLiveInstanceID(live *string) *settings.Manager {
 	cc := &promoterv1alpha1.ControllerConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      settings.ControllerConfigurationName,
@@ -35,21 +35,19 @@ func newManagerWithInstanceID(startup, live *string) *settings.Manager {
 	scheme := runtime.NewScheme()
 	Expect(promoterv1alpha1.AddToScheme(scheme)).To(Succeed())
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cc).Build()
-	return settings.NewManager(cl, cl, settings.ManagerConfig{
-		ControllerNamespace: "default",
-		StartupInstanceID:   startup,
-	})
+	return settings.NewManager(cl, cl, settings.ManagerConfig{ControllerNamespace: "default"})
 }
 
 var _ = Describe("StartupInstanceID", func() {
-	It("returns nil for the default install", func() {
-		mgr := newManagerWithInstanceID(nil, nil)
-		Expect(mgr.StartupInstanceID()).To(BeNil())
+	It("returns nil before initialization (default install)", func() {
+		Expect(settings.StartupInstanceID()).To(BeNil())
 	})
 
-	It("returns the configured value", func() {
-		mgr := newManagerWithInstanceID(ptr.To("wave-0"), ptr.To("wave-0"))
-		Expect(mgr.StartupInstanceID()).To(HaveValue(Equal("wave-0")))
+	It("returns the value set for tests and restores the previous value", func() {
+		restore := settings.SetStartupInstanceIDForTest(ptr.To("wave-0"))
+		Expect(settings.StartupInstanceID()).To(HaveValue(Equal("wave-0")))
+		restore()
+		Expect(settings.StartupInstanceID()).To(BeNil())
 	})
 })
 
@@ -61,17 +59,20 @@ var _ = Describe("EnsureInstanceIDStable", func() {
 	})
 
 	It("returns nil when startup and live instance IDs are both unset", func() {
-		mgr := newManagerWithInstanceID(nil, nil)
+		mgr := newManagerWithLiveInstanceID(nil)
 		Expect(mgr.EnsureInstanceIDStable(ctx)).To(Succeed())
 	})
 
 	It("returns nil when startup and live instance IDs match", func() {
-		mgr := newManagerWithInstanceID(ptr.To("wave-0"), ptr.To("wave-0"))
+		restore := settings.SetStartupInstanceIDForTest(ptr.To("wave-0"))
+		defer restore()
+
+		mgr := newManagerWithLiveInstanceID(ptr.To("wave-0"))
 		Expect(mgr.EnsureInstanceIDStable(ctx)).To(Succeed())
 	})
 
 	It("returns an error when the live instance ID drifts from startup", func() {
-		mgr := newManagerWithInstanceID(nil, ptr.To("wave-0"))
+		mgr := newManagerWithLiveInstanceID(ptr.To("wave-0"))
 		err := mgr.EnsureInstanceIDStable(ctx)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("drifted since startup"))
@@ -80,7 +81,10 @@ var _ = Describe("EnsureInstanceIDStable", func() {
 	})
 
 	It("returns an error when the live instance ID is cleared after multi-install startup", func() {
-		mgr := newManagerWithInstanceID(ptr.To("wave-0"), nil)
+		restore := settings.SetStartupInstanceIDForTest(ptr.To("wave-0"))
+		defer restore()
+
+		mgr := newManagerWithLiveInstanceID(nil)
 		err := mgr.EnsureInstanceIDStable(ctx)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("drifted since startup"))
@@ -100,7 +104,7 @@ var _ = Describe("EnsureInstanceIDStable", func() {
 
 var _ = Describe("GetInstanceID", func() {
 	It("returns the live spec.instanceID", func() {
-		mgr := newManagerWithInstanceID(nil, ptr.To("wave-1"))
+		mgr := newManagerWithLiveInstanceID(ptr.To("wave-1"))
 		live, err := mgr.GetInstanceID(context.Background())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(live).To(HaveValue(Equal("wave-1")))
