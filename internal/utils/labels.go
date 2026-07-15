@@ -2,16 +2,15 @@ package utils
 
 import (
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
-	"github.com/argoproj-labs/gitops-promoter/internal/instanceid"
 )
 
-// StampInstanceIDLabel sets promoter.argoproj.io/instance-id when instanceid.ControllerInstanceID() is non-nil.
+// StampInstanceIDLabel sets promoter.argoproj.io/instance-id when instanceID is non-nil.
+// Callers pass the controller's startup instance ID (settings.Manager.StartupInstanceID).
 // Returns labels (never nil).
-func StampInstanceIDLabel(labels map[string]string) map[string]string {
+func StampInstanceIDLabel(labels map[string]string, instanceID *string) map[string]string {
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-	instanceID := instanceid.ControllerInstanceID()
 	if instanceID == nil {
 		return labels
 	}

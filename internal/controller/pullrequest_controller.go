@@ -99,7 +99,7 @@ func (r *PullRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	var pr promoterv1alpha1.PullRequest
 	// This function applies the resource status via Server-Side Apply at the end of the reconciliation. Don't write status manually.
 	var previousReady *metav1.Condition
-	defer utils.HandleReconciliationResult(ctx, startTime, &pr, r.Client, r.Recorder, constants.PullRequestControllerFieldOwner, &result, &err, &previousReady)
+	defer utils.HandleReconciliationResult(ctx, startTime, &pr, r.Client, r.Recorder, constants.PullRequestControllerFieldOwner, &result, &err, &previousReady, r.SettingsMgr.StartupInstanceID())
 
 	if err := r.Get(ctx, req.NamespacedName, &pr); err != nil {
 		if k8serrors.IsNotFound(err) {

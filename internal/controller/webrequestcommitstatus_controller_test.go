@@ -4633,10 +4633,11 @@ var _ = Describe("WebRequestCommitStatus Controller - Stale Cache Guard", Ordere
 		// (The Scheme/SettingsMgr fields are unused on this path; we set Scheme
 		// to k8sClient.Scheme() for safety in case any helper reaches for it.)
 		r := &WebRequestCommitStatusReconciler{
-			Client:    k8sClient,
-			Scheme:    k8sClient.Scheme(),
-			Recorder:  events.NewFakeRecorder(10),
-			rvTracker: utils.NewResourceVersionTracker(),
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			Recorder:    events.NewFakeRecorder(10),
+			SettingsMgr: settings.NewManager(k8sClient, k8sClient, settings.ManagerConfig{ControllerNamespace: "default"}),
+			rvTracker:   utils.NewResourceVersionTracker(),
 		}
 
 		// Seed the tracker with an RV that the API server's current value
@@ -4715,10 +4716,11 @@ var _ = Describe("WebRequestCommitStatus Controller - Stale Cache Guard", Ordere
 		// and verify the entry was dropped. This proves the cleanup wiring in
 		// the IsNotFound branch is actually called.
 		r := &WebRequestCommitStatusReconciler{
-			Client:    k8sClient,
-			Scheme:    k8sClient.Scheme(),
-			Recorder:  events.NewFakeRecorder(10),
-			rvTracker: utils.NewResourceVersionTracker(),
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			Recorder:    events.NewFakeRecorder(10),
+			SettingsMgr: settings.NewManager(k8sClient, k8sClient, settings.ManagerConfig{ControllerNamespace: "default"}),
+			rvTracker:   utils.NewResourceVersionTracker(),
 		}
 		missingKey := types.NamespacedName{Name: "wrcs-stale-cache-guard-deleted", Namespace: "default"}
 		r.rvTracker.Record(missingKey, "500")

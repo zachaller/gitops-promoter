@@ -8,7 +8,11 @@ import (
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
 	"golang.org/x/time/rate"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -17,6 +21,30 @@ const (
 	ControllerConfigurationName = "promoter-controller-configuration"
 )
 
+// ReadInstanceIDFromAPI reads ControllerConfiguration.spec.instanceID via direct API
+// (rest.Config, not informer). It is called at process startup, before the manager cache
+// exists, to determine the instance-id partition the informer cache is built with. The
+// returned value should be passed to NewManager via ManagerConfig.StartupInstanceID.
+func ReadInstanceIDFromAPI(ctx context.Context, cfg *rest.Config, namespace string) (*string, error) {
+	scheme := runtime.NewScheme()
+	utilruntime.Must(promoterv1alpha1.AddToScheme(scheme))
+
+	c, err := client.New(cfg, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bootstrap client: %w", err)
+	}
+
+	cc := &promoterv1alpha1.ControllerConfiguration{}
+	if err := c.Get(ctx, client.ObjectKey{
+		Name:      ControllerConfigurationName,
+		Namespace: namespace,
+	}, cc); err != nil {
+		return nil, fmt.Errorf("failed to get ControllerConfiguration %q: %w", ControllerConfigurationName, err)
+	}
+
+	return cc.Spec.InstanceID, nil
+}
+
 // GetInstanceID returns the live ControllerConfiguration.spec.instanceID from the informer cache.
 func (m *Manager) GetInstanceID(ctx context.Context) (*string, error) {
 	cc, err := m.getControllerConfiguration(ctx)
@@ -24,6 +52,38 @@ func (m *Manager) GetInstanceID(ctx context.Context) (*string, error) {
 		return nil, err
 	}
 	return cc.Spec.InstanceID, nil
+}
+
+// StartupInstanceID returns the ControllerConfiguration.spec.instanceID value the process was
+// started with (ManagerConfig.StartupInstanceID). Nil means the default install. The informer
+// cache partition is built from this value, so it is immutable for the manager's lifetime.
+func (m *Manager) StartupInstanceID() *string {
+	return m.config.StartupInstanceID
+}
+
+// EnsureInstanceIDStable returns an error when the live ControllerConfiguration.spec.instanceID
+// no longer matches the startup value the informer cache partition was built with.
+func (m *Manager) EnsureInstanceIDStable(ctx context.Context) error {
+	live, err := m.GetInstanceID(ctx)
+	if err != nil {
+		return fmt.Errorf("read live ControllerConfiguration instanceID: %w", err)
+	}
+	cached := m.StartupInstanceID()
+	if ptr.Equal(cached, live) {
+		return nil
+	}
+	return fmt.Errorf(
+		"ControllerConfiguration.spec.instanceID drifted since startup (cached %s, live %s)",
+		instanceIDString(cached),
+		instanceIDString(live),
+	)
+}
+
+func instanceIDString(id *string) string {
+	if id == nil {
+		return "<unset>"
+	}
+	return *id
 }
 
 // ControllerConfigurationTypes is a constraint that defines the set of controller configuration types
@@ -68,6 +128,12 @@ type ControllerResultTypes interface {
 // dynamically-fetched ControllerConfiguration resource to provide complete configuration
 // information for the controller.
 type ManagerConfig struct {
+	// StartupInstanceID is the ControllerConfiguration.spec.instanceID value read at process
+	// startup (see ReadInstanceIDFromAPI). The informer cache partition is built from it, so it
+	// must not change for the manager's lifetime; EnsureInstanceIDStable detects drift against
+	// the live spec. Nil means the default install (only unlabeled resources are reconciled).
+	StartupInstanceID *string
+
 	// ControllerNamespace is the namespace where the promoter controller is running.
 	// This namespace is used when fetching the ControllerConfiguration resource from the cluster.
 	ControllerNamespace string

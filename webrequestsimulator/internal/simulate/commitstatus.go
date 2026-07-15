@@ -42,6 +42,13 @@ func renderCommitStatus(
 	phase promoterv1alpha1.CommitStatusPhase,
 	td webrequest.TemplateData,
 ) (*promoterv1alpha1.CommitStatus, error) {
+	// The simulator has no ControllerConfiguration to read a startup instance ID from; mirror the
+	// parent gate's label instead. The controller behaves identically in practice: its cache only
+	// admits gates whose instance-id label matches the ID it stamps.
+	var instanceID *string
+	if v, ok := wrcs.Labels[promoterv1alpha1.InstanceIDLabel]; ok && v != "" {
+		instanceID = &v
+	}
 	cs := &promoterv1alpha1.CommitStatus{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: promoterv1alpha1.GroupVersion.String(),
@@ -50,7 +57,7 @@ func renderCommitStatus(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      utils.CommitStatusResourceName(ctx, wrcs, branch),
 			Namespace: wrcs.Namespace,
-			Labels:    utils.CommitStatusStandardLabels(wrcs, branch, wrcs.Spec.Key),
+			Labels:    utils.CommitStatusStandardLabels(wrcs, branch, wrcs.Spec.Key, instanceID),
 		},
 		Spec: promoterv1alpha1.CommitStatusSpec{
 			RepositoryReference: promoterv1alpha1.ObjectReference{Name: repositoryRefName},

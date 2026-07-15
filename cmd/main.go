@@ -44,7 +44,6 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/argoproj-labs/gitops-promoter/internal/instanceid"
 	"github.com/argoproj-labs/gitops-promoter/internal/settings"
 	"github.com/argoproj-labs/gitops-promoter/internal/types/constants"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils/gitpaths"
@@ -175,10 +174,10 @@ func runController(
 	restConfig := ctrl.GetConfigOrDie()
 	processSignalsCtx := ctrl.SetupSignalHandler()
 
-	if err := instanceid.BootstrapControllerInstanceID(processSignalsCtx, restConfig, controllerNamespace); err != nil {
-		return fmt.Errorf("bootstrap controller instance ID: %w", err)
+	instanceID, err := settings.ReadInstanceIDFromAPI(processSignalsCtx, restConfig, controllerNamespace)
+	if err != nil {
+		return fmt.Errorf("read controller instance ID: %w", err)
 	}
-	instanceID := instanceid.ControllerInstanceID()
 	if instanceID != nil {
 		setupLog.Info("multi-instance-id mode: scoping informer cache to instanceID", "instanceID", *instanceID)
 	} else {
@@ -228,6 +227,7 @@ func runController(
 
 	settingsMgr := settings.NewManager(localManager.GetClient(), localManager.GetAPIReader(), settings.ManagerConfig{
 		ControllerNamespace: controllerNamespace,
+		StartupInstanceID:   instanceID,
 	})
 
 	prReconciler := &controller.PullRequestReconciler{

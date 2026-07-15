@@ -86,7 +86,7 @@ func (r *GitCommitStatusReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	var gcs promoterv1alpha1.GitCommitStatus
 	// This function applies the resource status via Server-Side Apply at the end of the reconciliation. Don't write status manually.
 	var previousReady *metav1.Condition
-	defer utils.HandleReconciliationResult(ctx, startTime, &gcs, r.Client, r.Recorder, constants.GitCommitStatusControllerFieldOwner, &result, &err, &previousReady)
+	defer utils.HandleReconciliationResult(ctx, startTime, &gcs, r.Client, r.Recorder, constants.GitCommitStatusControllerFieldOwner, &result, &err, &previousReady, r.SettingsMgr.StartupInstanceID())
 
 	err = r.Get(ctx, req.NamespacedName, &gcs, &client.GetOptions{})
 	if err != nil {
@@ -411,7 +411,7 @@ func (r *GitCommitStatusReconciler) upsertCommitStatus(ctx context.Context, gcs 
 	gvk := promoterv1alpha1.GroupVersion.WithKind(kind)
 
 	// Build the apply configuration
-	commitStatusLabels := utils.CommitStatusStandardLabels(gcs, branch, validationName)
+	commitStatusLabels := utils.CommitStatusStandardLabels(gcs, branch, validationName, r.SettingsMgr.StartupInstanceID())
 	commitStatusApply := acv1alpha1.CommitStatus(commitStatusName, gcs.Namespace).
 		WithLabels(commitStatusLabels).
 		WithOwnerReferences(acmetav1.OwnerReference().

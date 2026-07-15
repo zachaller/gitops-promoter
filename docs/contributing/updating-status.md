@@ -57,8 +57,10 @@ that consumers use to detect this:
 
 `HandleReconciliationResult` stamps `status.observedGeneration` on every **successful**
 full apply via `PromoterResource.SetObservedGeneration`, and sets `status.instanceID` from
-`instanceid.ControllerInstanceID()` (the value cached at process startup via direct API
-bootstrap) on **every** reconcile attempt (including when the reconcile returns an error),
+its `instanceID` parameter (the controller's startup instance ID, read from
+`ControllerConfiguration.spec.instanceID` via direct API at process startup and carried on
+`settings.Manager.StartupInstanceID`) on **every** reconcile attempt (including when the
+reconcile returns an error),
 so consumers can see which controller instance is actively reconciling the resource. Controller-created
 child resources receive the same value on `metadata.labels[promoter.argoproj.io/instance-id]`
 via `utils.StampInstanceIDLabel`. When the fallback path runs, it deliberately does **not**

@@ -104,7 +104,7 @@ func (r *WebRequestCommitStatusReconciler) Reconcile(ctx context.Context, req ct
 		if skipStatusWrite {
 			return
 		}
-		utils.HandleReconciliationResult(ctx, startTime, &wrcs, r.Client, r.Recorder, constants.WebRequestCommitStatusControllerFieldOwner, &result, &err, &previousReady)
+		utils.HandleReconciliationResult(ctx, startTime, &wrcs, r.Client, r.Recorder, constants.WebRequestCommitStatusControllerFieldOwner, &result, &err, &previousReady, r.SettingsMgr.StartupInstanceID())
 		// Record the post-patch ResourceVersion so the next reconcile for this key can
 		// detect a stale-cache read above. HandleReconciliationResult mutates wrcs in
 		// place with the patched object on success, so wrcs.ResourceVersion here is
@@ -502,7 +502,7 @@ func (r *WebRequestCommitStatusReconciler) upsertCommitStatus(ctx context.Contex
 	}
 
 	// Build the apply configuration
-	commitStatusLabels := utils.CommitStatusStandardLabels(wrcs, branch, wrcs.Spec.Key)
+	commitStatusLabels := utils.CommitStatusStandardLabels(wrcs, branch, wrcs.Spec.Key, r.SettingsMgr.StartupInstanceID())
 	commitStatusApply := acv1alpha1.CommitStatus(commitStatusName, wrcs.Namespace).
 		WithLabels(commitStatusLabels).
 		WithOwnerReferences(acmetav1.OwnerReference().

@@ -8,7 +8,7 @@ This document outlines best practices for implementing custom commit status cont
 
 ## Required Labels
 
-All commit status controllers should set the following standard labels on the `CommitStatus` resources they create. Use `utils.CommitStatusStandardLabels(parent, branch, key)` — it sets the three gating labels and copies `promoter.argoproj.io/instance-id` from the parent gate when present (see [§4](#4-instance-id-label-multi-install)).
+All commit status controllers should set the following standard labels on the `CommitStatus` resources they create. Use `utils.CommitStatusStandardLabels(parent, branch, key, instanceID)` — it sets the three gating labels and stamps `promoter.argoproj.io/instance-id` when `instanceID` (the controller's startup instance ID, `settings.Manager.StartupInstanceID()`) is non-nil (see [§4](#4-instance-id-label-multi-install)).
 
 ### 1. Commit Status Label
 
@@ -55,10 +55,10 @@ for different apps can target the same active commit SHA. In this setup, control
 
 When the cluster runs multiple Promoter controller installs, each install only caches resources labeled with its configured `ControllerConfiguration.spec.instanceID`. In the default install (`instanceID` unset), only **unlabeled** resources are cached—do not add this label to gate CRs or PromotionStrategies managed by the default install.
 
-`CommitStatusStandardLabels` copies `promoter.argoproj.io/instance-id` from the parent gate when the parent carries a non-empty value. Label the parent gate during migration before the controller will reconcile it.
+`CommitStatusStandardLabels` stamps `promoter.argoproj.io/instance-id` from its `instanceID` parameter — pass the controller's startup instance ID (`settings.Manager.StartupInstanceID()`). Because the informer cache only admits parents whose label matches that ID, the stamped value always matches the parent gate's label. Label the parent gate during migration before the controller will reconcile it.
 
 ```go
-commitStatusLabels := utils.CommitStatusStandardLabels(parentGate, branch, key)
+commitStatusLabels := utils.CommitStatusStandardLabels(parentGate, branch, key, r.SettingsMgr.StartupInstanceID())
 commitStatusApply := acv1alpha1.CommitStatus(name, namespace).
     WithLabels(commitStatusLabels).
     // …
@@ -117,7 +117,7 @@ The helper applies `KubeSafeUniqueName` to `parent.metadata.name-branch-<stem>`.
 
 Example: `my-app-environment-development-timed-<hash>` (or `...-argo-cd-<hash>` for Argo CD gates)
 
-Set the standard CommitStatus labels with `utils.CommitStatusStandardLabels(parent, branch, key)` (parent gate, environment, commit-status key, and instance-id when the parent gate carries it).
+Set the standard CommitStatus labels with `utils.CommitStatusStandardLabels(parent, branch, key, instanceID)` (parent gate, environment, commit-status key, and instance-id when the controller runs with one).
 
 #### Orphan cleanup
 

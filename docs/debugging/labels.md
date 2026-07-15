@@ -20,7 +20,7 @@ GitOps Promoter controllers set Kubernetes labels to associate resources, filter
 
 ### CommitStatus gating
 
-Built-in gate controllers set **three gating labels** on each `CommitStatus` via `utils.CommitStatusStandardLabels(parent, branch, key)`, and copy `promoter.argoproj.io/instance-id` from the parent gate when present:
+Built-in gate controllers set **three gating labels** on each `CommitStatus` via `utils.CommitStatusStandardLabels(parent, branch, key, instanceID)`, and stamp `promoter.argoproj.io/instance-id` when the controller runs with an instance ID (which always matches the parent gate's label, since the cache only admits matching parents):
 
 | Label key | Value | Purpose |
 | --------- | ----- | ------- |
@@ -58,7 +58,7 @@ This label is **not** defined in `constants.go`; it is a convention for Argo CD 
 ## How controllers use labels
 
 - **ChangeTransferPolicy** evaluates `activeCommitStatuses` and `proposedCommitStatuses` by listing `CommitStatus` resources with `promoter.argoproj.io/commit-status=<key>` and field-selecting on `.spec.sha`.
-- **Gate controllers** (Argo CD, timed, web request, git commit) set gating labels and instance-id via `utils.CommitStatusStandardLabels(parent, branch, key)` and use the parent-gate label when cleaning up orphaned CommitStatuses.
+- **Gate controllers** (Argo CD, timed, web request, git commit) set gating labels and instance-id via `utils.CommitStatusStandardLabels(parent, branch, key, instanceID)` and use the parent-gate label when cleaning up orphaned CommitStatuses.
 - **PromotionStrategy** lists `ChangeTransferPolicy` objects with `promoter.argoproj.io/promotion-strategy=<strategy>` to remove orphaned policies when environments change.
 
 ## Useful queries

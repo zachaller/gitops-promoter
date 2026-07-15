@@ -115,7 +115,7 @@ func (r *ChangeTransferPolicyReconciler) Reconcile(ctx context.Context, req ctrl
 	var ctp promoterv1alpha1.ChangeTransferPolicy
 	// This function applies the resource status via Server-Side Apply at the end of the reconciliation. Don't write status manually.
 	var previousReady *metav1.Condition
-	defer utils.HandleReconciliationResult(ctx, startTime, &ctp, r.Client, r.Recorder, constants.ChangeTransferPolicyControllerFieldOwner, &result, &err, &previousReady)
+	defer utils.HandleReconciliationResult(ctx, startTime, &ctp, r.Client, r.Recorder, constants.ChangeTransferPolicyControllerFieldOwner, &result, &err, &previousReady, r.SettingsMgr.StartupInstanceID())
 
 	err = r.Get(ctx, req.NamespacedName, &ctp, &client.GetOptions{})
 	if err != nil {
@@ -1305,7 +1305,7 @@ func (r *ChangeTransferPolicyReconciler) createOrUpdatePullRequest(ctx context.C
 		promoterv1alpha1.ChangeTransferPolicyLabel: utils.KubeSafeLabel(ctp.Name),
 		promoterv1alpha1.EnvironmentLabel:          utils.KubeSafeLabel(ctp.Spec.ActiveBranch),
 	}
-	prLabels = utils.StampInstanceIDLabel(prLabels)
+	prLabels = utils.StampInstanceIDLabel(prLabels, r.SettingsMgr.StartupInstanceID())
 	prApply := acv1alpha1.PullRequest(prName, ctp.Namespace).
 		WithLabels(prLabels).
 		WithOwnerReferences(acmetav1.OwnerReference().

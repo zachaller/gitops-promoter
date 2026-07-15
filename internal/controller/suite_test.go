@@ -48,7 +48,6 @@ import (
 	"k8s.io/client-go/util/retry"
 
 	"github.com/argoproj-labs/gitops-promoter/internal/git"
-	"github.com/argoproj-labs/gitops-promoter/internal/instanceid"
 	"github.com/argoproj-labs/gitops-promoter/internal/settings"
 	"github.com/argoproj-labs/gitops-promoter/internal/types/constants"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
@@ -184,10 +183,15 @@ var _ = BeforeSuite(func() {
 	controllerConfiguration, err := loadShippedControllerConfigurationForTests(settings.ControllerConfigurationName)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient.Create(ctx, controllerConfiguration)).To(Succeed())
-	Expect(instanceid.BootstrapControllerInstanceID(ctx, cfg, "default")).To(Succeed())
+	// Mirror cmd/main.go: read the startup instance ID via direct API before wiring the
+	// settings manager. The shipped configuration leaves spec.instanceID unset.
+	startupInstanceID, err := settings.ReadInstanceIDFromAPI(ctx, cfg, "default")
+	Expect(err).NotTo(HaveOccurred())
+	Expect(startupInstanceID).To(BeNil())
 
 	settingsMgr := settings.NewManager(k8sManager.GetClient(), k8sManager.GetAPIReader(), settings.ManagerConfig{
 		ControllerNamespace: "default",
+		StartupInstanceID:   startupInstanceID,
 	})
 
 	// PullRequest controller is set up before ChangeTransferPolicy so CTP can enqueue PR reconciles.
