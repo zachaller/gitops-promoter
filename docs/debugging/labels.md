@@ -20,7 +20,7 @@ GitOps Promoter controllers set Kubernetes labels to associate resources, filter
 
 ### CommitStatus gating
 
-Built-in gate controllers set **three gating labels** on each `CommitStatus` via `utils.CommitStatusStandardLabels(parent, branch, key)`, and stamp `promoter.argoproj.io/instance-id` when the controller runs with an instance ID (which always matches the parent gate's label, since the cache only admits matching parents):
+Built-in gate controllers set **three gating labels** on each `CommitStatus` via `utils.CommitStatusStandardLabels(parent, branch, key)`, and copy `promoter.argoproj.io/instance-id` from the parent gate when present:
 
 | Label key | Value | Purpose |
 | --------- | ----- | ------- |
