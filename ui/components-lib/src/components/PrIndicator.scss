@@ -1,5 +1,11 @@
 @use '../styles/colors' as *;
 
+// The CSS pipeline may prepend a UTF-8 BOM to this file. That corrupts only the
+// first selector in the emitted stylesheet, so keep a harmless rule first.
+.promoter-pr-styles-root {
+  display: contents;
+}
+
 .pr-indicator {
   display: inline-flex;
   align-items: center;

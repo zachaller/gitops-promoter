@@ -28,7 +28,19 @@ export default {
       },
       {
         test: /\.s?css$/,
-        use: ['style-loader', 'css-loader', 'sass-loader'],
+        use: [
+          'style-loader',
+          'css-loader',
+          {
+            loader: 'sass-loader',
+            options: {
+              sassOptions: {
+                // Avoid a leading UTF-8 BOM in emitted CSS (breaks the first selector).
+                charset: false,
+              },
+            },
+          },
+        ],
         exclude: /node_modules/,
       },
     ],
