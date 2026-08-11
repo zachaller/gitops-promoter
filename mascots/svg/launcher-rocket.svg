@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 350" width="250" height="350">
+  <!-- Launcher Rocket - On Launch Pad Ready for Takeoff -->
+
+  <!-- Launch pad base -->
+  <rect x="50" y="310" width="150" height="8" rx="2" fill="#5A5A5A"/>
+  <rect x="40" y="318" width="170" height="15" rx="3" fill="#7A7A7A"/>
+
+  <!-- Support towers -->
+  <rect x="55" y="200" width="8" height="118" fill="#7A7A7A"/>
+  <rect x="187" y="200" width="8" height="118" fill="#7A7A7A"/>
+
+  <!-- Tower platforms -->
+  <rect x="50" y="230" width="18" height="4" fill="#5A5A5A"/>
+  <rect x="50" y="260" width="18" height="4" fill="#5A5A5A"/>
+  <rect x="182" y="230" width="18" height="4" fill="#5A5A5A"/>
+  <rect x="182" y="260" width="18" height="4" fill="#5A5A5A"/>
+
+  <!-- Countdown display -->
+  <rect x="15" y="250" width="30" height="20" rx="3" fill="#2C3E50"/>
+  <text x="30" y="264" font-family="monospace" font-size="16" font-weight="bold" fill="#00FF00" text-anchor="middle">3</text>
+
+  <!-- Steam/vapor from pre-launch -->
+  <ellipse cx="125" cy="315" rx="35" ry="8" fill="#E8F4F8" opacity="0.6"/>
+  <ellipse cx="120" cy="320" rx="40" ry="10" fill="#FFFFFF" opacity="0.4"/>
+  <ellipse cx="130" cy="318" rx="30" ry="7" fill="#E8F4F8" opacity="0.5"/>
+
+  <!-- Rocket body - Stage 1 (bottom) -->
+  <rect x="85" y="240" width="80" height="70" rx="5" fill="#FF8C42"/>
+  <rect x="90" y="245" width="70" height="60" rx="3" fill="#FFA15C" opacity="0.3"/>
+  <text x="125" y="280" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">DEV</text>
+
+  <!-- Stage 2 (middle) -->
+  <rect x="90" y="175" width="70" height="65" rx="5" fill="#FF8C42"/>
+  <rect x="95" y="180" width="60" height="55" rx="3" fill="#FFA15C" opacity="0.3"/>
+  <text x="125" y="213" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF" text-anchor="middle">TEST</text>
+
+  <!-- Stage 3 (top) -->
+  <rect x="95" y="120" width="60" height="55" rx="5" fill="#FF8C42"/>
+  <rect x="100" y="125" width="50" height="45" rx="3" fill="#FFA15C" opacity="0.3"/>
+  <text x="125" y="153" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#FFFFFF" text-anchor="middle">PROD</text>
+
+  <!-- Nose cone -->
+  <path d="M 125 40 L 155 120 L 95 120 Z" fill="#FF6B35"/>
+
+  <!-- Command module window -->
+  <circle cx="125" cy="85" r="20" fill="#4A90E2" opacity="0.3"/>
+  <circle cx="125" cy="85" r="17" fill="#E8F4F8"/>
+
+  <!-- Friendly face -->
+  <circle cx="120" cy="83" r="3.5" fill="#2C3E50"/>
+  <circle cx="130" cy="83" r="3.5" fill="#2C3E50"/>
+  <circle cx="121" cy="81" r="1.5" fill="#FFFFFF"/>
+  <circle cx="131" cy="81" r="1.5" fill="#FFFFFF"/>
+  <path d="M 117 90 Q 125 95 133 90" stroke="#2C3E50" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Fins -->
+  <path d="M 85 240 L 60 280 L 60 300 L 85 270 Z" fill="#4A90E2"/>
+  <path d="M 165 240 L 190 280 L 190 300 L 165 270 Z" fill="#4A90E2"/>
+
+  <!-- Fin details -->
+  <path d="M 70 285 L 70 295" stroke="#5BA3F5" stroke-width="2"/>
+  <path d="M 180 285 L 180 295" stroke="#5BA3F5" stroke-width="2"/>
+
+  <!-- Stage separators -->
+  <line x1="85" y1="240" x2="165" y2="240" stroke="#FF6B35" stroke-width="3"/>
+  <line x1="90" y1="175" x2="160" y2="175" stroke="#FF6B35" stroke-width="3"/>
+
+  <!-- Rivets -->
+  <circle cx="95" cy="195" r="2.5" fill="#FF6B35"/>
+  <circle cx="155" cy="195" r="2.5" fill="#FF6B35"/>
+  <circle cx="95" cy="260" r="2.5" fill="#FF6B35"/>
+  <circle cx="155" cy="260" r="2.5" fill="#FF6B35"/>
+
+  <!-- Ready indicator lights -->
+  <circle cx="100" cy="245" r="3" fill="#00FF00" opacity="0.9">
+    <animate attributeName="opacity" values="0.3;0.9;0.3" dur="1s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="150" cy="245" r="3" fill="#00FF00" opacity="0.9">
+    <animate attributeName="opacity" values="0.3;0.9;0.3" dur="1s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Connection umbilicals -->
+  <line x1="68" y1="232" x2="85" y2="240" stroke="#7A7A7A" stroke-width="2"/>
+  <line x1="68" y1="262" x2="85" y2="265" stroke="#7A7A7A" stroke-width="2"/>
+
+  <!-- Engine nozzles (not firing yet) -->
+  <rect x="95" y="310" width="15" height="8" fill="#5A5A5A"/>
+  <rect x="135" y="310" width="15" height="8" fill="#5A5A5A"/>
+
+  <!-- Mission patch on body -->
+  <circle cx="125" cy="130" r="8" fill="#4A90E2" opacity="0.7"/>
+  <text x="125" y="133" font-family="Arial, sans-serif" font-size="8" fill="#FFFFFF" text-anchor="middle">GP</text>
+</svg>
