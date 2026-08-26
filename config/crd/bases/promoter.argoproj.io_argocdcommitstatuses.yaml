@@ -15,6 +15,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.key
+      name: Key
+      type: string
     - jsonPath: .spec.promotionStrategyRef.name
       name: PromotionStrategy
       priority: 1

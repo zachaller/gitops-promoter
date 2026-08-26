@@ -187,6 +187,7 @@ type ApplicationsSelected struct {
 // +kubebuilder:subresource:status
 
 // ArgoCDCommitStatus is the Schema for the argocdcommitstatuses API.
+// +kubebuilder:printcolumn:name="Key",type=string,JSONPath=`.spec.key`
 // +kubebuilder:printcolumn:name="PromotionStrategy",type=string,JSONPath=`.spec.promotionStrategyRef.name`,priority=1
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 type ArgoCDCommitStatus struct {

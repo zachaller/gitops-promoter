@@ -140,6 +140,7 @@ type TimedCommitStatusEnvironmentsStatus struct {
 // +kubebuilder:subresource:status
 
 // TimedCommitStatus is the Schema for the timedcommitstatuses API
+// +kubebuilder:printcolumn:name="Key",type=string,JSONPath=`.spec.key`
 // +kubebuilder:printcolumn:name="PromotionStrategy",type=string,JSONPath=`.spec.promotionStrategyRef.name`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 type TimedCommitStatus struct {
