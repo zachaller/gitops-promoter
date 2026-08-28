@@ -7,6 +7,18 @@ spec:
     name: example-git-repository
   proposedBranch: environment/dev-next
   activeBranch: environment/dev
+  # Copied from the owning PromotionStrategy. Empty means Latest.
+  promotionPolicy: LatestVerified # Latest, LatestVerified, or Sequential
+  # A promoter-owned branch carrying the candidate this policy selected. Required by every policy
+  # other than Latest, which promotes the proposed branch tip directly. Nothing but the controller may
+  # write to it; it is force-pushed whenever the selection changes.
+  promotionBranch: environment/dev-promote
+  candidates:
+    # The changes every preceding environment has verified, newest first, computed by the
+    # PromotionStrategy controller. Only these may be promoted. Omitted entirely for the first
+    # environment in a sequence, which has nothing upstream to wait for.
+    dryShas:
+    - "abcdef1234567890abcdef1234567890abcdef12"
   # Defaults to true when omitted
   autoMerge: true
   activeCommitStatuses:
@@ -49,6 +61,15 @@ status:
         phase: pending # pending, success, or failure
         url: https://example.com/checks/example-key
         description: Waiting for check
+  candidate:
+    # The tip of the hydrator's proposed branch: the newest change that exists, whether or not it is
+    # eligible for promotion. Only populated when promotionPolicy selects candidates, because
+    # otherwise it is identical to proposed.
+    drySha: "1111111111111111111111111111111111111111"
+    hydratedSha: "2222222222222222222222222222222222222222"
+    commitTime: 2023-10-01T00:00:00Z
+    # Runs ahead of drySha after a hydration that changed no manifests.
+    noteDrySha: "1111111111111111111111111111111111111111"
   active:
     dry:
       sha: "fedcba0987654321fedcba0987654321fedcba09"

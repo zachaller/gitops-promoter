@@ -177,6 +177,23 @@ func (r *ChangeTransferPolicyReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, fmt.Errorf("failed to fetch git notes: %w", err)
 	}
 
+	// Point the promotion branch at the change this policy should promote, before any status is
+	// calculated from it. Policies that promote the proposed branch tip need no branch of their own.
+	if ctp.Spec.SelectsCandidates() {
+		var movedPromotionBranch bool
+		movedPromotionBranch, err = r.selectPromotionCandidate(ctx, &ctp, gitOperations)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to select promotion candidate: %w", err)
+		}
+		if movedPromotionBranch {
+			return ctrl.Result{RequeueAfter: 100 * time.Millisecond}, nil
+		}
+	} else {
+		// Proposed already describes the newest change under this policy, so a separate candidate
+		// record would only duplicate it. Clear any left behind by a previous policy.
+		ctp.Status.Candidate = nil
+	}
+
 	// Snapshot the persisted status (from the Get above) before calculateStatus overwrites it,
 	// so promotion lifecycle events can be emitted only on actual state transitions.
 	prevStatus := ctp.Status.DeepCopy()
@@ -595,6 +612,258 @@ func (r *ChangeTransferPolicyReconciler) SetupWithManager(ctx context.Context, m
 	return nil
 }
 
+// maxPromotionCandidates bounds how far back along the proposed branch the controller will look for
+// a promotable change. It is a safety valve, not a tuning knob: selection normally stops at the
+// change the environment is already running, and only walks the full window when the environment has
+// fallen very far behind. It is deliberately larger than MaxLastHealthyDryShas so the walk can always
+// reach past every change an upstream environment could still be vouching for.
+const maxPromotionCandidates = 200
+
+// selectPromotionCandidate points the promotion branch at the change this policy should promote next.
+//
+// The proposed branch belongs to the hydrator: it always carries the newest dry commit, which is also
+// the one upstream environments have had the least time to verify. Promoting it directly is what the
+// Latest policy does, and under churn it can starve an environment indefinitely. The other policies
+// instead treat the proposed branch as a stream of candidates — the hydrator writes one commit per
+// dry commit — and pick one out of its history, which is what this function does. The chosen commit
+// is force-pushed to the promotion branch, and the rest of the reconcile proceeds against that branch
+// exactly as it would against the proposed branch.
+//
+// Called before calculateStatus so that the status, the pull request, and the conflict merge all
+// describe the selected candidate. Returns true when the promotion branch was moved, in which case
+// the caller must requeue rather than continue: everything after this point derives from the branch,
+// and re-deriving it on a fresh reconcile is simpler than reasoning about which reads in this one
+// would still see the pre-push tip.
+func (r *ChangeTransferPolicyReconciler) selectPromotionCandidate(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy, gitOperations *git.EnvironmentOperations) (bool, error) {
+	var lastKnownCandidateSha string
+	if ctp.Status.Candidate != nil {
+		lastKnownCandidateSha = ctp.Status.Candidate.HydratedSha
+	}
+
+	candidateShas, err := gitOperations.GetBranchShas(ctx, ctp.Spec.ProposedBranch, ctp.Spec.ActivePath, lastKnownCandidateSha)
+	if err != nil {
+		if strings.Contains(err.Error(), "couldn't find remote ref") {
+			return false, fmt.Errorf("failed to get SHAs for proposed branch %q: %w (this branch may not exist yet - check if your hydrator is running and has processed this branch)", ctp.Spec.ProposedBranch, err)
+		}
+		return false, fmt.Errorf("failed to get SHAs for proposed branch %q: %w", ctp.Spec.ProposedBranch, err)
+	}
+
+	// The commit time is what the PromotionStrategy controller ranks environments by when deciding
+	// which one has the newest view of the hydrator's output, so it has to be populated here.
+	candidateCommitTime, err := gitOperations.GetShaTime(ctx, candidateShas.Hydrated)
+	if err != nil {
+		return false, fmt.Errorf("failed to get commit time for candidate SHA %q: %w", candidateShas.Hydrated, err)
+	}
+
+	// The hydrator's note lives on this branch, not on the promotion branch, and it is the only
+	// signal that a hydration which changed no manifests has happened. The PromotionStrategy
+	// controller reads it to spot environments whose view of the notes has gone stale.
+	candidateNote, err := gitOperations.FindMatchingHydratorNote(ctx, candidateShas.Hydrated, candidateShas.Dry, git.MaxHydratorNoteFirstParentWalk)
+	if err != nil {
+		return false, fmt.Errorf("failed to get hydrator note for candidate SHA %q: %w", candidateShas.Hydrated, err)
+	}
+
+	// Record the newest change that exists regardless of whether it can be promoted, so the gap
+	// between it and Proposed shows how far behind the environment is running.
+	ctp.Status.Candidate = &promoterv1alpha1.PromotionCandidateState{
+		DrySha:      candidateShas.Dry,
+		HydratedSha: candidateShas.Hydrated,
+		CommitTime:  candidateCommitTime,
+	}
+	if candidateNote != nil {
+		ctp.Status.Candidate.NoteDrySha = candidateNote.DrySha
+	}
+
+	activeShas, err := gitOperations.GetBranchShas(ctx, ctp.Spec.ActiveBranch, ctp.Spec.ActivePath, ctp.Status.Active.Hydrated.Sha)
+	if err != nil {
+		return false, fmt.Errorf("failed to get SHAs for active branch %q: %w", ctp.Spec.ActiveBranch, err)
+	}
+
+	selected, err := r.findPromotionCandidate(ctx, ctp, gitOperations, candidateShas.Hydrated, activeShas.Dry)
+	if err != nil {
+		return false, err
+	}
+
+	return r.updatePromotionBranch(ctx, ctp, gitOperations, selected, activeShas)
+}
+
+// promotionCandidate is a commit on the proposed branch and the dry commit it hydrates.
+type promotionCandidate struct {
+	hydratedSha string
+	drySha      string
+}
+
+// findPromotionCandidate walks the proposed branch from its tip back toward the change the
+// environment is already running and returns the candidate the policy selects, or a zero value when
+// nothing is promotable right now.
+//
+// The walk stops at activeDrySha because everything older is already promoted. It reads each commit's
+// dry SHA from hydrator.metadata rather than from the git note: a note-only hydration means the
+// manifests did not change, so there is no distinct commit to promote, and the ledger upstream
+// environments write records the hydrator.metadata SHA too. Using the same source on both sides is
+// what makes a candidate comparable with what upstream verified.
+func (r *ChangeTransferPolicyReconciler) findPromotionCandidate(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy, gitOperations *git.EnvironmentOperations, candidateTipSha, activeDrySha string) (promotionCandidate, error) {
+	logger := log.FromContext(ctx)
+
+	shas, err := gitOperations.GetRevListFirstParent(ctx, candidateTipSha, maxPromotionCandidates)
+	if err != nil {
+		return promotionCandidate{}, fmt.Errorf("failed to list candidates on branch %q: %w", ctp.Spec.ProposedBranch, err)
+	}
+
+	policy := ctp.Spec.GetPromotionPolicy()
+
+	// Newest first, so the first eligible commit is the newest one. Sequential wants the oldest
+	// instead, so it keeps walking and takes the last one it found.
+	var eligible []promotionCandidate
+	for _, sha := range shas {
+		metadata, err := gitOperations.GetShaMetadataFromFile(ctx, sha, ctp.Spec.ActivePath)
+		if err != nil {
+			return promotionCandidate{}, fmt.Errorf("failed to read hydrator metadata for commit %q: %w", sha, err)
+		}
+
+		drySha := metadata.Sha
+		if drySha == "" {
+			// Not a commit the hydrator identified, so there is no dry SHA to match against what
+			// upstream verified. Conflict-resolving merge commits pushed by an earlier reconcile land
+			// here before the hydrated commit they sit on top of.
+			continue
+		}
+
+		if drySha == activeDrySha {
+			// Reached what the environment already runs; everything from here back is promoted.
+			break
+		}
+
+		if !isPromotionCandidateAllowed(ctp, drySha) {
+			continue
+		}
+
+		eligible = append(eligible, promotionCandidate{hydratedSha: sha, drySha: drySha})
+		if policy != promoterv1alpha1.PromotionPolicySequential {
+			break
+		}
+	}
+
+	if len(eligible) == 0 {
+		logger.V(4).Info("No promotable candidate found",
+			"policy", policy,
+			"proposedBranch", ctp.Spec.ProposedBranch,
+			"candidateTipSha", candidateTipSha,
+			"activeDrySha", activeDrySha,
+			"walked", len(shas))
+		return promotionCandidate{}, nil
+	}
+
+	selected := eligible[0]
+	if policy == promoterv1alpha1.PromotionPolicySequential {
+		selected = eligible[len(eligible)-1]
+	}
+
+	// The walk stops at the active dry SHA, but that SHA is only found when the environment's current
+	// change is still within the window and still on the branch's first-parent chain. Confirm the
+	// selection really is ahead of the active branch so a rewritten or aged-out history cannot make
+	// the promotion branch move backwards onto something already merged.
+	alreadyPromoted, err := gitOperations.IsAncestor(ctx, selected.hydratedSha, "origin/"+ctp.Spec.ActiveBranch)
+	if err != nil {
+		return promotionCandidate{}, fmt.Errorf("failed to check whether candidate %q is already on branch %q: %w", selected.hydratedSha, ctp.Spec.ActiveBranch, err)
+	}
+	if alreadyPromoted {
+		logger.V(4).Info("Skipping candidate already contained in the active branch",
+			"candidateSha", selected.hydratedSha, "candidateDrySha", selected.drySha)
+		return promotionCandidate{}, nil
+	}
+
+	logger.Info("Selected promotion candidate",
+		"policy", policy,
+		"candidateSha", selected.hydratedSha,
+		"candidateDrySha", selected.drySha,
+		"newestDrySha", ctp.Status.Candidate.DrySha,
+		"activeDrySha", activeDrySha)
+
+	return selected, nil
+}
+
+// isPromotionCandidateAllowed reports whether every preceding environment has verified the change.
+// A nil Candidates means there is nothing upstream to wait for, which is the case for the first
+// environment in a sequence.
+func isPromotionCandidateAllowed(ctp *promoterv1alpha1.ChangeTransferPolicy, drySha string) bool {
+	if ctp.Spec.Candidates == nil {
+		return true
+	}
+	for _, allowed := range ctp.Spec.Candidates.DryShas {
+		if allowed == drySha {
+			return true
+		}
+	}
+	return false
+}
+
+// updatePromotionBranch moves the promotion branch onto the selected candidate when it is not
+// already carrying it.
+//
+// The comparison is by dry SHA rather than by commit SHA because the branch tip is not always the
+// candidate commit itself: when the promotion conflicts with the active branch, gitMergeStrategyOurs
+// pushes a merge commit on top that keeps the candidate's tree, and therefore its hydrator.metadata.
+// Comparing commit SHAs would see a difference there, force the branch back onto the candidate, and
+// leave the next reconcile to redo the merge forever.
+func (r *ChangeTransferPolicyReconciler) updatePromotionBranch(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy, gitOperations *git.EnvironmentOperations, selected promotionCandidate, activeShas git.BranchShas) (bool, error) {
+	logger := log.FromContext(ctx)
+
+	promotionBranch := ctp.Spec.PromotionBranch
+
+	// An empty head means the branch does not exist yet, which is the normal state before this
+	// environment's first promotion.
+	currentHead, err := gitOperations.LsRemoteBranchHead(ctx, promotionBranch)
+	if err != nil {
+		return false, fmt.Errorf("failed to look up promotion branch %q: %w", promotionBranch, err)
+	}
+
+	if selected.hydratedSha == "" {
+		if currentHead != "" {
+			// Nothing new to promote. Leaving the branch where it is keeps it equivalent to the active
+			// branch, so the rest of the reconcile sees no pending promotion.
+			return false, nil
+		}
+
+		// First reconcile for this environment. The branch has to exist before the rest of the
+		// reconcile can read it, so start it at the active branch: same content, hence nothing to
+		// promote until a candidate is selected.
+		if activeShas.Hydrated == "" {
+			return false, fmt.Errorf("cannot initialize promotion branch %q: active branch %q has no commit", promotionBranch, ctp.Spec.ActiveBranch)
+		}
+		logger.Info("Initializing promotion branch at the active branch", "promotionBranch", promotionBranch, "activeSha", activeShas.Hydrated)
+		if err := gitOperations.PushShaToBranch(ctx, activeShas.Hydrated, promotionBranch); err != nil {
+			return false, fmt.Errorf("failed to initialize promotion branch %q: %w", promotionBranch, err)
+		}
+		return true, nil
+	}
+
+	if currentHead != "" {
+		currentShas, err := gitOperations.GetBranchShas(ctx, promotionBranch, ctp.Spec.ActivePath, ctp.Status.Proposed.Hydrated.Sha)
+		if err != nil {
+			return false, fmt.Errorf("failed to get SHAs for promotion branch %q: %w", promotionBranch, err)
+		}
+		if currentShas.Dry == selected.drySha {
+			return false, nil
+		}
+	}
+
+	logger.Info("Advancing promotion branch to selected candidate",
+		"promotionBranch", promotionBranch,
+		"fromSha", currentHead,
+		"toSha", selected.hydratedSha,
+		"drySha", selected.drySha)
+
+	if err := gitOperations.PushShaToBranch(ctx, selected.hydratedSha, promotionBranch); err != nil {
+		return false, fmt.Errorf("failed to advance promotion branch %q: %w", promotionBranch, err)
+	}
+
+	r.Recorder.Eventf(ctp, nil, "Normal", constants.PromotionCandidateSelectedReason, "SelectingCandidate",
+		constants.PromotionCandidateSelectedMessage, selected.drySha, ctp.Spec.ActiveBranch, ctp.Status.Candidate.DrySha)
+
+	return true, nil
+}
+
 func (r *ChangeTransferPolicyReconciler) calculateStatus(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy, gitOperations *git.EnvironmentOperations) error {
 	logger := log.FromContext(ctx)
 
@@ -607,13 +876,13 @@ func (r *ChangeTransferPolicyReconciler) calculateStatus(ctx context.Context, ct
 	// present in this identity's clone. In the common steady state (nothing changed since the last
 	// reconcile) this avoids paying for a full fetch on either branch. A failed probe (for example a
 	// branch not existing yet) just falls back to a real fetch, exactly as before.
-	proposedShas, err := gitOperations.GetBranchShas(ctx, ctp.Spec.ProposedBranch, ctp.Spec.ActivePath, ctp.Status.Proposed.Hydrated.Sha)
+	proposedShas, err := gitOperations.GetBranchShas(ctx, ctp.Spec.GetPromotionSourceBranch(), ctp.Spec.ActivePath, ctp.Status.Proposed.Hydrated.Sha)
 	if err != nil {
 		// If the proposed branch doesn't exist, it's likely because the hydrator hasn't run yet
 		if strings.Contains(err.Error(), "couldn't find remote ref") {
-			return fmt.Errorf("failed to get SHAs for proposed branch %q: %w (this branch may not exist yet - check if your hydrator is running and has processed this branch)", ctp.Spec.ProposedBranch, err)
+			return fmt.Errorf("failed to get SHAs for proposed branch %q: %w (this branch may not exist yet - check if your hydrator is running and has processed this branch)", ctp.Spec.GetPromotionSourceBranch(), err)
 		}
-		return fmt.Errorf("failed to get SHAs for proposed branch %q: %w", ctp.Spec.ProposedBranch, err)
+		return fmt.Errorf("failed to get SHAs for proposed branch %q: %w", ctp.Spec.GetPromotionSourceBranch(), err)
 	}
 
 	activeShas, err := gitOperations.GetBranchShas(ctx, ctp.Spec.ActiveBranch, ctp.Spec.ActivePath, ctp.Status.Active.Hydrated.Sha)
@@ -622,8 +891,8 @@ func (r *ChangeTransferPolicyReconciler) calculateStatus(ctx context.Context, ct
 	}
 
 	logger.Info("Branch SHAs", "branchShas", map[string]git.BranchShas{
-		ctp.Spec.ActiveBranch:   activeShas,
-		ctp.Spec.ProposedBranch: proposedShas,
+		ctp.Spec.ActiveBranch:               activeShas,
+		ctp.Spec.GetPromotionSourceBranch(): proposedShas,
 	})
 
 	err = r.setCommitMetadata(ctx, ctp, gitOperations, activeShas.Hydrated, proposedShas.Hydrated)
@@ -634,7 +903,7 @@ func (r *ChangeTransferPolicyReconciler) calculateStatus(ctx context.Context, ct
 	if err := validateProposedDryMetadata(ctp); err != nil {
 		metadataPath := hydratorMetadataPath(ctp.Spec.ActivePath)
 		r.Recorder.Eventf(ctp, nil, "Warning", constants.MissingProposedHydratorMetadataReason, "EvaluatingPromotion",
-			constants.MissingProposedHydratorMetadataMessage, ctp.Spec.ProposedBranch, ctp.Status.Proposed.Hydrated.Sha, metadataPath)
+			constants.MissingProposedHydratorMetadataMessage, ctp.Spec.GetPromotionSourceBranch(), ctp.Status.Proposed.Hydrated.Sha, metadataPath)
 		return err
 	}
 
@@ -689,7 +958,7 @@ func validateProposedDryMetadata(ctp *promoterv1alpha1.ChangeTransferPolicy) err
 
 	metadataPath := hydratorMetadataPath(ctp.Spec.ActivePath)
 	msg := fmt.Sprintf("proposed branch %q has hydrated commit %s but no dry SHA from %q on that commit",
-		ctp.Spec.ProposedBranch, proposedHydratedSha, metadataPath)
+		ctp.Spec.GetPromotionSourceBranch(), proposedHydratedSha, metadataPath)
 	if ctp.Spec.ActivePath != "" {
 		msg += fmt.Sprintf("; ensure the hydrator writes hydrator.metadata under activePath %q", ctp.Spec.ActivePath)
 	}
@@ -1285,7 +1554,7 @@ func (r *ChangeTransferPolicyReconciler) createOrUpdatePullRequest(ctx context.C
 		// Update existing PR - add trailers
 		commitTrailers := trailers{}
 		commitTrailers[constants.TrailerPullRequestID] = existingPR.Status.ID
-		commitTrailers[constants.TrailerPullRequestSourceBranch] = ctp.Spec.ProposedBranch
+		commitTrailers[constants.TrailerPullRequestSourceBranch] = ctp.Spec.GetPromotionSourceBranch()
 		commitTrailers[constants.TrailerPullRequestTargetBranch] = ctp.Spec.ActiveBranch
 		commitTrailers[constants.TrailerPullRequestCreationTime] = existingPR.Status.PRCreationTime.Format(time.RFC3339)
 		commitTrailers[constants.TrailerPullRequestUrl] = existingPR.Status.Url
@@ -1341,7 +1610,7 @@ func (r *ChangeTransferPolicyReconciler) createOrUpdatePullRequest(ctx context.C
 			RepositoryReference: promoterv1alpha1.ObjectReference{Name: ctp.Spec.RepositoryReference.Name},
 			Title:               title,
 			TargetBranch:        ctp.Spec.ActiveBranch,
-			SourceBranch:        ctp.Spec.ProposedBranch,
+			SourceBranch:        ctp.Spec.GetPromotionSourceBranch(),
 			Description:         description,
 			Commit:              promoterv1alpha1.CommitConfiguration{Message: commitMessage},
 			MergeSha:            ctp.Status.Proposed.Hydrated.Sha,
@@ -1516,32 +1785,32 @@ func (r *ChangeTransferPolicyReconciler) mergePullRequests(ctx context.Context, 
 // reconcile when true is returned, so that the next reconcile re-derives Status.Proposed from the new tip.
 func (r *ChangeTransferPolicyReconciler) gitMergeStrategyOurs(ctx context.Context, gitOperations *git.EnvironmentOperations, ctp *promoterv1alpha1.ChangeTransferPolicy) (bool, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("Testing for conflicts between branches", "proposed", ctp.Spec.ProposedBranch, "active", ctp.Spec.ActiveBranch)
+	logger.Info("Testing for conflicts between branches", "proposed", ctp.Spec.GetPromotionSourceBranch(), "active", ctp.Spec.ActiveBranch)
 
 	// Check if there's a conflict between branches
-	hasConflict, err := gitOperations.HasConflict(ctx, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch)
+	hasConflict, err := gitOperations.HasConflict(ctx, ctp.Spec.GetPromotionSourceBranch(), ctp.Spec.ActiveBranch)
 	if err != nil {
-		return false, fmt.Errorf("failed to check for conflicts between branches %q and %q: %w", ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch, err)
+		return false, fmt.Errorf("failed to check for conflicts between branches %q and %q: %w", ctp.Spec.GetPromotionSourceBranch(), ctp.Spec.ActiveBranch, err)
 	}
 
 	if !hasConflict {
-		logger.V(4).Info("No conflicts detected between branches", "proposed", ctp.Spec.ProposedBranch, "active", ctp.Spec.ActiveBranch)
+		logger.V(4).Info("No conflicts detected between branches", "proposed", ctp.Spec.GetPromotionSourceBranch(), "active", ctp.Spec.ActiveBranch)
 		return false, nil // No conflict, nothing to do
 	}
 
 	// If we have a conflict, perform a merge with "ours" strategy
-	logger.Info("Conflicts detected, performing merge with 'ours' strategy", "proposed", ctp.Spec.ProposedBranch, "active", ctp.Spec.ActiveBranch, "activePath", ctp.Spec.ActivePath)
+	logger.Info("Conflicts detected, performing merge with 'ours' strategy", "proposed", ctp.Spec.GetPromotionSourceBranch(), "active", ctp.Spec.ActiveBranch, "activePath", ctp.Spec.ActivePath)
 
 	if ctp.Spec.ActivePath != "" {
-		err = gitOperations.MergeWithOursStrategyForPath(ctx, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch, ctp.Spec.ActivePath)
+		err = gitOperations.MergeWithOursStrategyForPath(ctx, ctp.Spec.GetPromotionSourceBranch(), ctp.Spec.ActiveBranch, ctp.Spec.ActivePath)
 	} else {
-		err = gitOperations.MergeWithOursStrategy(ctx, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch)
+		err = gitOperations.MergeWithOursStrategy(ctx, ctp.Spec.GetPromotionSourceBranch(), ctp.Spec.ActiveBranch)
 	}
 	if err != nil {
-		return false, fmt.Errorf("failed to merge branches %q and %q with 'ours' strategy: %w", ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch, err)
+		return false, fmt.Errorf("failed to merge branches %q and %q with 'ours' strategy: %w", ctp.Spec.GetPromotionSourceBranch(), ctp.Spec.ActiveBranch, err)
 	}
 
-	r.Recorder.Eventf(ctp, nil, "Normal", constants.ResolvedConflictReason, "ResolvingConflict", constants.ResolvedConflictMessage, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch)
+	r.Recorder.Eventf(ctp, nil, "Normal", constants.ResolvedConflictReason, "ResolvingConflict", constants.ResolvedConflictMessage, ctp.Spec.GetPromotionSourceBranch(), ctp.Spec.ActiveBranch)
 
 	return true, nil
 }

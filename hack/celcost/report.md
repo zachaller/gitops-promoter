@@ -10,7 +10,7 @@ Estimated static CEL costs versus kube-apiserver limits, computed from `k8s.io/a
 | Resource | Version | Total cost | % of schema limit |
 |---|---|---:|---:|
 | ArgoCDCommitStatus | v1alpha1 | 0 | 0.00% |
-| ChangeTransferPolicy | v1alpha1 | 56,623,293 | 56.62% |
+| ChangeTransferPolicy | v1alpha1 | 56,623,380 | 56.62% |
 | ClusterScmProvider | v1alpha1 | 135 | 0.00% |
 | CommitStatus | v1alpha1 | 3 | 0.00% |
 | ControllerConfiguration | v1alpha1 | 3,195 | 0.00% |
@@ -62,16 +62,19 @@ Source: `promoter.argoproj.io_changetransferpolicies.yaml`
 | `.status.proposed.note.references[].commit.repoURL` | 3,145,728 | 31.46% | `self == '' \|\| isURL(self)` |
 | `.spec.activeBranch` | 42 | 0.00% | `!self.contains(':')` |
 | `.spec.activeBranch` | 42 | 0.00% | `!self.contains('..')` |
+| `.spec.promotionBranch` | 42 | 0.00% | `!self.contains(':')` |
+| `.spec.promotionBranch` | 42 | 0.00% | `!self.contains('..')` |
 | `.spec.proposedBranch` | 42 | 0.00% | `!self.contains(':')` |
 | `.spec.proposedBranch` | 42 | 0.00% | `!self.contains('..')` |
 | `.spec.activeBranch` | 3 | 0.00% | `!self.startsWith('-')` |
+| `.spec.promotionBranch` | 3 | 0.00% | `!self.startsWith('-')` |
 | `.spec.proposedBranch` | 3 | 0.00% | `!self.startsWith('-')` |
 | `.status.active.dry.repoURL` | 3 | 0.00% | `self == '' \|\| isURL(self)` |
 | `.status.active.hydrated.repoURL` | 3 | 0.00% | `self == '' \|\| isURL(self)` |
 | `.status.proposed.dry.repoURL` | 3 | 0.00% | `self == '' \|\| isURL(self)` |
 | `.status.proposed.hydrated.repoURL` | 3 | 0.00% | `self == '' \|\| isURL(self)` |
 | `.status.pullRequest.url` | 3 | 0.00% | `self == '' \|\| isURL(self)` |
-| **Total** | **56,623,293** | **56.62%** | |
+| **Total** | **56,623,380** | **56.62%** | |
 
 #### ClusterScmProvider
 

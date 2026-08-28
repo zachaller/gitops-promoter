@@ -101,6 +101,23 @@ spec:
               autoMerge:
                 default: true
                 type: boolean
+              candidates:
+                description: |-
+                  Candidates constrains which hydrated changes this policy may promote. It is computed by the
+                  PromotionStrategy controller from the verification ledgers of every preceding environment.
+                  A nil value means unconstrained, which is the case for the first environment in a sequence
+                  because it has no preceding environment to wait for.
+                properties:
+                  dryShas:
+                    description: |-
+                      DryShas are the dry commit SHAs that every preceding environment has verified, newest first.
+                      Only candidates whose dry SHA appears in this list may be promoted. An empty list means no
+                      change is currently eligible, which is different from a nil PromotionCandidates (unconstrained).
+                    items:
+                      type: string
+                    maxItems: 50
+                    type: array
+                type: object
               gitRepositoryRef:
                 description: RepositoryReference what repository to open the PR on.
                 properties:
@@ -113,6 +130,37 @@ spec:
                 required:
                 - name
                 type: object
+              promotionBranch:
+                description: |-
+                  PromotionBranch is a promoter-owned branch that carries the candidate this policy has selected
+                  for promotion. It is required by every policy other than Latest, which promotes the proposed
+                  branch tip directly and needs no separate branch.
+
+                  The proposed branch belongs to the hydrator and always tracks the newest dry commit, so it cannot
+                  be used to promote anything but the newest candidate. Instead the controller picks a commit out
+                  of the proposed branch's history and force-pushes it here, and the promotion pull request is
+                  opened from this branch. Nothing but this controller may write to it.
+
+                  Must not start with '-', contain ':', or contain '..'.
+                maxLength: 100
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: branch must not start with '-'
+                  rule: '!self.startsWith(''-'')'
+                - message: branch must not contain ':'
+                  rule: '!self.contains('':'')'
+                - message: branch must not contain '..'
+                  rule: '!self.contains(''..'')'
+              promotionPolicy:
+                description: |-
+                  PromotionPolicy selects which candidate on the proposed branch this policy promotes.
+                  Copied from the owning PromotionStrategy by the PromotionStrategy controller. Empty means Latest.
+                enum:
+                - Latest
+                - LatestVerified
+                - Sequential
+                type: string
               proposedBranch:
                 description: |-
                   ProposedBranch staging hydrated branch
@@ -464,6 +512,41 @@ spec:
                           that was used to hydrate the branch.
                         type: string
                     type: object
+                type: object
+              candidate:
+                description: |-
+                  Candidate is the tip of the hydrator's proposed branch: the newest change that exists for this
+                  environment, whether or not it is eligible for promotion. It is only populated when the policy
+                  selects candidates, because otherwise it is identical to Proposed. Comparing it with Proposed
+                  shows how far behind the newest change this environment's current promotion is.
+                properties:
+                  commitTime:
+                    description: CommitTime is the time of the hydrated commit.
+                    format: date-time
+                    type: string
+                  drySha:
+                    description: |-
+                      DrySha is the dry commit SHA this candidate hydrates, read from hydrator.metadata.
+                      Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                    maxLength: 64
+                    pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                    type: string
+                  hydratedSha:
+                    description: |-
+                      HydratedSha is the commit SHA at the tip of the proposed branch.
+                      Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                    maxLength: 64
+                    pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                    type: string
+                  noteDrySha:
+                    description: |-
+                      NoteDrySha is the dry SHA from the git note on the hydrated commit, when there is one. It runs
+                      ahead of DrySha after a hydration that changed no manifests, because the hydrator then updates
+                      only the note and creates no new commit.
+                      Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                    maxLength: 64
+                    pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                    type: string
                 type: object
               conditions:
                 description: Conditions Represents the observations of the current

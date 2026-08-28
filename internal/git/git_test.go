@@ -1317,3 +1317,162 @@ func (f *fakeGitProvider) GetGitHttpsRepoUrl(repo v1alpha1.GitRepository) string
 }
 func (f *fakeGitProvider) GetUser(ctx context.Context) (string, error)  { return "user", nil }
 func (f *fakeGitProvider) GetToken(ctx context.Context) (string, error) { return "token", nil }
+
+var _ = Describe("IsAncestor and PushShaToBranch", func() {
+	var (
+		tempRepoDir string
+		workDir     string
+		branch      string
+		g           *git.EnvironmentOperations
+		firstSha    string
+		secondSha   string
+		sideSha     string
+	)
+
+	BeforeEach(func() {
+		var err error
+		tempRepoDir, err = os.MkdirTemp("", "git-test-*")
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Setting up a bare repository with a two-commit branch and one commit off to the side")
+		_, err = runGitCmd(tempRepoDir, "init", "--bare")
+		Expect(err).NotTo(HaveOccurred())
+
+		workDir, err = os.MkdirTemp("", "git-work-*")
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = runGitCmd(workDir, "clone", tempRepoDir, ".")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "user.name", "Test User")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "user.email", "test@example.com")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "commit.gpgsign", "false")
+		Expect(err).NotTo(HaveOccurred())
+
+		commit := func(content string) string {
+			GinkgoHelper()
+			Expect(os.WriteFile(filepath.Join(workDir, "hydrator.metadata"), []byte(content), 0o644)).To(Succeed())
+			_, err := runGitCmd(workDir, "add", "hydrator.metadata")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = runGitCmd(workDir, "commit", "-m", "commit")
+			Expect(err).NotTo(HaveOccurred())
+			sha, err := runGitCmd(workDir, "rev-parse", "HEAD")
+			Expect(err).NotTo(HaveOccurred())
+			return strings.TrimSpace(sha)
+		}
+
+		firstSha = commit(`{"drySha": "dry-1"}`)
+		defaultBranch, err := runGitCmd(workDir, "rev-parse", "--abbrev-ref", "HEAD")
+		Expect(err).NotTo(HaveOccurred())
+		branch = strings.TrimSpace(defaultBranch)
+		secondSha = commit(`{"drySha": "dry-2"}`)
+		_, err = runGitCmd(workDir, "push", "origin", branch)
+		Expect(err).NotTo(HaveOccurred())
+
+		// A commit on an unrelated branch, so it is reachable from neither of the two above.
+		_, err = runGitCmd(workDir, "checkout", "-b", "side", firstSha)
+		Expect(err).NotTo(HaveOccurred())
+		sideSha = commit(`{"drySha": "dry-side"}`)
+		_, err = runGitCmd(workDir, "push", "origin", "side")
+		Expect(err).NotTo(HaveOccurred())
+
+		repo := &v1alpha1.GitRepository{
+			Spec: v1alpha1.GitRepositorySpec{
+				GitHub: &v1alpha1.GitHubRepo{Owner: "test-owner", Name: "testrepo"},
+				ScmProviderRef: v1alpha1.ScmProviderObjectReference{
+					Kind: "ScmProvider",
+					Name: "testprovider",
+				},
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "testrepo", Namespace: "default"},
+		}
+		g = git.NewEnvironmentOperations(repo, &fakeGitProvider{tempDirPath: tempRepoDir}, "default/testrepo")
+		Expect(g.CloneRepo(GinkgoT().Context())).To(Succeed())
+		_, err = g.GetBranchShas(GinkgoT().Context(), branch, "", "")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = g.GetBranchShas(GinkgoT().Context(), "side", "", "")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		if tempRepoDir != "" {
+			Expect(os.RemoveAll(tempRepoDir)).To(Succeed())
+		}
+		if workDir != "" {
+			Expect(os.RemoveAll(workDir)).To(Succeed())
+		}
+	})
+
+	Describe("IsAncestor", func() {
+		It("reports an earlier commit as an ancestor of a later one", func() {
+			Expect(g.IsAncestor(GinkgoT().Context(), firstSha, secondSha)).To(BeTrue())
+		})
+
+		It("reports a commit as an ancestor of itself", func() {
+			Expect(g.IsAncestor(GinkgoT().Context(), secondSha, secondSha)).To(BeTrue())
+		})
+
+		// This is the distinction candidate selection depends on: a commit already merged into the
+		// active branch must not be selected again, while a commit that is merely newer must be.
+		It("reports a later commit as not an ancestor of an earlier one", func() {
+			Expect(g.IsAncestor(GinkgoT().Context(), secondSha, firstSha)).To(BeFalse())
+		})
+
+		It("reports an unrelated commit as not an ancestor", func() {
+			Expect(g.IsAncestor(GinkgoT().Context(), sideSha, secondSha)).To(BeFalse())
+		})
+
+		It("returns an error rather than a negative answer for a commit that does not exist", func() {
+			_, err := g.IsAncestor(GinkgoT().Context(), strings.Repeat("0", 40), secondSha)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("leaves the clone in its resting state", func() {
+			headBefore, statusBefore := cloneHeadAndStatus(g.ClonePath())
+			_, err := g.IsAncestor(GinkgoT().Context(), firstSha, secondSha)
+			Expect(err).NotTo(HaveOccurred())
+			headAfter, statusAfter := cloneHeadAndStatus(g.ClonePath())
+			Expect(headAfter).To(Equal(headBefore))
+			Expect(statusAfter).To(Equal(statusBefore))
+		})
+	})
+
+	Describe("PushShaToBranch", func() {
+		It("creates a branch that does not exist yet", func() {
+			Expect(g.PushShaToBranch(GinkgoT().Context(), firstSha, "promote")).To(Succeed())
+
+			Expect(g.LsRemoteBranchHead(GinkgoT().Context(), "promote")).To(Equal(firstSha))
+		})
+
+		// Selection moves the promotion branch between candidates that need not share history, for
+		// example when a conflict-resolving merge commit sits on the branch. That is a non-fast-forward
+		// update, so the push has to force.
+		It("moves a branch to a commit that is not a descendant of its current tip", func() {
+			Expect(g.PushShaToBranch(GinkgoT().Context(), secondSha, "promote")).To(Succeed())
+			Expect(g.PushShaToBranch(GinkgoT().Context(), sideSha, "promote")).To(Succeed())
+
+			Expect(g.LsRemoteBranchHead(GinkgoT().Context(), "promote")).To(Equal(sideSha))
+		})
+
+		It("leaves the clone in its resting state", func() {
+			headBefore, statusBefore := cloneHeadAndStatus(g.ClonePath())
+			Expect(g.PushShaToBranch(GinkgoT().Context(), firstSha, "promote")).To(Succeed())
+			headAfter, statusAfter := cloneHeadAndStatus(g.ClonePath())
+			Expect(headAfter).To(Equal(headBefore))
+			Expect(statusAfter).To(Equal(statusBefore))
+		})
+	})
+
+	Describe("LsRemoteBranchHead", func() {
+		It("returns the SHA of a branch that exists", func() {
+			Expect(g.LsRemoteBranchHead(GinkgoT().Context(), branch)).To(Equal(secondSha))
+		})
+
+		// Candidate selection creates the promotion branch when it is absent, so absence has to be a
+		// normal answer here rather than the error LsRemote returns for a missing branch.
+		It("returns an empty SHA and no error for a branch that does not exist", func() {
+			Expect(g.LsRemoteBranchHead(GinkgoT().Context(), "no-such-branch")).To(BeEmpty())
+		})
+	})
+})

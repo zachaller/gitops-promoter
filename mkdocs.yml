@@ -42,6 +42,7 @@ nav:
   - Getting Started: getting-started.md
   - Structuring Your Repos: structuring-your-repos.md
   - Structuring Your Changes: structuring-your-changes.md
+  - Promotion Policies: promotion-policies.md
   - Gating Promotions:
       - Overview: gating-promotions/index.md
       - Built-In Gates:

@@ -30,7 +30,19 @@ type EnvironmentStatusApplyConfiguration struct {
 	Active *CommitBranchStateApplyConfiguration `json:"active,omitempty"`
 	// PullRequest is the state of the pull request that was created for this environment.
 	PullRequest *PullRequestCommonStatusApplyConfiguration `json:"pullRequest,omitempty"`
-	// LastHealthyDryShas is a list of dry commits that were observed to be healthy in the environment.
+	// Candidate is the tip of the hydrator's proposed branch for this environment: the newest change
+	// that exists, whether or not it is eligible for promotion. It is only populated when the
+	// environment's promotion policy selects candidates, because otherwise it is identical to Proposed.
+	// Comparing it with Proposed shows how far behind the newest change this environment is running.
+	Candidate *PromotionCandidateStateApplyConfiguration `json:"candidate,omitempty"`
+	// LastHealthyDryShas records the dry commits this environment has verified: those that were active
+	// in the environment while every one of its active commit statuses was passing. It is the durable
+	// record of "this environment vouched for this change", and it keeps its entries after the
+	// environment has moved on to a newer change. Later environments consult it so that a change can
+	// still be promoted on the strength of a verification that has since been superseded, which is what
+	// allows a promotion chain to keep moving when the dry branch churns faster than an environment can
+	// verify a change. Entries are in reverse chronological order (newest first) and are capped at
+	// MaxLastHealthyDryShas.
 	LastHealthyDryShas []HealthyDryShasApplyConfiguration `json:"lastHealthyDryShas,omitempty"`
 	// History defines the history of promoted changes done by the PromotionStrategy for each environment.
 	// You can think of it as a list of PRs merged by GitOps Promoter. It will not include changes that were
@@ -75,6 +87,14 @@ func (b *EnvironmentStatusApplyConfiguration) WithActive(value *CommitBranchStat
 // If called multiple times, the PullRequest field is set to the value of the last call.
 func (b *EnvironmentStatusApplyConfiguration) WithPullRequest(value *PullRequestCommonStatusApplyConfiguration) *EnvironmentStatusApplyConfiguration {
 	b.PullRequest = value
+	return b
+}
+
+// WithCandidate sets the Candidate field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Candidate field is set to the value of the last call.
+func (b *EnvironmentStatusApplyConfiguration) WithCandidate(value *PromotionCandidateStateApplyConfiguration) *EnvironmentStatusApplyConfiguration {
+	b.Candidate = value
 	return b
 }
 

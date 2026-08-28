@@ -157,6 +157,10 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.OutputSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PollingModeSpec"):
 		return &apiv1alpha1.PollingModeSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("PromotionCandidates"):
+		return &apiv1alpha1.PromotionCandidatesApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("PromotionCandidateState"):
+		return &apiv1alpha1.PromotionCandidateStateApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PromotionStrategy"):
 		return &apiv1alpha1.PromotionStrategyApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PromotionStrategyConfiguration"):

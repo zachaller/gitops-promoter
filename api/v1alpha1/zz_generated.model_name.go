@@ -376,6 +376,16 @@ func (in PollingModeSpec) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in PromotionCandidateState) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.PromotionCandidateState"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in PromotionCandidates) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.PromotionCandidates"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in PromotionStrategy) OpenAPIModelName() string {
 	return "io.argoproj.promoter.v1alpha1.PromotionStrategy"
 }

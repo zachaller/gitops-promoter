@@ -41,6 +41,8 @@
 //     plus read-tree/write-tree/commit-tree for the path-scoped merge — then push the computed
 //     commit straight to the remote ref. They never check out a branch, so they cannot be wedged by,
 //     nor leave behind, a dirty worktree or a half-finished merge.
+//   - PushShaToBranch pushes an already-fetched commit straight to a remote ref, so like the merges
+//     it touches only the object DB and the remote.
 //
 // The clone's working tree therefore stays exactly as CloneRepo left it for the life of the clone.
 //
@@ -54,8 +56,8 @@
 // that read a specific ref/SHA/note assume the relevant objects were already fetched. HasConflict
 // and the merges assume origin/<active> and origin/<proposed> were fetched by an earlier
 // GetBranchShas; SHA-based readers (GetShaMetadataFromGit, GetShaMetadataFromFile,
-// GetRevListFirstParent, GetTrailers) assume the commit is present; GetHydratorNote assumes
-// FetchNotes ran. These are forward ordering requirements satisfied by the controller's call
+// GetRevListFirstParent, GetTrailers, IsAncestor, PushShaToBranch) assume the commit is present;
+// GetHydratorNote assumes FetchNotes ran. These are forward ordering requirements satisfied by the controller's call
 // sequence; they are documented per method but not enforced here.
 //
 // # Future work
@@ -71,6 +73,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -811,6 +814,95 @@ func (g *EnvironmentOperations) GetRevListFirstParent(ctx context.Context, revis
 	}
 
 	return strings.Split(strings.TrimSpace(stdout), "\n"), nil
+}
+
+// LsRemoteBranchHead returns the SHA a branch points at on the remote, or an empty string when the
+// branch does not exist there.
+//
+// Unlike LsRemote, whose callers are looking up branches that are expected to exist and want a clear
+// error naming the missing ones, this treats absence as a normal answer. It is for callers that
+// create the branch when it is not there yet.
+//
+// LsRemoteBranchHead uses no on-disk clone, so it is safe to call before CloneRepo.
+func (g *EnvironmentOperations) LsRemoteBranchHead(ctx context.Context, branch string) (string, error) {
+	logger := log.FromContext(ctx)
+
+	start := time.Now()
+	stdout, stderr, err := runCmd(ctx, g.gap, "", "ls-remote", "--heads", g.gap.GetGitHttpsRepoUrl(*g.gitRepo), branch)
+	metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationLsRemote, metrics.GitOperationResultFromError(err), time.Since(start))
+	if err != nil {
+		logger.Error(err, "could not git ls-remote", "gitError", stderr, "branch", branch)
+		return "", fmt.Errorf("failed to ls-remote branch %q: %w (stderr: %s)", branch, err, stderr)
+	}
+
+	line, _, _ := strings.Cut(strings.TrimSpace(stdout), "\n")
+	if line == "" {
+		return "", nil
+	}
+
+	sha, _, found := strings.Cut(line, "\t")
+	if !found {
+		return "", fmt.Errorf("could not parse line %q from ls-remote output for branch %q", line, branch)
+	}
+	return sha, nil
+}
+
+// IsAncestor reports whether ancestor is reachable from descendant, i.e. whether the commit is
+// already contained in that branch's history.
+//
+// Read-only: never mutates the clone's index/worktree/HEAD. Requires both commits to have been
+// fetched.
+func (g *EnvironmentOperations) IsAncestor(ctx context.Context, ancestor, descendant string) (bool, error) {
+	logger := log.FromContext(ctx)
+
+	gitPath := g.ClonePath()
+	if gitPath == "" {
+		return false, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
+	}
+
+	// merge-base --is-ancestor signals the answer through its exit code: 0 for yes, 1 for no, and
+	// anything else for a real failure. Only exit code 1 may be read as a negative answer.
+	_, stderr, err := g.runCmd(ctx, gitPath, "merge-base", "--is-ancestor", ancestor, descendant)
+	if err == nil {
+		return true, nil
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+
+	logger.Error(err, "could not determine ancestry", "gitError", stderr, "ancestor", ancestor, "descendant", descendant)
+	return false, fmt.Errorf("failed to check whether %q is an ancestor of %q: %w (stderr: %s)", ancestor, descendant, err, stderr)
+}
+
+// PushShaToBranch force-updates a remote branch to point at an already-fetched commit.
+//
+// The force is required rather than incidental: the branch this is used for carries whichever
+// promotion candidate is currently selected, and moving between candidates is not always a
+// fast-forward (a conflict-resolving merge commit on the branch is not an ancestor of the next
+// candidate). Only use this for branches the controller owns exclusively.
+//
+// Operates on the object DB only: nothing is checked out and the clone's index/worktree/HEAD are
+// never touched.
+func (g *EnvironmentOperations) PushShaToBranch(ctx context.Context, sha, branch string) error {
+	logger := log.FromContext(ctx)
+
+	gitPath := g.ClonePath()
+	if gitPath == "" {
+		return fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
+	}
+
+	start := time.Now()
+	_, stderr, err := g.runCmd(ctx, gitPath, "push", "--force", "origin", sha+":refs/heads/"+branch)
+	metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationPush, metrics.GitOperationResultFromError(err), time.Since(start))
+	if err != nil {
+		logger.Error(err, "could not push sha to branch", "gitError", stderr, "sha", sha, "branch", branch)
+		return fmt.Errorf("failed to push %q to branch %q: %w (stderr: %s)", sha, branch, err, stderr)
+	}
+
+	logger.Info("Pushed commit to branch", "sha", sha, "branch", branch)
+	return nil
 }
 
 // AddTrailerToCommitMessage adds a trailer to a commit message using git interpret-trailers.

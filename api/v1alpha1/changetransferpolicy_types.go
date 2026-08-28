@@ -79,6 +79,70 @@ type ChangeTransferPolicySpec struct {
 	// Copied from the owning PromotionStrategy by the PromotionStrategy controller.
 	// +kubebuilder:validation:Optional
 	PullRequest *PullRequestPolicySpec `json:"pullRequest,omitempty"`
+
+	// PromotionPolicy selects which candidate on the proposed branch this policy promotes.
+	// Copied from the owning PromotionStrategy by the PromotionStrategy controller. Empty means Latest.
+	// +kubebuilder:validation:Optional
+	PromotionPolicy PromotionPolicy `json:"promotionPolicy,omitempty"`
+
+	// PromotionBranch is a promoter-owned branch that carries the candidate this policy has selected
+	// for promotion. It is required by every policy other than Latest, which promotes the proposed
+	// branch tip directly and needs no separate branch.
+	//
+	// The proposed branch belongs to the hydrator and always tracks the newest dry commit, so it cannot
+	// be used to promote anything but the newest candidate. Instead the controller picks a commit out
+	// of the proposed branch's history and force-pushes it here, and the promotion pull request is
+	// opened from this branch. Nothing but this controller may write to it.
+	//
+	// Must not start with '-', contain ':', or contain '..'.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=100
+	// +kubebuilder:validation:XValidation:rule="!self.startsWith('-')",message="branch must not start with '-'"
+	// +kubebuilder:validation:XValidation:rule="!self.contains(':')",message="branch must not contain ':'"
+	// +kubebuilder:validation:XValidation:rule="!self.contains('..')",message="branch must not contain '..'"
+	PromotionBranch string `json:"promotionBranch,omitempty"`
+
+	// Candidates constrains which hydrated changes this policy may promote. It is computed by the
+	// PromotionStrategy controller from the verification ledgers of every preceding environment.
+	// A nil value means unconstrained, which is the case for the first environment in a sequence
+	// because it has no preceding environment to wait for.
+	// +kubebuilder:validation:Optional
+	Candidates *PromotionCandidates `json:"candidates,omitempty"`
+}
+
+// PromotionCandidates lists the changes a ChangeTransferPolicy is allowed to promote.
+type PromotionCandidates struct {
+	// DryShas are the dry commit SHAs that every preceding environment has verified, newest first.
+	// Only candidates whose dry SHA appears in this list may be promoted. An empty list means no
+	// change is currently eligible, which is different from a nil PromotionCandidates (unconstrained).
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxItems=50
+	DryShas []string `json:"dryShas,omitempty"`
+}
+
+// GetPromotionPolicy returns the policy for this ChangeTransferPolicy, defaulting to Latest.
+func (ctp *ChangeTransferPolicySpec) GetPromotionPolicy() PromotionPolicy {
+	if ctp.PromotionPolicy == "" {
+		return PromotionPolicyLatest
+	}
+	return ctp.PromotionPolicy
+}
+
+// GetPromotionSourceBranch returns the branch the promotion pull request is opened from, and which
+// Status.Proposed describes. That is the promotion branch when the policy selects candidates, and the
+// hydrator's proposed branch under the Latest policy.
+func (ctp *ChangeTransferPolicySpec) GetPromotionSourceBranch() string {
+	if ctp.SelectsCandidates() {
+		return ctp.PromotionBranch
+	}
+	return ctp.ProposedBranch
+}
+
+// SelectsCandidates reports whether this policy picks a candidate out of the proposed branch's
+// history rather than promoting its tip. When true the controller maintains PromotionBranch.
+func (ctp *ChangeTransferPolicySpec) SelectsCandidates() bool {
+	return ctp.GetPromotionPolicy() != PromotionPolicyLatest && ctp.PromotionBranch != ""
 }
 
 // ChangeRequestPolicyCommitStatusPhase defines the phase of a commit status in a ChangeTransferPolicy.
@@ -193,6 +257,13 @@ type ChangeTransferPolicyStatus struct {
 	// PullRequest is the state of the pull request that was created for this ChangeTransferPolicy.
 	PullRequest *PullRequestCommonStatus `json:"pullRequest,omitempty"`
 
+	// Candidate is the tip of the hydrator's proposed branch: the newest change that exists for this
+	// environment, whether or not it is eligible for promotion. It is only populated when the policy
+	// selects candidates, because otherwise it is identical to Proposed. Comparing it with Proposed
+	// shows how far behind the newest change this environment's current promotion is.
+	// +kubebuilder:validation:Optional
+	Candidate *PromotionCandidateState `json:"candidate,omitempty"`
+
 	// History defines the history of promoted changes done by the ChangeTransferPolicy. You can think of
 	// it as a list of PRs merged by GitOps Promoter. It will not include changes that were manually merged.
 	// The history length is hard-coded to be at most 5 entries. This may change in the future.
@@ -215,6 +286,49 @@ type ChangeTransferPolicyStatus struct {
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$`
 	InstanceID *string `json:"instanceID,omitempty"`
+}
+
+// PromotionCandidateState summarizes the tip of the hydrator's proposed branch.
+//
+// It is deliberately a handful of scalars rather than a CommitBranchState. Only these fields are
+// meaningful for a change that has not been selected for promotion, and CommitBranchState carries
+// enough validated URL fields that repeating it here would push the CRDs a long way toward the
+// apiserver's per-schema CEL cost limit (see hack/celcost/report.md) for information nothing reads.
+type PromotionCandidateState struct {
+	// DrySha is the dry commit SHA this candidate hydrates, read from hydrator.metadata.
+	// Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^([a-f0-9]{40}|[a-f0-9]{64})?$`
+	DrySha string `json:"drySha,omitempty"`
+
+	// HydratedSha is the commit SHA at the tip of the proposed branch.
+	// Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^([a-f0-9]{40}|[a-f0-9]{64})?$`
+	HydratedSha string `json:"hydratedSha,omitempty"`
+
+	// CommitTime is the time of the hydrated commit.
+	CommitTime metav1.Time `json:"commitTime,omitempty"`
+
+	// NoteDrySha is the dry SHA from the git note on the hydrated commit, when there is one. It runs
+	// ahead of DrySha after a hydration that changed no manifests, because the hydrator then updates
+	// only the note and creates no new commit.
+	// Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^([a-f0-9]{40}|[a-f0-9]{64})?$`
+	NoteDrySha string `json:"noteDrySha,omitempty"`
+}
+
+// EffectiveDrySha returns the dry SHA the hydrator has most recently produced for this branch: the
+// note's SHA when there is one, otherwise the SHA from hydrator.metadata.
+func (c *PromotionCandidateState) EffectiveDrySha() string {
+	if c == nil {
+		return ""
+	}
+	if c.NoteDrySha != "" {
+		return c.NoteDrySha
+	}
+	return c.DrySha
 }
 
 // History describes a particular change that was promoted by the ChangeTransferPolicy.

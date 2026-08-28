@@ -132,6 +132,15 @@ spec:
                         rule: '!self.contains('':'')'
                       - message: branch must not contain '..'
                         rule: '!self.contains(''..'')'
+                    promotionPolicy:
+                      description: |-
+                        PromotionPolicy optionally overrides the strategy-level promotionPolicy for this environment.
+                        When empty, spec.promotionPolicy applies, which itself defaults to Latest.
+                      enum:
+                      - Latest
+                      - LatestVerified
+                      - Sequential
+                      type: string
                     proposedCommitStatuses:
                       description: |-
                         ProposedCommitStatuses are commit statuses describing a proposed dry commit, i.e. one that is not yet running
@@ -178,6 +187,15 @@ spec:
                 required:
                 - name
                 type: object
+              promotionPolicy:
+                description: |-
+                  PromotionPolicy is the default candidate selection policy for all environments in this strategy.
+                  Individual environments can override it via their own promotionPolicy field. Defaults to Latest.
+                enum:
+                - Latest
+                - LatestVerified
+                - Sequential
+                type: string
               proposedCommitStatuses:
                 description: |-
                   ProposedCommitStatuses are commit statuses describing a proposed dry commit, i.e. one that is not yet running
@@ -600,6 +618,41 @@ spec:
                         environment.
                       minLength: 1
                       type: string
+                    candidate:
+                      description: |-
+                        Candidate is the tip of the hydrator's proposed branch for this environment: the newest change
+                        that exists, whether or not it is eligible for promotion. It is only populated when the
+                        environment's promotion policy selects candidates, because otherwise it is identical to Proposed.
+                        Comparing it with Proposed shows how far behind the newest change this environment is running.
+                      properties:
+                        commitTime:
+                          description: CommitTime is the time of the hydrated commit.
+                          format: date-time
+                          type: string
+                        drySha:
+                          description: |-
+                            DrySha is the dry commit SHA this candidate hydrates, read from hydrator.metadata.
+                            Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                          maxLength: 64
+                          pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                          type: string
+                        hydratedSha:
+                          description: |-
+                            HydratedSha is the commit SHA at the tip of the proposed branch.
+                            Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                          maxLength: 64
+                          pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                          type: string
+                        noteDrySha:
+                          description: |-
+                            NoteDrySha is the dry SHA from the git note on the hydrated commit, when there is one. It runs
+                            ahead of DrySha after a hydration that changed no manifests, because the hydrator then updates
+                            only the note and creates no new commit.
+                            Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                          maxLength: 64
+                          pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                          type: string
+                      type: object
                     history:
                       description: |-
                         History defines the history of promoted changes done by the PromotionStrategy for each environment.
@@ -1099,11 +1152,18 @@ spec:
                         type: object
                       type: array
                     lastHealthyDryShas:
-                      description: LastHealthyDryShas is a list of dry commits that
-                        were observed to be healthy in the environment.
+                      description: |-
+                        LastHealthyDryShas records the dry commits this environment has verified: those that were active
+                        in the environment while every one of its active commit statuses was passing. It is the durable
+                        record of "this environment vouched for this change", and it keeps its entries after the
+                        environment has moved on to a newer change. Later environments consult it so that a change can
+                        still be promoted on the strength of a verification that has since been superseded, which is what
+                        allows a promotion chain to keep moving when the dry branch churns faster than an environment can
+                        verify a change. Entries are in reverse chronological order (newest first) and are capped at
+                        MaxLastHealthyDryShas.
                       items:
-                        description: HealthyDryShas is a list of dry commits that
-                          were observed to be healthy in the environment.
+                        description: HealthyDryShas records a dry commit that an environment
+                          verified.
                         properties:
                           sha:
                             description: |-
@@ -1113,14 +1173,15 @@ spec:
                             pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
                             type: string
                           time:
-                            description: Time is the time when the proposed commit
-                              for the given dry SHA was merged into the active branch.
+                            description: Time is the time at which the environment
+                              was first observed to be healthy on this dry SHA.
                             format: date-time
                             type: string
                         required:
                         - sha
                         - time
                         type: object
+                      maxItems: 50
                       type: array
                     proposed:
                       description: Proposed is the state of the proposed branch for

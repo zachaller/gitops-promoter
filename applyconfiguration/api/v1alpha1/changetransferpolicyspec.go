@@ -17,6 +17,10 @@ limitations under the License.
 
 package v1alpha1
 
+import (
+	apiv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+)
+
 // ChangeTransferPolicySpecApplyConfiguration represents a declarative configuration of the ChangeTransferPolicySpec type for use
 // with apply.
 //
@@ -43,6 +47,25 @@ type ChangeTransferPolicySpecApplyConfiguration struct {
 	// PullRequest configures SCM pull request behavior for this change transfer policy.
 	// Copied from the owning PromotionStrategy by the PromotionStrategy controller.
 	PullRequest *PullRequestPolicySpecApplyConfiguration `json:"pullRequest,omitempty"`
+	// PromotionPolicy selects which candidate on the proposed branch this policy promotes.
+	// Copied from the owning PromotionStrategy by the PromotionStrategy controller. Empty means Latest.
+	PromotionPolicy *apiv1alpha1.PromotionPolicy `json:"promotionPolicy,omitempty"`
+	// PromotionBranch is a promoter-owned branch that carries the candidate this policy has selected
+	// for promotion. It is required by every policy other than Latest, which promotes the proposed
+	// branch tip directly and needs no separate branch.
+	//
+	// The proposed branch belongs to the hydrator and always tracks the newest dry commit, so it cannot
+	// be used to promote anything but the newest candidate. Instead the controller picks a commit out
+	// of the proposed branch's history and force-pushes it here, and the promotion pull request is
+	// opened from this branch. Nothing but this controller may write to it.
+	//
+	// Must not start with '-', contain ':', or contain '..'.
+	PromotionBranch *string `json:"promotionBranch,omitempty"`
+	// Candidates constrains which hydrated changes this policy may promote. It is computed by the
+	// PromotionStrategy controller from the verification ledgers of every preceding environment.
+	// A nil value means unconstrained, which is the case for the first environment in a sequence
+	// because it has no preceding environment to wait for.
+	Candidates *PromotionCandidatesApplyConfiguration `json:"candidates,omitempty"`
 }
 
 // ChangeTransferPolicySpecApplyConfiguration constructs a declarative configuration of the ChangeTransferPolicySpec type for use with
@@ -122,5 +145,29 @@ func (b *ChangeTransferPolicySpecApplyConfiguration) WithProposedCommitStatuses(
 // If called multiple times, the PullRequest field is set to the value of the last call.
 func (b *ChangeTransferPolicySpecApplyConfiguration) WithPullRequest(value *PullRequestPolicySpecApplyConfiguration) *ChangeTransferPolicySpecApplyConfiguration {
 	b.PullRequest = value
+	return b
+}
+
+// WithPromotionPolicy sets the PromotionPolicy field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the PromotionPolicy field is set to the value of the last call.
+func (b *ChangeTransferPolicySpecApplyConfiguration) WithPromotionPolicy(value apiv1alpha1.PromotionPolicy) *ChangeTransferPolicySpecApplyConfiguration {
+	b.PromotionPolicy = &value
+	return b
+}
+
+// WithPromotionBranch sets the PromotionBranch field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the PromotionBranch field is set to the value of the last call.
+func (b *ChangeTransferPolicySpecApplyConfiguration) WithPromotionBranch(value string) *ChangeTransferPolicySpecApplyConfiguration {
+	b.PromotionBranch = &value
+	return b
+}
+
+// WithCandidates sets the Candidates field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Candidates field is set to the value of the last call.
+func (b *ChangeTransferPolicySpecApplyConfiguration) WithCandidates(value *PromotionCandidatesApplyConfiguration) *ChangeTransferPolicySpecApplyConfiguration {
+	b.Candidates = value
 	return b
 }

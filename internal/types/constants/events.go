@@ -8,6 +8,12 @@ const (
 	// ResolvedConflictMessage is the message for a resolved conflict event.
 	ResolvedConflictMessage = "Merged %s into %s with 'ours' strategy to resolve conflicts"
 
+	// PromotionCandidateSelectedReason is the reason for an event announcing which change a
+	// candidate-selecting promotion policy picked out of the proposed branch.
+	PromotionCandidateSelectedReason = "PromotionCandidateSelected"
+	// PromotionCandidateSelectedMessage is the message for a promotion candidate selection event.
+	PromotionCandidateSelectedMessage = "Selected dry commit %s for promotion to %s (newest available is %s)"
+
 	// TooManyMatchingShaReason indicates that there are too many matching SHAs for the active or proposed commit status.
 	TooManyMatchingShaReason = "TooManyMatchingSha"
 	// TooManyMatchingShaActiveMessage is the message for too many matching SHAs for the active commit status.

@@ -17,6 +17,10 @@ limitations under the License.
 
 package v1alpha1
 
+import (
+	apiv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+)
+
 // EnvironmentApplyConfiguration represents a declarative configuration of the Environment type for use
 // with apply.
 //
@@ -44,6 +48,9 @@ type EnvironmentApplyConfiguration struct {
 	// ActivePath optionally overrides the strategy-level activePath for this environment.
 	// When set, this environment's CTP uses this path instead of spec.activePath.
 	ActivePath *string `json:"activePath,omitempty"`
+	// PromotionPolicy optionally overrides the strategy-level promotionPolicy for this environment.
+	// When empty, spec.promotionPolicy applies, which itself defaults to Latest.
+	PromotionPolicy *apiv1alpha1.PromotionPolicy `json:"promotionPolicy,omitempty"`
 }
 
 // EnvironmentApplyConfiguration constructs a declarative configuration of the Environment type for use with
@@ -99,5 +106,13 @@ func (b *EnvironmentApplyConfiguration) WithProposedCommitStatuses(values ...*Co
 // If called multiple times, the ActivePath field is set to the value of the last call.
 func (b *EnvironmentApplyConfiguration) WithActivePath(value string) *EnvironmentApplyConfiguration {
 	b.ActivePath = &value
+	return b
+}
+
+// WithPromotionPolicy sets the PromotionPolicy field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the PromotionPolicy field is set to the value of the last call.
+func (b *EnvironmentApplyConfiguration) WithPromotionPolicy(value apiv1alpha1.PromotionPolicy) *EnvironmentApplyConfiguration {
+	b.PromotionPolicy = &value
 	return b
 }

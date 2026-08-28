@@ -17,11 +17,13 @@ limitations under the License.
 
 package v1alpha1
 
+import (
+	apiv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+)
+
 // PromotionStrategySpecApplyConfiguration represents a declarative configuration of the PromotionStrategySpec type for use
 // with apply.
 //
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 // PromotionStrategySpec defines the desired state of PromotionStrategy
 type PromotionStrategySpecApplyConfiguration struct {
 	// RepositoryReference indicates what repository to promote commits in.
@@ -47,6 +49,9 @@ type PromotionStrategySpecApplyConfiguration struct {
 	ActivePath *string `json:"activePath,omitempty"`
 	// PullRequest configures SCM pull request behavior for all environments in this strategy.
 	PullRequest *PullRequestPolicySpecApplyConfiguration `json:"pullRequest,omitempty"`
+	// PromotionPolicy is the default candidate selection policy for all environments in this strategy.
+	// Individual environments can override it via their own promotionPolicy field. Defaults to Latest.
+	PromotionPolicy *apiv1alpha1.PromotionPolicy `json:"promotionPolicy,omitempty"`
 }
 
 // PromotionStrategySpecApplyConfiguration constructs a declarative configuration of the PromotionStrategySpec type for use with
@@ -115,5 +120,13 @@ func (b *PromotionStrategySpecApplyConfiguration) WithActivePath(value string) *
 // If called multiple times, the PullRequest field is set to the value of the last call.
 func (b *PromotionStrategySpecApplyConfiguration) WithPullRequest(value *PullRequestPolicySpecApplyConfiguration) *PromotionStrategySpecApplyConfiguration {
 	b.PullRequest = value
+	return b
+}
+
+// WithPromotionPolicy sets the PromotionPolicy field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the PromotionPolicy field is set to the value of the last call.
+func (b *PromotionStrategySpecApplyConfiguration) WithPromotionPolicy(value apiv1alpha1.PromotionPolicy) *PromotionStrategySpecApplyConfiguration {
+	b.PromotionPolicy = &value
 	return b
 }
