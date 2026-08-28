@@ -122,16 +122,6 @@ func (r *PullRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// A terminating PullRequest this controller holds no finalizer on is one it is already done with:
-	// it either never adopted the object or released the finalizer after recording a terminal SCM
-	// outcome. Whatever still retains the object, normally the ChangeTransferPolicy's finalizer,
-	// belongs to another controller, so there is no SCM work left and no reason to spend calls
-	// discovering that.
-	if !pr.DeletionTimestamp.IsZero() && !controllerutil.ContainsFinalizer(&pr, promoterv1alpha1.PullRequestFinalizer) {
-		logger.V(4).Info("PullRequest is terminating and no longer holds the promoter finalizer, nothing left to do")
-		return ctrl.Result{}, nil
-	}
-
 	// This short-circuit avoids FindOpen (and other) SCM calls for a very narrow kind of reconcile:
 	// where the PR is marked open, the resource isn't being deleted, the spec has changed, and the
 	// _only_ changes to the spec do not require an Update to the SCM PR (title/description) or
@@ -601,6 +591,19 @@ func shouldSkipSCMSync(pr *promoterv1alpha1.PullRequest) bool {
 	return true
 }
 
+// pullRequestTerminatingWithoutPromoterFinalizerPredicate matches PullRequests that are being
+// deleted but no longer hold the promoter finalizer. The controller has already released it or
+// never adopted the object; whatever still retains the object belongs to another controller.
+func pullRequestTerminatingWithoutPromoterFinalizerPredicate() predicate.Predicate {
+	return predicate.NewPredicateFuncs(func(obj client.Object) bool {
+		pr, ok := obj.(*promoterv1alpha1.PullRequest)
+		if !ok {
+			return false
+		}
+		return !pr.DeletionTimestamp.IsZero() && !controllerutil.ContainsFinalizer(pr, promoterv1alpha1.PullRequestFinalizer)
+	})
+}
+
 // pullRequestDeletionFinalizerLengthChangedPredicate matches Update events where the object is
 // terminating (deletionTimestamp set) and the finalizer count changed. This is important because
 // the CTP controller sets a finalizer, and we need to reconcile when it's removed to ensure
@@ -649,10 +652,15 @@ func (r *PullRequestReconciler) SetupWithManager(ctx context.Context, mgr ctrl.M
 	}
 
 	err = ctrl.NewControllerManagedBy(mgr).
-		For(&promoterv1alpha1.PullRequest{}, builder.WithPredicates(predicate.Or(
-			predicate.GenerationChangedPredicate{},
-			pullRequestDeletionFinalizerLengthChangedPredicate(),
-		))).
+		For(&promoterv1alpha1.PullRequest{}, builder.WithPredicates(
+			predicate.And(
+				predicate.Or(
+					predicate.GenerationChangedPredicate{},
+					pullRequestDeletionFinalizerLengthChangedPredicate(),
+				),
+				predicate.Not(pullRequestTerminatingWithoutPromoterFinalizerPredicate()),
+			),
+		)).
 		WatchesRawSource(source.Channel(externalEnqueueChan, &handler.EnqueueRequestForObject{})).
 		WithOptions(controller.Options{MaxConcurrentReconciles: maxConcurrentReconciles, RateLimiter: rateLimiter}).
 		Complete(r)

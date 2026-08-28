@@ -7,7 +7,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 env:
   ARGOCD_VERSION: v3.5.1
