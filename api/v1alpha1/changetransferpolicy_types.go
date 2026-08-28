@@ -286,6 +286,43 @@ type ChangeTransferPolicyStatus struct {
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$`
 	InstanceID *string `json:"instanceID,omitempty"`
+
+	// Verification records the changes this environment has vouched for. The owning PromotionStrategy
+	// mirrors it into status.environments[].lastHealthyDryShas, where later environments consult it.
+	// +kubebuilder:validation:Optional
+	Verification *VerificationState `json:"verification,omitempty"`
+}
+
+// VerificationState is an environment's record of the changes it was healthy on when it stopped
+// running them.
+//
+// It is a cache over git rather than an accumulated log: each promotion records the outgoing change's
+// health in its merge commit on the active branch, so all of this can be rebuilt by walking that
+// branch, and losing the status costs nothing permanent. It deliberately excludes the change the
+// environment is running right now — that one has no merge commit yet and is judged on live health
+// instead, wherever the record is consumed.
+type VerificationState struct {
+	// DryShas are the dry commits this environment was healthy on at the point it promoted past them,
+	// newest first and capped at MaxLastHealthyDryShas.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxItems=50
+	DryShas []HealthyDryShas `json:"dryShas,omitempty"`
+
+	// ObservedActiveSha is the active branch commit the git-derived entries were built from. While the
+	// active branch still points there the walk is skipped entirely; when it has moved, only the
+	// commits added since are examined.
+	// Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^([a-f0-9]{40}|[a-f0-9]{64})?$`
+	ObservedActiveSha string `json:"observedActiveSha,omitempty"`
+}
+
+// GetDryShas returns the recorded verifications, or nil when nothing has been recorded yet.
+func (v *VerificationState) GetDryShas() []HealthyDryShas {
+	if v == nil {
+		return nil
+	}
+	return v.DryShas
 }
 
 // PromotionCandidateState summarizes the tip of the hydrator's proposed branch.

@@ -111,6 +111,10 @@ status:
     # The dry commits this environment has verified: active in the environment while all of its active
     # commit statuses were passing. Entries are kept after the environment moves on to a newer change,
     # which is what lets a later environment still promote a change whose verification was superseded.
+    #
+    # Composed from the environment's ChangeTransferPolicy status.verification, which is rebuilt from
+    # the active branch's merge commits, plus the change it is running right now when it is healthy
+    # on it.
     # Newest first, at most 50 entries.
     - sha: "abcdef1234567890abcdef1234567890abcdef12"
       time: 2023-10-01T00:00:00Z

@@ -61,6 +61,23 @@ status:
         phase: pending # pending, success, or failure
         url: https://example.com/checks/example-key
         description: Waiting for check
+  verification:
+    # The changes this environment was healthy on at the point it promoted past them. Later
+    # environments consult it (via the owning PromotionStrategy, which surfaces it as
+    # status.environments[].lastHealthyDryShas) so a change stays promotable after this environment
+    # has moved on to a newer one.
+    #
+    # This is a cache over git, not an accumulated log: each promotion records the outgoing change's
+    # health in its merge commit on the active branch, so the record is rebuilt by walking that branch
+    # when this status is lost. It excludes the change running right now, which has no merge commit
+    # yet and is judged on live active commit statuses instead.
+    dryShas:
+    # Newest first, at most 50 entries.
+    - sha: "abcdef1234567890abcdef1234567890abcdef12"
+      time: 2023-10-01T00:00:00Z
+    # The active branch commit the entries were built from. While the branch still points here the
+    # walk is skipped; when it moves, only the commits added since are examined.
+    observedActiveSha: "fedcba0987654321fedcba0987654321fedcba09"
   candidate:
     # The tip of the hydrator's proposed branch: the newest change that exists, whether or not it is
     # eligible for promotion. Only populated when promotionPolicy selects candidates, because

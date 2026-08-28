@@ -54,6 +54,9 @@ type ChangeTransferPolicyStatusApplyConfiguration struct {
 	// reconcile attempt by this install's controller, including when Ready=False; omitted
 	// when the resource has no instance-id label (default install).
 	InstanceID *string `json:"instanceID,omitempty"`
+	// Verification records the changes this environment has vouched for. The owning PromotionStrategy
+	// mirrors it into status.environments[].lastHealthyDryShas, where later environments consult it.
+	Verification *VerificationStateApplyConfiguration `json:"verification,omitempty"`
 }
 
 // ChangeTransferPolicyStatusApplyConfiguration constructs a declarative configuration of the ChangeTransferPolicyStatus type for use with
@@ -133,5 +136,13 @@ func (b *ChangeTransferPolicyStatusApplyConfiguration) WithConditions(values ...
 // If called multiple times, the InstanceID field is set to the value of the last call.
 func (b *ChangeTransferPolicyStatusApplyConfiguration) WithInstanceID(value string) *ChangeTransferPolicyStatusApplyConfiguration {
 	b.InstanceID = &value
+	return b
+}
+
+// WithVerification sets the Verification field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Verification field is set to the value of the last call.
+func (b *ChangeTransferPolicyStatusApplyConfiguration) WithVerification(value *VerificationStateApplyConfiguration) *ChangeTransferPolicyStatusApplyConfiguration {
+	b.Verification = value
 	return b
 }

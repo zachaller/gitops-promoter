@@ -206,6 +206,12 @@ func (r *ChangeTransferPolicyReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 	r.emitPromotionLifecycleEvents(&ctp, prevStatus)
 
+	// Bring the record of what this environment has vouched for up to date before the pull request is
+	// written, since the pull request is what records the current change's verification into git.
+	if err = r.refreshVerification(ctx, &ctp, gitOperations); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to refresh verification record: %w", err)
+	}
+
 	mergedProposedBranch, err := r.gitMergeStrategyOurs(ctx, gitOperations, &ctp)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to git merge for conflict resolution: %w", err)
@@ -610,6 +616,171 @@ func (r *ChangeTransferPolicyReconciler) SetupWithManager(ctx context.Context, m
 		return fmt.Errorf("failed to create controller: %w", err)
 	}
 	return nil
+}
+
+// maxVerificationWalk bounds how many commits on the active branch are examined when rebuilding an
+// environment's verification record from git. Skipped commits — direct pushes, squash merges that
+// dropped the promoter's message — consume the budget without contributing evidence, so a repository
+// with heavy manual activity gets a shorter effective record than the bound suggests. It is generous
+// because the walk normally examines nothing at all: the record is only extended when the active
+// branch moves, and then only over the commits it moved by.
+const maxVerificationWalk = 200
+
+// refreshVerification brings the environment's record of the changes it has promoted past up to date
+// by reading the evidence each promotion wrote into its merge commit on the active branch.
+//
+// This is only half of what an environment has vouched for. It covers every change the environment
+// has moved past; the change it is running right now has no merge commit yet, and is composed in
+// from live health where the record is read (see verifiedDryShas in the PromotionStrategy
+// controller). That live half is what stops a later environment from only ever seeing changes that
+// are already one promotion stale.
+//
+// Must run after calculateStatus, which populates the active branch state this reads.
+func (r *ChangeTransferPolicyReconciler) refreshVerification(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy, gitOperations *git.EnvironmentOperations) error {
+	logger := log.FromContext(ctx)
+
+	activeHydratedSha := ctp.Status.Active.Hydrated.Sha
+	if activeHydratedSha == "" {
+		// Nothing promoted yet, so there is no history to walk and nothing running to latch.
+		return nil
+	}
+
+	if ctp.Status.Verification == nil {
+		ctp.Status.Verification = &promoterv1alpha1.VerificationState{}
+	}
+	verification := ctp.Status.Verification
+
+	if verification.ObservedActiveSha != activeHydratedSha {
+		entries, reachedObserved, err := r.walkVerifiedDryShas(ctx, ctp, gitOperations, activeHydratedSha, verification.ObservedActiveSha)
+		if err != nil {
+			return err
+		}
+
+		if reachedObserved {
+			verification.DryShas = append(entries, verification.DryShas...)
+		} else {
+			// The walk could not reach what was recorded last time — a first reconcile, a lost status,
+			// or rewritten history. It has therefore just read the whole record git can offer, so
+			// replace rather than prepend; keeping the old entries would preserve ones git no longer
+			// supports.
+			logger.V(4).Info("Rebuilt verification record from scratch",
+				"activeBranch", ctp.Spec.ActiveBranch,
+				"previousObservedActiveSha", verification.ObservedActiveSha,
+				"entries", len(entries))
+			verification.DryShas = entries
+		}
+		verification.ObservedActiveSha = activeHydratedSha
+	}
+
+	verification.DryShas = dedupeVerifiedDryShas(verification.DryShas)
+	if len(verification.DryShas) > promoterv1alpha1.MaxLastHealthyDryShas {
+		verification.DryShas = verification.DryShas[:promoterv1alpha1.MaxLastHealthyDryShas]
+	}
+
+	return nil
+}
+
+// walkVerifiedDryShas reads verification evidence off the active branch, newest commit first,
+// stopping when it reaches stopAtSha or has collected a full record. It reports whether it reached
+// stopAtSha: a walk that did not has read everything it is going to, so its result replaces the
+// existing record rather than extending it.
+//
+// Everything read here lives in commit objects — the message for the trailers, and the commit time.
+// The clone is blobless (--filter=blob:none), so reading file content instead would fetch a blob from
+// the remote per commit; staying off the trees is what keeps this walk cheap.
+func (r *ChangeTransferPolicyReconciler) walkVerifiedDryShas(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy, gitOperations *git.EnvironmentOperations, fromSha, stopAtSha string) ([]promoterv1alpha1.HealthyDryShas, bool, error) {
+	logger := log.FromContext(ctx)
+
+	shas, err := gitOperations.GetRevListFirstParent(ctx, fromSha, maxVerificationWalk)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to list commits on branch %q: %w", ctp.Spec.ActiveBranch, err)
+	}
+
+	entries := make([]promoterv1alpha1.HealthyDryShas, 0, len(shas))
+	for _, sha := range shas {
+		if stopAtSha != "" && sha == stopAtSha {
+			return entries, true, nil
+		}
+
+		if len(entries) >= promoterv1alpha1.MaxLastHealthyDryShas {
+			// A full record already; anything older would be truncated away regardless. Reported as not
+			// having reached stopAtSha so the caller replaces rather than extends, which is right: these
+			// are the newest entries there are.
+			break
+		}
+
+		trailers, err := gitOperations.GetTrailers(ctx, sha)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to get trailers for commit %q: %w", sha, err)
+		}
+
+		drySha, ok := verifiedDryShaFromTrailers(ctx, trailers)
+		if !ok {
+			continue
+		}
+
+		commitTime, err := gitOperations.GetShaTime(ctx, sha)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to get commit time for commit %q: %w", sha, err)
+		}
+
+		entries = append(entries, promoterv1alpha1.HealthyDryShas{Sha: drySha, Time: commitTime})
+	}
+
+	logger.V(4).Info("Walked active branch for verification evidence",
+		"activeBranch", ctp.Spec.ActiveBranch, "walked", len(shas), "found", len(entries))
+
+	return entries, false, nil
+}
+
+// verifiedDryShaFromTrailers reads a commit's evidence that the environment was healthy on the change
+// it was running before that promotion, returning false when the commit is evidence of nothing.
+//
+// The phases recorded here are read at promotion time: the controller refreshes the pull request body
+// and merges it in the same reconcile, off the same status, so they describe the environment's health
+// at the moment it stopped running that change. That is the claim this record makes — healthy when we
+// moved past it — not merely healthy at some point along the way.
+//
+// A commit carrying no promoter trailers at all — a direct push to the active branch, a squash merge
+// that dropped the message, a hand-edited message — is unknown rather than negative. The caller skips
+// it and keeps walking: stopping there would let a single manual push blind the whole record behind
+// it, while treating it as a verification would invent one.
+func verifiedDryShaFromTrailers(ctx context.Context, trailers map[string][]string) (string, bool) {
+	drySha := getFirstTrailerValue(trailers, constants.TrailerShaDryActive)
+	if drySha == "" {
+		return "", false
+	}
+
+	activeKeys, _ := getCommitStatusKeysFromTrailers(ctx, trailers)
+	if len(activeKeys) == 0 {
+		// Every configured active commit status is written as a trailer, as pending when nothing has
+		// reported yet, so no trailers means no gates were configured. An environment that gates on
+		// nothing verifies whatever it runs.
+		return drySha, true
+	}
+
+	for _, key := range activeKeys {
+		if getFirstTrailerValue(trailers, constants.TrailerCommitStatusActivePrefix+key+"-phase") != string(promoterv1alpha1.CommitPhaseSuccess) {
+			return "", false
+		}
+	}
+	return drySha, true
+}
+
+// dedupeVerifiedDryShas keeps the first entry for each dry SHA, which is the newest. A change can be
+// recorded twice when the live latch names one the walk also found, or when a change is promoted,
+// reverted, and promoted again.
+func dedupeVerifiedDryShas(entries []promoterv1alpha1.HealthyDryShas) []promoterv1alpha1.HealthyDryShas {
+	seen := make(map[string]bool, len(entries))
+	deduped := make([]promoterv1alpha1.HealthyDryShas, 0, len(entries))
+	for _, entry := range entries {
+		if seen[entry.Sha] {
+			continue
+		}
+		seen[entry.Sha] = true
+		deduped = append(deduped, entry)
+	}
+	return deduped
 }
 
 // maxPromotionCandidates bounds how far back along the proposed branch the controller will look for

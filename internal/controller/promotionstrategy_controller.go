@@ -503,7 +503,7 @@ func (r *PromotionStrategyReconciler) calculateStatus(ps *promoterv1alpha1.Promo
 		ps.Status.Environments[i].History = ctp.Status.History
 		ps.Status.Environments[i].Candidate = ctp.Status.Candidate
 
-		recordVerifiedDrySha(&ps.Status.Environments[i], ctp)
+		ps.Status.Environments[i].LastHealthyDryShas = verifiedDryShas(ctp)
 	}
 
 	utils.InheritNotReadyConditionFromObjects(ps, promoterConditions.ChangeTransferPolicyNotReady, ctps...)
@@ -956,43 +956,39 @@ func (r *PromotionStrategyReconciler) updatePreviousEnvironmentCommitStatus(ctx 
 	return nil
 }
 
-// recordVerifiedDrySha appends the environment's active dry SHA to its verification ledger when the
-// environment is currently healthy on it, meaning every active commit status the environment gates on
-// is passing. An environment with no active commit statuses configured gates on nothing, so whatever
-// it is running counts as verified.
+// verifiedDryShas returns the changes an environment has vouched for: the record its
+// ChangeTransferPolicy derived from the active branch, plus the change it is running right now if it
+// is currently healthy on it.
 //
-// The ledger is what keeps a change promotable after the environment has moved on to a newer one.
-// Under high dry-branch churn an environment is rarely healthy on the newest change at the exact
-// moment a downstream environment looks at it, so without a durable record downstream environments
-// would only ever see the one change least likely to be verified yet.
-func recordVerifiedDrySha(envStatus *promoterv1alpha1.EnvironmentStatus, ctp *promoterv1alpha1.ChangeTransferPolicy) {
+// The two halves say slightly different things, deliberately. The branch record is health at the
+// moment the environment stopped running each change, written into that promotion's merge commit. The
+// live entry is health right now, and it is composed here rather than stored because it is a claim
+// about the present: an environment green on its current change vouches for it, and stops vouching if
+// it goes unhealthy before moving on. Storing it would turn a transient green into a permanent
+// verification, a weaker claim than the branch record makes.
+//
+// The live entry is what closes the lag. Its evidence only reaches git when the next promotion merges,
+// so without it a later environment would only ever be offered changes that are already one promotion
+// stale — which under churn is the whole problem.
+func verifiedDryShas(ctp *promoterv1alpha1.ChangeTransferPolicy) []promoterv1alpha1.HealthyDryShas {
+	recorded := ctp.Status.Verification.GetDryShas()
+
 	drySha := ctp.Status.Active.Dry.Sha
-	if drySha == "" {
-		return
+	if drySha == "" || !utils.AreCommitStatusesPassing(ctp.Status.Active.CommitStatuses) {
+		return recorded
 	}
 
-	// Commit statuses are resolved against Active.Hydrated.Sha in the same pass that set
-	// Active.Dry.Sha, so a passing set here always describes the dry SHA being recorded. A configured
-	// status with nothing reported yet is recorded as pending rather than omitted, so this cannot pass
-	// vacuously while the environment is still waiting to hear about the change.
-	if !utils.AreCommitStatusesPassing(ctp.Status.Active.CommitStatuses) {
-		return
+	for _, entry := range recorded {
+		if entry.Sha == drySha {
+			return recorded
+		}
 	}
 
-	// An environment stays healthy across many reconciles. Re-recording on each one would churn the
-	// status and evict older entries that slower downstream environments may still be working toward.
-	if hasVerifiedDrySha(*envStatus, drySha) {
-		return
-	}
-
-	envStatus.LastHealthyDryShas = append([]promoterv1alpha1.HealthyDryShas{{
-		Sha:  drySha,
-		Time: metav1.Now(),
-	}}, envStatus.LastHealthyDryShas...)
-
-	if len(envStatus.LastHealthyDryShas) > promoterv1alpha1.MaxLastHealthyDryShas {
-		envStatus.LastHealthyDryShas = envStatus.LastHealthyDryShas[:promoterv1alpha1.MaxLastHealthyDryShas]
-	}
+	// Timed by the active commit rather than by now, matching how the branch-derived entries are timed
+	// by their merge commit — and so that a healthy environment does not rewrite its status with a new
+	// timestamp on every reconcile.
+	live := promoterv1alpha1.HealthyDryShas{Sha: drySha, Time: ctp.Status.Active.Hydrated.CommitTime}
+	return append([]promoterv1alpha1.HealthyDryShas{live}, recorded...)
 }
 
 // hasVerifiedDrySha reports whether the environment has ever been observed healthy on the given dry SHA.

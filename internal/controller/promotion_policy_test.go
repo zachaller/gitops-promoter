@@ -17,35 +17,24 @@ limitations under the License.
 package controller
 
 import (
+	"context"
+	"maps"
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
+	"github.com/argoproj-labs/gitops-promoter/internal/types/constants"
 )
 
-// passing builds an active branch state on drySha whose commit statuses are all successful, i.e. an
-// environment that is healthy on that change.
-func passing(drySha string, keys ...string) promoterv1alpha1.CommitBranchState {
-	statuses := make([]promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase, 0, len(keys))
-	for _, key := range keys {
-		statuses = append(statuses, promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase{
-			Key:   key,
-			Phase: string(promoterv1alpha1.CommitPhaseSuccess),
-		})
-	}
+// pendingOnSHA3 builds an active branch state on SHA3 with one commit status still pending, i.e. an
+// environment that is running that change but has not vouched for it.
+func pendingOnSHA3() promoterv1alpha1.CommitBranchState {
 	return promoterv1alpha1.CommitBranchState{
-		Dry:            promoterv1alpha1.CommitShaState{Sha: drySha},
-		CommitStatuses: statuses,
-	}
-}
-
-// pending builds an active branch state on drySha with one commit status still pending, i.e. an
-// environment that is running the change but has not vouched for it.
-func pending(drySha string) promoterv1alpha1.CommitBranchState {
-	return promoterv1alpha1.CommitBranchState{
-		Dry: promoterv1alpha1.CommitShaState{Sha: drySha},
+		Dry: promoterv1alpha1.CommitShaState{Sha: "SHA3"},
 		CommitStatuses: []promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase{
 			{Key: "argocd-health", Phase: string(promoterv1alpha1.CommitPhasePending)},
 		},
@@ -60,98 +49,141 @@ func ledger(shas ...string) []promoterv1alpha1.HealthyDryShas {
 	return entries
 }
 
-var _ = Describe("recordVerifiedDrySha", func() {
-	It("records the active dry SHA when every active commit status is passing", func() {
-		envStatus := promoterv1alpha1.EnvironmentStatus{Branch: "environment/dev"}
-		ctp := &promoterv1alpha1.ChangeTransferPolicy{}
-		ctp.Status.Active = passing("SHA1", "argocd-health")
+func activeStatusTrailers(key, phase string) map[string][]string {
+	return map[string][]string{
+		constants.TrailerCommitStatusActivePrefix + key + "-phase": {phase},
+	}
+}
 
-		recordVerifiedDrySha(&envStatus, ctp)
+var _ = Describe("verifiedDryShaFromTrailers", func() {
+	ctx := context.Background()
 
-		Expect(envStatus.LastHealthyDryShas).To(HaveLen(1))
-		Expect(envStatus.LastHealthyDryShas[0].Sha).To(Equal("SHA1"))
+	It("accepts a change whose active statuses all passed at promotion time", func() {
+		trailers := map[string][]string{constants.TrailerShaDryActive: {"SHA1"}}
+		maps.Copy(trailers, activeStatusTrailers("argocd-health", "success"))
+
+		drySha, ok := verifiedDryShaFromTrailers(ctx, trailers)
+		Expect(ok).To(BeTrue())
+		Expect(drySha).To(Equal("SHA1"))
 	})
 
-	// An environment that gates on nothing has nothing to wait for, so whatever it runs is verified.
-	It("records the active dry SHA when no active commit statuses are configured", func() {
-		envStatus := promoterv1alpha1.EnvironmentStatus{Branch: "environment/dev"}
-		ctp := &promoterv1alpha1.ChangeTransferPolicy{}
-		ctp.Status.Active = passing("SHA1")
+	It("rejects a change with any status not passing", func() {
+		trailers := map[string][]string{constants.TrailerShaDryActive: {"SHA1"}}
+		maps.Copy(trailers, activeStatusTrailers("argocd-health", "success"))
+		maps.Copy(trailers, activeStatusTrailers("perf-test", "pending"))
 
-		recordVerifiedDrySha(&envStatus, ctp)
-
-		Expect(envStatus.LastHealthyDryShas).To(HaveLen(1))
+		_, ok := verifiedDryShaFromTrailers(ctx, trailers)
+		Expect(ok).To(BeFalse())
 	})
 
-	It("records nothing while a commit status is still pending", func() {
-		envStatus := promoterv1alpha1.EnvironmentStatus{Branch: "environment/dev"}
-		ctp := &promoterv1alpha1.ChangeTransferPolicy{}
-		ctp.Status.Active = pending("SHA1")
+	// Every configured active status is written as a trailer, pending when nothing has reported, so
+	// no status trailers means no gates were configured.
+	It("accepts a change from an environment that gates on nothing", func() {
+		trailers := map[string][]string{constants.TrailerShaDryActive: {"SHA1"}}
 
-		recordVerifiedDrySha(&envStatus, ctp)
-
-		Expect(envStatus.LastHealthyDryShas).To(BeEmpty())
+		drySha, ok := verifiedDryShaFromTrailers(ctx, trailers)
+		Expect(ok).To(BeTrue())
+		Expect(drySha).To(Equal("SHA1"))
 	})
 
-	It("records nothing before the active dry SHA is known", func() {
-		envStatus := promoterv1alpha1.EnvironmentStatus{Branch: "environment/dev"}
-		ctp := &promoterv1alpha1.ChangeTransferPolicy{}
-		ctp.Status.Active = passing("", "argocd-health")
-
-		recordVerifiedDrySha(&envStatus, ctp)
-
-		Expect(envStatus.LastHealthyDryShas).To(BeEmpty())
+	// A commit the controller did not author the message for is evidence of nothing, in either
+	// direction. The caller skips it and keeps walking rather than stopping there.
+	It("reports unknown for a commit with no promoter trailers", func() {
+		_, ok := verifiedDryShaFromTrailers(ctx, map[string][]string{})
+		Expect(ok).To(BeFalse())
 	})
 
-	// An environment stays healthy across many reconciles. Re-recording would evict older entries
-	// that downstream environments may still be working toward.
-	It("does not re-record a SHA it already holds", func() {
-		envStatus := promoterv1alpha1.EnvironmentStatus{
-			Branch:             "environment/dev",
-			LastHealthyDryShas: ledger("SHA1"),
+	It("reports unknown for a commit carrying unrelated trailers only", func() {
+		_, ok := verifiedDryShaFromTrailers(ctx, map[string][]string{"Signed-off-by": {"Someone <a@b.c>"}})
+		Expect(ok).To(BeFalse())
+	})
+
+	// Status trailers without a dry SHA cannot be attributed to a change.
+	It("reports unknown when the dry SHA trailer is missing", func() {
+		_, ok := verifiedDryShaFromTrailers(ctx, activeStatusTrailers("argocd-health", "success"))
+		Expect(ok).To(BeFalse())
+	})
+})
+
+var _ = Describe("dedupeVerifiedDryShas", func() {
+	// The live latch can name a change the git walk also found.
+	It("keeps the newest entry for a repeated change", func() {
+		entries := dedupeVerifiedDryShas(ledger("SHA2", "SHA1", "SHA2"))
+		Expect(entries).To(HaveLen(2))
+		Expect(entries[0].Sha).To(Equal("SHA2"))
+		Expect(entries[1].Sha).To(Equal("SHA1"))
+	})
+
+	It("leaves a record with no repeats alone", func() {
+		Expect(dedupeVerifiedDryShas(ledger("SHA2", "SHA1"))).To(HaveLen(2))
+	})
+})
+
+var _ = Describe("verifiedDryShas", func() {
+	ctpWith := func(activeDrySha string, statuses []promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase, recorded ...string) *promoterv1alpha1.ChangeTransferPolicy {
+		ctp := &promoterv1alpha1.ChangeTransferPolicy{}
+		ctp.Status.Active = promoterv1alpha1.CommitBranchState{
+			Dry:            promoterv1alpha1.CommitShaState{Sha: activeDrySha},
+			CommitStatuses: statuses,
 		}
-		ctp := &promoterv1alpha1.ChangeTransferPolicy{}
-		ctp.Status.Active = passing("SHA1", "argocd-health")
+		if len(recorded) > 0 {
+			ctp.Status.Verification = &promoterv1alpha1.VerificationState{DryShas: ledger(recorded...)}
+		}
+		return ctp
+	}
 
-		recordVerifiedDrySha(&envStatus, ctp)
-		recordVerifiedDrySha(&envStatus, ctp)
+	green := []promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase{
+		{Key: "argocd-health", Phase: string(promoterv1alpha1.CommitPhaseSuccess)},
+	}
+	notGreen := []promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase{
+		{Key: "argocd-health", Phase: string(promoterv1alpha1.CommitPhasePending)},
+	}
 
-		Expect(envStatus.LastHealthyDryShas).To(HaveLen(1))
+	// The live half: the change being run right now has no merge commit yet, so without this a later
+	// environment would only ever see changes that are already one promotion stale.
+	It("adds the current change when the environment is healthy on it", func() {
+		entries := verifiedDryShas(ctpWith("SHA3", green, "SHA2", "SHA1"))
+		Expect(entries).To(HaveLen(3))
+		Expect(entries[0].Sha).To(Equal("SHA3"))
+		Expect(entries[1].Sha).To(Equal("SHA2"))
 	})
 
-	It("keeps the newest verification first", func() {
-		envStatus := promoterv1alpha1.EnvironmentStatus{
-			Branch:             "environment/dev",
-			LastHealthyDryShas: ledger("SHA1"),
-		}
-		ctp := &promoterv1alpha1.ChangeTransferPolicy{}
-		ctp.Status.Active = passing("SHA2", "argocd-health")
-
-		recordVerifiedDrySha(&envStatus, ctp)
-
-		Expect(envStatus.LastHealthyDryShas).To(HaveLen(2))
-		Expect(envStatus.LastHealthyDryShas[0].Sha).To(Equal("SHA2"))
-		Expect(envStatus.LastHealthyDryShas[1].Sha).To(Equal("SHA1"))
+	// Composed rather than stored: an environment that goes unhealthy stops vouching for what it runs.
+	It("omits the current change while the environment is not healthy on it", func() {
+		entries := verifiedDryShas(ctpWith("SHA3", notGreen, "SHA2", "SHA1"))
+		Expect(entries).To(HaveLen(2))
+		Expect(entries[0].Sha).To(Equal("SHA2"))
 	})
 
-	It("drops the oldest verification once the ledger is full", func() {
-		existing := make([]string, promoterv1alpha1.MaxLastHealthyDryShas)
-		for i := range existing {
-			existing[i] = "SHA" + string(rune('A'+i%26)) + string(rune('a'+i/26))
-		}
-		oldest := existing[len(existing)-1]
-		envStatus := promoterv1alpha1.EnvironmentStatus{
-			Branch:             "environment/dev",
-			LastHealthyDryShas: ledger(existing...),
-		}
-		ctp := &promoterv1alpha1.ChangeTransferPolicy{}
-		ctp.Status.Active = passing("NEWEST", "argocd-health")
+	It("adds the current change for an environment that gates on nothing", func() {
+		entries := verifiedDryShas(ctpWith("SHA3", nil, "SHA2"))
+		Expect(entries).To(HaveLen(2))
+		Expect(entries[0].Sha).To(Equal("SHA3"))
+	})
 
-		recordVerifiedDrySha(&envStatus, ctp)
+	It("returns only the branch record before anything is active", func() {
+		entries := verifiedDryShas(ctpWith("", green, "SHA2"))
+		Expect(entries).To(HaveLen(1))
+		Expect(entries[0].Sha).To(Equal("SHA2"))
+	})
 
-		Expect(envStatus.LastHealthyDryShas).To(HaveLen(promoterv1alpha1.MaxLastHealthyDryShas))
-		Expect(envStatus.LastHealthyDryShas[0].Sha).To(Equal("NEWEST"))
-		Expect(hasVerifiedDrySha(envStatus, oldest)).To(BeFalse())
+	It("returns nothing when there is no record and nothing healthy", func() {
+		Expect(verifiedDryShas(ctpWith("SHA3", notGreen))).To(BeEmpty())
+	})
+
+	// A change promoted, reverted, and promoted again is already in the branch record.
+	It("does not duplicate a current change the branch record already holds", func() {
+		entries := verifiedDryShas(ctpWith("SHA2", green, "SHA2", "SHA1"))
+		Expect(entries).To(HaveLen(2))
+	})
+
+	// Timed by the active commit so a healthy environment does not rewrite status every reconcile.
+	It("times the current change by its active commit, not by now", func() {
+		ctp := ctpWith("SHA3", green, "SHA2")
+		activeTime := metav1.NewTime(metav1.Now().Add(-24 * time.Hour).Truncate(time.Second))
+		ctp.Status.Active.Hydrated.CommitTime = activeTime
+
+		Expect(verifiedDryShas(ctp)[0].Time).To(Equal(activeTime))
 	})
 })
 
@@ -259,7 +291,7 @@ var _ = Describe("isPreviousEnvironmentPending with a verification ledger", func
 	It("allows promotion of a change the previous environment verified before moving on", func() {
 		prevEnvStatus := promoterv1alpha1.EnvironmentStatus{
 			Branch:             "environment/dev",
-			Active:             pending("SHA3"),
+			Active:             pendingOnSHA3(),
 			Proposed:           promoterv1alpha1.CommitBranchState{Dry: promoterv1alpha1.CommitShaState{Sha: "SHA3"}},
 			LastHealthyDryShas: ledger("SHA2", "SHA1"),
 		}
@@ -274,7 +306,7 @@ var _ = Describe("isPreviousEnvironmentPending with a verification ledger", func
 	It("still blocks a change the previous environment has never verified", func() {
 		prevEnvStatus := promoterv1alpha1.EnvironmentStatus{
 			Branch:             "environment/dev",
-			Active:             pending("SHA3"),
+			Active:             pendingOnSHA3(),
 			Proposed:           promoterv1alpha1.CommitBranchState{Dry: promoterv1alpha1.CommitShaState{Sha: "SHA3"}},
 			LastHealthyDryShas: ledger("SHA2", "SHA1"),
 		}
@@ -289,12 +321,12 @@ var _ = Describe("isPreviousEnvironmentPending with a verification ledger", func
 	It("blocks when an earlier environment in the chain never verified the change", func() {
 		dev := promoterv1alpha1.EnvironmentStatus{
 			Branch:   "environment/dev",
-			Active:   pending("SHA3"),
+			Active:   pendingOnSHA3(),
 			Proposed: promoterv1alpha1.CommitBranchState{Dry: promoterv1alpha1.CommitShaState{Sha: "SHA3"}},
 		}
 		test := promoterv1alpha1.EnvironmentStatus{
 			Branch:             "environment/test",
-			Active:             pending("SHA3"),
+			Active:             pendingOnSHA3(),
 			Proposed:           promoterv1alpha1.CommitBranchState{Dry: promoterv1alpha1.CommitShaState{Sha: "SHA3"}},
 			LastHealthyDryShas: ledger("SHA2"),
 		}

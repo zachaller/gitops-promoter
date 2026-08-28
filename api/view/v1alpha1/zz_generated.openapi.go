@@ -154,6 +154,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		apiv1alpha1.TimedCommitStatusStatus{}.OpenAPIModelName():                              schema_argoproj_labs_gitops_promoter_api_v1alpha1_TimedCommitStatusStatus(ref),
 		apiv1alpha1.TriggerModeSpec{}.OpenAPIModelName():                                      schema_argoproj_labs_gitops_promoter_api_v1alpha1_TriggerModeSpec(ref),
 		apiv1alpha1.URLConfig{}.OpenAPIModelName():                                            schema_argoproj_labs_gitops_promoter_api_v1alpha1_URLConfig(ref),
+		apiv1alpha1.VerificationState{}.OpenAPIModelName():                                    schema_argoproj_labs_gitops_promoter_api_v1alpha1_VerificationState(ref),
 		apiv1alpha1.WebRequestCommitStatus{}.OpenAPIModelName():                               schema_argoproj_labs_gitops_promoter_api_v1alpha1_WebRequestCommitStatus(ref),
 		apiv1alpha1.WebRequestCommitStatusConfiguration{}.OpenAPIModelName():                  schema_argoproj_labs_gitops_promoter_api_v1alpha1_WebRequestCommitStatusConfiguration(ref),
 		apiv1alpha1.WebRequestCommitStatusEnvironmentStatus{}.OpenAPIModelName():              schema_argoproj_labs_gitops_promoter_api_v1alpha1_WebRequestCommitStatusEnvironmentStatus(ref),
@@ -1334,11 +1335,17 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ChangeTransferPolicyStatu
 							Format:      "",
 						},
 					},
+					"verification": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Verification records the changes this environment has vouched for. The owning PromotionStrategy mirrors it into status.environments[].lastHealthyDryShas, where later environments consult it.",
+							Ref:         ref(apiv1alpha1.VerificationState{}.OpenAPIModelName()),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.History{}.OpenAPIModelName(), apiv1alpha1.PromotionCandidateState{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName(), metav1.Condition{}.OpenAPIModelName()},
+			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.History{}.OpenAPIModelName(), apiv1alpha1.PromotionCandidateState{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName(), apiv1alpha1.VerificationState{}.OpenAPIModelName(), metav1.Condition{}.OpenAPIModelName()},
 	}
 }
 
@@ -5769,6 +5776,41 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_URLConfig(ref common.Refe
 				},
 			},
 		},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_VerificationState(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "VerificationState is an environment's record of the changes it was healthy on when it stopped running them.\n\nIt is a cache over git rather than an accumulated log: each promotion records the outgoing change's health in its merge commit on the active branch, so all of this can be rebuilt by walking that branch, and losing the status costs nothing permanent. It deliberately excludes the change the environment is running right now — that one has no merge commit yet and is judged on live health instead, wherever the record is consumed.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"dryShas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DryShas are the dry commits this environment was healthy on at the point it promoted past them, newest first and capped at MaxLastHealthyDryShas.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+					"observedActiveSha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedActiveSha is the active branch commit the git-derived entries were built from. While the active branch still points there the walk is skipped entirely; when it has moved, only the commits added since are examined. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()},
 	}
 }
 

@@ -79,14 +79,48 @@ An environment verifies a change when that change is active in it and **every on
 active commit statuses is passing**. An environment with no active commit statuses configured gates on
 nothing, so everything it runs counts as verified.
 
-Verifications are recorded in `status.environments[].lastHealthyDryShas` on the `PromotionStrategy`,
-newest first, and are **kept after the environment moves on** to a newer change. That durability is
-what makes the whole thing work: a change stays promotable on the strength of a verification that has
-since been superseded. The list holds the 50 most recent verifications per environment, which bounds
-how far behind a downstream environment can fall and still catch up.
+Verifications are **kept after the environment moves on** to a newer change. That is what makes the
+whole thing work: a change stays promotable on the strength of a verification that has since been
+superseded. Without it, a churning environment would never hand anything downstream, because it is
+almost never healthy on a given change at the exact moment a later environment looks.
 
 A change must be verified by *every* environment before the one promoting it, not just the immediately
 preceding one.
+
+### Where the record lives
+
+The record is kept on each environment's `ChangeTransferPolicy` at `status.verification`, and surfaced
+on the `PromotionStrategy` at `status.environments[].lastHealthyDryShas`. It holds the 50 most recent
+verifications per environment, which bounds how far behind a downstream environment can fall and still
+catch up.
+
+It has two halves, which say deliberately different things:
+
+- **Changes the environment has moved past** come from git. Every promotion records the outgoing
+  change's health in its merge commit on the active branch — the controller refreshes the pull request
+  body and merges it in the same reconcile, so those statuses describe health *at the moment the
+  environment stopped running the change*. Nothing is accumulated: the record is rebuilt by walking
+  the branch whenever the status is lost, so a deleted and recreated resource costs nothing permanent.
+- **The change running right now** has no merge commit yet, so it is judged on live health and
+  composed in when the record is read. This half is what closes the lag: its evidence only reaches git
+  at the next promotion, and without it a later environment would only ever be offered changes that
+  are already one promotion stale — which under churn is the whole problem.
+
+Because the live half is composed rather than stored, an environment that goes unhealthy stops
+vouching for what it is running. A transient green never becomes a permanent verification.
+
+Walking the active branch, a commit falls into one of three buckets:
+
+| Commit | Read as |
+|---|---|
+| Promoter trailers showing every active status passing | verified |
+| Promoter trailers with any status not passing | not verified |
+| No promoter trailers at all — a direct push, a squash merge that dropped the message, a hand-edited message | **unknown**: skipped, and the walk continues past it |
+
+Unknown is skipped rather than treated as a stopping point, so a single manual push to an environment
+branch cannot blind the record behind it. It is also safe in the right direction: an unknown commit can
+only ever withhold a promotion, never grant one. Skipped commits still consume the walk budget, so a
+repository with heavy direct pushing has a shorter effective record than the 50-entry cap suggests.
 
 ## The promotion branch
 

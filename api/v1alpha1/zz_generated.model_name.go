@@ -616,6 +616,11 @@ func (in URLConfig) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in VerificationState) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.VerificationState"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in WebRequestCommitStatus) OpenAPIModelName() string {
 	return "io.argoproj.promoter.v1alpha1.WebRequestCommitStatus"
 }

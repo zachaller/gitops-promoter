@@ -1427,6 +1427,47 @@ spec:
                     - message: must be a valid URL
                       rule: self == '' || isURL(self)
                 type: object
+              verification:
+                description: |-
+                  Verification records the changes this environment has vouched for. The owning PromotionStrategy
+                  mirrors it into status.environments[].lastHealthyDryShas, where later environments consult it.
+                properties:
+                  dryShas:
+                    description: |-
+                      DryShas are the dry commits this environment was healthy on at the point it promoted past them,
+                      newest first and capped at MaxLastHealthyDryShas.
+                    items:
+                      description: HealthyDryShas records a dry commit that an environment
+                        verified.
+                      properties:
+                        sha:
+                          description: |-
+                            Sha is the commit SHA of the dry commit that was observed to be healthy.
+                            Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                          maxLength: 64
+                          pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
+                          type: string
+                        time:
+                          description: Time is the time at which the environment was
+                            first observed to be healthy on this dry SHA.
+                          format: date-time
+                          type: string
+                      required:
+                      - sha
+                      - time
+                      type: object
+                    maxItems: 50
+                    type: array
+                  observedActiveSha:
+                    description: |-
+                      ObservedActiveSha is the active branch commit the git-derived entries were built from. While the
+                      active branch still points there the walk is skipped entirely; when it has moved, only the
+                      commits added since are examined.
+                      Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                    maxLength: 64
+                    pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                    type: string
+                type: object
             type: object
         type: object
     served: true
