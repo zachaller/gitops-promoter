@@ -7,6 +7,10 @@ Most environment promotion strategies will involve enforcing some kind of "gates
 GitOps promoter uses the [PromotionStrategy API](../crd-specs.md#promotionstrategy) to configure checks that must pass
 between environments. It uses the [CommitStatus API](../crd-specs.md#commitstatus) to understand the state of the checks.
 
+Gates decide *whether* a change may be promoted. [Promotion policies](../promotion-policies.md) decide **which** change
+an environment promotes when several are waiting — reach for those if a later environment has stopped deploying because
+its gates never all pass at the same moment.
+
 A "proposed commit status" is a check which must be passing on a proposed change before it can be merged. To set a 
 CommitStatus to be used as a proposed commit status, set the `spec.sha` field to the commit hash of the proposed change
 in the proposed (`-next`) environment branch.
