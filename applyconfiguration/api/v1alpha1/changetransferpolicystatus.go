@@ -55,7 +55,7 @@ type ChangeTransferPolicyStatusApplyConfiguration struct {
 	// when the resource has no instance-id label (default install).
 	InstanceID *string `json:"instanceID,omitempty"`
 	// Verification records the changes this environment has vouched for. The owning PromotionStrategy
-	// mirrors it into status.environments[].lastHealthyDryShas, where later environments consult it.
+	// mirrors it into status.environments[].verification, where later environments consult it.
 	Verification *VerificationStateApplyConfiguration `json:"verification,omitempty"`
 }
 

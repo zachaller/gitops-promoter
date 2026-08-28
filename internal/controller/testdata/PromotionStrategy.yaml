@@ -107,17 +107,16 @@ status:
       # Runs ahead of drySha after a hydration that changed no manifests, since the hydrator then
       # updates only the git note and creates no new commit.
       noteDrySha: "1111111111111111111111111111111111111111"
-    lastHealthyDryShas:
-    # The dry commits this environment has verified: active in the environment while all of its active
-    # commit statuses were passing. Entries are kept after the environment moves on to a newer change,
-    # which is what lets a later environment still promote a change whose verification was superseded.
-    #
-    # Composed from the environment's ChangeTransferPolicy status.verification, which is rebuilt from
-    # the active branch's merge commits, plus the change it is running right now when it is healthy
-    # on it.
-    # Newest first, at most 50 entries.
-    - sha: "abcdef1234567890abcdef1234567890abcdef12"
-      time: 2023-10-01T00:00:00Z
+    verification:
+      # Mirrors the environment's ChangeTransferPolicy status.verification, with current composed from
+      # live active health when the environment is healthy on its active change.
+      dryShas:
+      # Changes this environment was healthy on when it promoted past them, copied from the CTP.
+      # Newest first, at most 50 entries.
+      - sha: "abcdef1234567890abcdef1234567890abcdef12"
+        time: 2023-10-01T00:00:00Z
+      observedActiveSha: "2222222222222222222222222222222222222222"
+      # current is omitted here; set when the environment is healthy on a change not yet in dryShas.
   - branch: environment/test
     # same fields as dev
   - branch: environment/prod

@@ -64,7 +64,7 @@ status:
   verification:
     # The changes this environment was healthy on at the point it promoted past them. Later
     # environments consult it (via the owning PromotionStrategy, which surfaces it as
-    # status.environments[].lastHealthyDryShas) so a change stays promotable after this environment
+    # status.environments[].verification) so a change stays promotable after this environment
     # has moved on to a newer one.
     #
     # This is a cache over git, not an accumulated log: each promotion records the outgoing change's

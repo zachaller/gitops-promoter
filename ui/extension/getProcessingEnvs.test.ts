@@ -13,7 +13,7 @@ interface EnvOverrides {
 
 const makeEnv = (o: EnvOverrides = {}): Environment => ({
   branch: o.branch ?? 'main',
-  lastHealthyDryShas: [],
+  verification: {},
   active: {
     dry: o.activeDrySha ? { sha: o.activeDrySha } : undefined,
   },

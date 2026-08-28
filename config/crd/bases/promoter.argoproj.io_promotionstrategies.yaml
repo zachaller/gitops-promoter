@@ -1151,38 +1151,6 @@ spec:
                             type: object
                         type: object
                       type: array
-                    lastHealthyDryShas:
-                      description: |-
-                        LastHealthyDryShas records the dry commits this environment has verified: those that were active
-                        in the environment while every one of its active commit statuses was passing. It is the durable
-                        record of "this environment vouched for this change", and it keeps its entries after the
-                        environment has moved on to a newer change. Later environments consult it so that a change can
-                        still be promoted on the strength of a verification that has since been superseded, which is what
-                        allows a promotion chain to keep moving when the dry branch churns faster than an environment can
-                        verify a change. Entries are in reverse chronological order (newest first) and are capped at
-                        MaxLastHealthyDryShas.
-                      items:
-                        description: HealthyDryShas records a dry commit that an environment
-                          verified.
-                        properties:
-                          sha:
-                            description: |-
-                              Sha is the commit SHA of the dry commit that was observed to be healthy.
-                              Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
-                            maxLength: 64
-                            pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
-                            type: string
-                          time:
-                            description: Time is the time at which the environment
-                              was first observed to be healthy on this dry SHA.
-                            format: date-time
-                            type: string
-                        required:
-                        - sha
-                        - time
-                        type: object
-                      maxItems: 50
-                      type: array
                     proposed:
                       description: Proposed is the state of the proposed branch for
                         the environment.
@@ -1518,6 +1486,68 @@ spec:
                           x-kubernetes-validations:
                           - message: must be a valid URL
                             rule: self == '' || isURL(self)
+                      type: object
+                    verification:
+                      description: |-
+                        Verification mirrors the owning ChangeTransferPolicy status.verification and adds Current for
+                        the change the environment is running right now when it is healthy on it. Later environments
+                        consult the effective record — DryShas plus Current when present — when selecting candidates.
+                      properties:
+                        current:
+                          description: |-
+                            Current is the change the environment is running right now when every active commit status is
+                            passing and that change is not already in DryShas. Omitted when the environment is not healthy
+                            on its active change or when the active change is already recorded in DryShas.
+                          properties:
+                            sha:
+                              description: |-
+                                Sha is the commit SHA of the dry commit that was observed to be healthy.
+                                Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                              maxLength: 64
+                              pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
+                              type: string
+                            time:
+                              description: Time is the time at which the environment
+                                was first observed to be healthy on this dry SHA.
+                              format: date-time
+                              type: string
+                          required:
+                          - sha
+                          - time
+                          type: object
+                        dryShas:
+                          description: |-
+                            DryShas are copied from the owning ChangeTransferPolicy status.verification.dryShas: changes
+                            this environment was healthy on when it promoted past them, newest first.
+                          items:
+                            description: HealthyDryShas records a dry commit that
+                              an environment verified.
+                            properties:
+                              sha:
+                                description: |-
+                                  Sha is the commit SHA of the dry commit that was observed to be healthy.
+                                  Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                                maxLength: 64
+                                pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
+                                type: string
+                              time:
+                                description: Time is the time at which the environment
+                                  was first observed to be healthy on this dry SHA.
+                                format: date-time
+                                type: string
+                            required:
+                            - sha
+                            - time
+                            type: object
+                          maxItems: 50
+                          type: array
+                        observedActiveSha:
+                          description: |-
+                            ObservedActiveSha is copied from the owning ChangeTransferPolicy status.verification.observedActiveSha.
+                            Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                          maxLength: 64
+                          pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                          type: string
                       type: object
                   required:
                   - active

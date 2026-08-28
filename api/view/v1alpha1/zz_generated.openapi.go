@@ -74,6 +74,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		apiv1alpha1.CronWindow{}.OpenAPIModelName():                                           schema_argoproj_labs_gitops_promoter_api_v1alpha1_CronWindow(ref),
 		apiv1alpha1.Environment{}.OpenAPIModelName():                                          schema_argoproj_labs_gitops_promoter_api_v1alpha1_Environment(ref),
 		apiv1alpha1.EnvironmentStatus{}.OpenAPIModelName():                                    schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentStatus(ref),
+		apiv1alpha1.EnvironmentVerificationStatus{}.OpenAPIModelName():                        schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentVerificationStatus(ref),
 		apiv1alpha1.ExponentialFailure{}.OpenAPIModelName():                                   schema_argoproj_labs_gitops_promoter_api_v1alpha1_ExponentialFailure(ref),
 		apiv1alpha1.Fake{}.OpenAPIModelName():                                                 schema_argoproj_labs_gitops_promoter_api_v1alpha1_Fake(ref),
 		apiv1alpha1.FakeRepo{}.OpenAPIModelName():                                             schema_argoproj_labs_gitops_promoter_api_v1alpha1_FakeRepo(ref),
@@ -1337,7 +1338,7 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ChangeTransferPolicyStatu
 					},
 					"verification": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Verification records the changes this environment has vouched for. The owning PromotionStrategy mirrors it into status.environments[].lastHealthyDryShas, where later environments consult it.",
+							Description: "Verification records the changes this environment has vouched for. The owning PromotionStrategy mirrors it into status.environments[].verification, where later environments consult it.",
 							Ref:         ref(apiv1alpha1.VerificationState{}.OpenAPIModelName()),
 						},
 					},
@@ -2357,17 +2358,10 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentStatus(ref com
 							Ref:         ref(apiv1alpha1.PromotionCandidateState{}.OpenAPIModelName()),
 						},
 					},
-					"lastHealthyDryShas": {
+					"verification": {
 						SchemaProps: spec.SchemaProps{
-							Description: "LastHealthyDryShas records the dry commits this environment has verified: those that were active in the environment while every one of its active commit statuses was passing. It is the durable record of \"this environment vouched for this change\", and it keeps its entries after the environment has moved on to a newer change. Later environments consult it so that a change can still be promoted on the strength of a verification that has since been superseded, which is what allows a promotion chain to keep moving when the dry branch churns faster than an environment can verify a change. Entries are in reverse chronological order (newest first) and are capped at MaxLastHealthyDryShas.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref(apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()),
-									},
-								},
-							},
+							Description: "Verification mirrors the owning ChangeTransferPolicy status.verification and adds Current for the change the environment is running right now when it is healthy on it. Later environments consult the effective record — DryShas plus Current when present — when selecting candidates.",
+							Ref:         ref(apiv1alpha1.EnvironmentVerificationStatus{}.OpenAPIModelName()),
 						},
 					},
 					"history": {
@@ -2384,11 +2378,52 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentStatus(ref com
 						},
 					},
 				},
-				Required: []string{"branch", "proposed", "active", "lastHealthyDryShas"},
+				Required: []string{"branch", "proposed", "active"},
 			},
 		},
 		Dependencies: []string{
-			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.HealthyDryShas{}.OpenAPIModelName(), apiv1alpha1.History{}.OpenAPIModelName(), apiv1alpha1.PromotionCandidateState{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName()},
+			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.EnvironmentVerificationStatus{}.OpenAPIModelName(), apiv1alpha1.History{}.OpenAPIModelName(), apiv1alpha1.PromotionCandidateState{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentVerificationStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "EnvironmentVerificationStatus mirrors an environment's ChangeTransferPolicy status.verification on the PromotionStrategy and adds Current for the change the environment is running right now when it is healthy on it. Current is composed at reconcile time rather than stored on the CTP because it is a claim about the present.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"dryShas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DryShas are copied from the owning ChangeTransferPolicy status.verification.dryShas: changes this environment was healthy on when it promoted past them, newest first.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+					"observedActiveSha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedActiveSha is copied from the owning ChangeTransferPolicy status.verification.observedActiveSha. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"current": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Current is the change the environment is running right now when every active commit status is passing and that change is not already in DryShas. Omitted when the environment is not healthy on its active change or when the active change is already recorded in DryShas.",
+							Ref:         ref(apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()},
 	}
 }
 

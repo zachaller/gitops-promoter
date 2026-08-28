@@ -97,6 +97,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.EnvironmentApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("EnvironmentStatus"):
 		return &apiv1alpha1.EnvironmentStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("EnvironmentVerificationStatus"):
+		return &apiv1alpha1.EnvironmentVerificationStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ExponentialFailure"):
 		return &apiv1alpha1.ExponentialFailureApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Fake"):

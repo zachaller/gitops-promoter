@@ -288,7 +288,7 @@ type ChangeTransferPolicyStatus struct {
 	InstanceID *string `json:"instanceID,omitempty"`
 
 	// Verification records the changes this environment has vouched for. The owning PromotionStrategy
-	// mirrors it into status.environments[].lastHealthyDryShas, where later environments consult it.
+	// mirrors it into status.environments[].verification, where later environments consult it.
 	// +kubebuilder:validation:Optional
 	Verification *VerificationState `json:"verification,omitempty"`
 }

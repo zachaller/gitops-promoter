@@ -35,15 +35,10 @@ type EnvironmentStatusApplyConfiguration struct {
 	// environment's promotion policy selects candidates, because otherwise it is identical to Proposed.
 	// Comparing it with Proposed shows how far behind the newest change this environment is running.
 	Candidate *PromotionCandidateStateApplyConfiguration `json:"candidate,omitempty"`
-	// LastHealthyDryShas records the dry commits this environment has verified: those that were active
-	// in the environment while every one of its active commit statuses was passing. It is the durable
-	// record of "this environment vouched for this change", and it keeps its entries after the
-	// environment has moved on to a newer change. Later environments consult it so that a change can
-	// still be promoted on the strength of a verification that has since been superseded, which is what
-	// allows a promotion chain to keep moving when the dry branch churns faster than an environment can
-	// verify a change. Entries are in reverse chronological order (newest first) and are capped at
-	// MaxLastHealthyDryShas.
-	LastHealthyDryShas []HealthyDryShasApplyConfiguration `json:"lastHealthyDryShas,omitempty"`
+	// Verification mirrors the owning ChangeTransferPolicy status.verification and adds Current for
+	// the change the environment is running right now when it is healthy on it. Later environments
+	// consult the effective record — DryShas plus Current when present — when selecting candidates.
+	Verification *EnvironmentVerificationStatusApplyConfiguration `json:"verification,omitempty"`
 	// History defines the history of promoted changes done by the PromotionStrategy for each environment.
 	// You can think of it as a list of PRs merged by GitOps Promoter. It will not include changes that were
 	// manually merged. The history length is hard-coded to be at most 5 entries. This may change in the future.
@@ -98,16 +93,11 @@ func (b *EnvironmentStatusApplyConfiguration) WithCandidate(value *PromotionCand
 	return b
 }
 
-// WithLastHealthyDryShas adds the given value to the LastHealthyDryShas field in the declarative configuration
-// and returns the receiver, so that objects can be build by chaining "With" function invocations.
-// If called multiple times, values provided by each call will be appended to the LastHealthyDryShas field.
-func (b *EnvironmentStatusApplyConfiguration) WithLastHealthyDryShas(values ...*HealthyDryShasApplyConfiguration) *EnvironmentStatusApplyConfiguration {
-	for i := range values {
-		if values[i] == nil {
-			panic("nil value passed to WithLastHealthyDryShas")
-		}
-		b.LastHealthyDryShas = append(b.LastHealthyDryShas, *values[i])
-	}
+// WithVerification sets the Verification field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Verification field is set to the value of the last call.
+func (b *EnvironmentStatusApplyConfiguration) WithVerification(value *EnvironmentVerificationStatusApplyConfiguration) *EnvironmentStatusApplyConfiguration {
+	b.Verification = value
 	return b
 }
 

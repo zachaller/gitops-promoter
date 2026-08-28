@@ -276,17 +276,11 @@ type EnvironmentStatus struct {
 	// +kubebuilder:validation:Optional
 	Candidate *PromotionCandidateState `json:"candidate,omitempty"`
 
-	// LastHealthyDryShas records the dry commits this environment has verified: those that were active
-	// in the environment while every one of its active commit statuses was passing. It is the durable
-	// record of "this environment vouched for this change", and it keeps its entries after the
-	// environment has moved on to a newer change. Later environments consult it so that a change can
-	// still be promoted on the strength of a verification that has since been superseded, which is what
-	// allows a promotion chain to keep moving when the dry branch churns faster than an environment can
-	// verify a change. Entries are in reverse chronological order (newest first) and are capped at
-	// MaxLastHealthyDryShas.
+	// Verification mirrors the owning ChangeTransferPolicy status.verification and adds Current for
+	// the change the environment is running right now when it is healthy on it. Later environments
+	// consult the effective record — DryShas plus Current when present — when selecting candidates.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:MaxItems=50
-	LastHealthyDryShas []HealthyDryShas `json:"lastHealthyDryShas"`
+	Verification *EnvironmentVerificationStatus `json:"verification,omitempty"`
 
 	// History defines the history of promoted changes done by the PromotionStrategy for each environment.
 	// You can think of it as a list of PRs merged by GitOps Promoter. It will not include changes that were
@@ -297,11 +291,68 @@ type EnvironmentStatus struct {
 }
 
 // MaxLastHealthyDryShas is the number of verified dry commits retained per environment in
-// EnvironmentStatus.LastHealthyDryShas. The list is a lookback window for downstream environments:
-// it has to be long enough that a change stays eligible for promotion while slower downstream
-// environments work through their queue, and short enough to keep the status object small. Keep it
-// in sync with the MaxItems validation on the field.
+// VerificationState.DryShas and EnvironmentVerificationStatus.DryShas. The list is a lookback window
+// for downstream environments: it has to be long enough that a change stays eligible for promotion
+// while slower downstream environments work through their queue, and short enough to keep the status
+// object small. Keep it in sync with the MaxItems validation on those fields.
 const MaxLastHealthyDryShas = 50
+
+// EnvironmentVerificationStatus mirrors an environment's ChangeTransferPolicy status.verification on
+// the PromotionStrategy and adds Current for the change the environment is running right now when it
+// is healthy on it. Current is composed at reconcile time rather than stored on the CTP because it
+// is a claim about the present.
+type EnvironmentVerificationStatus struct {
+	// DryShas are copied from the owning ChangeTransferPolicy status.verification.dryShas: changes
+	// this environment was healthy on when it promoted past them, newest first.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxItems=50
+	DryShas []HealthyDryShas `json:"dryShas,omitempty"`
+
+	// ObservedActiveSha is copied from the owning ChangeTransferPolicy status.verification.observedActiveSha.
+	// Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^([a-f0-9]{40}|[a-f0-9]{64})?$`
+	ObservedActiveSha string `json:"observedActiveSha,omitempty"`
+
+	// Current is the change the environment is running right now when every active commit status is
+	// passing and that change is not already in DryShas. Omitted when the environment is not healthy
+	// on its active change or when the active change is already recorded in DryShas.
+	// +kubebuilder:validation:Optional
+	Current *HealthyDryShas `json:"current,omitempty"`
+}
+
+// HasVerifiedDrySha reports whether the environment has ever been observed healthy on the given dry SHA.
+func (v *EnvironmentVerificationStatus) HasVerifiedDrySha(drySha string) bool {
+	if drySha == "" || v == nil {
+		return false
+	}
+	if v.Current != nil && v.Current.Sha == drySha {
+		return true
+	}
+	for _, healthy := range v.DryShas {
+		if healthy.Sha == drySha {
+			return true
+		}
+	}
+	return false
+}
+
+// EffectiveVerifiedDryShas returns the dry commits this environment vouches for: DryShas with Current
+// prepended when it names a change not already recorded. Entries are newest first.
+func (v *EnvironmentVerificationStatus) EffectiveVerifiedDryShas() []HealthyDryShas {
+	if v == nil {
+		return nil
+	}
+	if v.Current == nil {
+		return v.DryShas
+	}
+	for _, entry := range v.DryShas {
+		if entry.Sha == v.Current.Sha {
+			return v.DryShas
+		}
+	}
+	return append([]HealthyDryShas{*v.Current}, v.DryShas...)
+}
 
 // HealthyDryShas records a dry commit that an environment verified.
 type HealthyDryShas struct {

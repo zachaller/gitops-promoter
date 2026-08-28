@@ -200,11 +200,23 @@ export type components = {
             /** @description ActivePath is an optional repository subpath for this policy's active state. When set, hydrator metadata is read from <activePath>/hydrator.metadata. */
             activePath?: string;
             autoMerge?: boolean;
+            /** @description Candidates constrains which hydrated changes this policy may promote. It is computed by the PromotionStrategy controller from the verification ledgers of every preceding environment. A nil value means unconstrained, which is the case for the first environment in a sequence because it has no preceding environment to wait for. */
+            candidates?: components["schemas"]["PromotionCandidates"];
             /**
              * @description RepositoryReference what repository to open the PR on.
              * @default {}
              */
             gitRepositoryRef: components["schemas"]["io_argoproj_promoter_v1alpha1_ObjectReference"];
+            /**
+             * @description PromotionBranch is a promoter-owned branch that carries the candidate this policy has selected for promotion. It is required by every policy other than Latest, which promotes the proposed branch tip directly and needs no separate branch.
+             *
+             *     The proposed branch belongs to the hydrator and always tracks the newest dry commit, so it cannot be used to promote anything but the newest candidate. Instead the controller picks a commit out of the proposed branch's history and force-pushes it here, and the promotion pull request is opened from this branch. Nothing but this controller may write to it.
+             *
+             *     Must not start with '-', contain ':', or contain '..'.
+             */
+            promotionBranch?: string;
+            /** @description PromotionPolicy selects which candidate on the proposed branch this policy promotes. Copied from the owning PromotionStrategy by the PromotionStrategy controller. Empty means Latest. */
+            promotionPolicy?: string;
             /**
              * @description ProposedBranch staging hydrated branch Must not start with '-', contain ':', or contain '..'.
              * @default
@@ -222,6 +234,8 @@ export type components = {
              * @default {}
              */
             active?: components["schemas"]["CommitBranchState"];
+            /** @description Candidate is the tip of the hydrator's proposed branch: the newest change that exists for this environment, whether or not it is eligible for promotion. It is only populated when the policy selects candidates, because otherwise it is identical to Proposed. Comparing it with Proposed shows how far behind the newest change this environment's current promotion is. */
+            candidate?: components["schemas"]["PromotionCandidateState"];
             /** @description Conditions Represents the observations of the current state. */
             conditions?: components["schemas"]["Condition"][];
             /** @description History defines the history of promoted changes done by the ChangeTransferPolicy. You can think of it as a list of PRs merged by GitOps Promoter. It will not include changes that were manually merged. The history length is hard-coded to be at most 5 entries. This may change in the future. History is constructed on a best-effort basis and should be used for informational purposes only. History is in reverse chronological order (newest is first). */
@@ -240,6 +254,8 @@ export type components = {
             proposed?: components["schemas"]["CommitBranchState"];
             /** @description PullRequest is the state of the pull request that was created for this ChangeTransferPolicy. */
             pullRequest?: components["schemas"]["PullRequestCommonStatus"];
+            /** @description Verification records the changes this environment has vouched for. The owning PromotionStrategy mirrors it into status.environments[].verification, where later environments consult it. */
+            verification?: components["schemas"]["VerificationState"];
         };
         /** @description ClusterScmProvider is the Schema for the clusterscmproviders API. */
         ClusterScmProvider: {
@@ -447,6 +463,8 @@ export type components = {
              * @default
              */
             branch: string;
+            /** @description PromotionPolicy optionally overrides the strategy-level promotionPolicy for this environment. When empty, spec.promotionPolicy applies, which itself defaults to Latest. */
+            promotionPolicy?: string;
             /**
              * @description ProposedCommitStatuses are commit statuses describing a proposed dry commit, i.e. one that is not yet running in a live environment. If a proposed commit status is failing for a given environment, the dry commit will not be promoted to that environment.
              *
@@ -466,10 +484,10 @@ export type components = {
              * @default
              */
             branch: string;
+            /** @description Candidate is the tip of the hydrator's proposed branch for this environment: the newest change that exists, whether or not it is eligible for promotion. It is only populated when the environment's promotion policy selects candidates, because otherwise it is identical to Proposed. Comparing it with Proposed shows how far behind the newest change this environment is running. */
+            candidate?: components["schemas"]["PromotionCandidateState"];
             /** @description History defines the history of promoted changes done by the PromotionStrategy for each environment. You can think of it as a list of PRs merged by GitOps Promoter. It will not include changes that were manually merged. The history length is hard-coded to be at most 5 entries. This may change in the future. History is constructed on a best-effort basis and should be used for informational purposes only. History is in reverse chronological order (newest is first). */
             history?: components["schemas"]["History"][];
-            /** @description LastHealthyDryShas is a list of dry commits that were observed to be healthy in the environment. */
-            lastHealthyDryShas: components["schemas"]["HealthyDryShas"][];
             /**
              * @description Proposed is the state of the proposed branch for the environment.
              * @default {}
@@ -477,6 +495,17 @@ export type components = {
             proposed: components["schemas"]["CommitBranchState"];
             /** @description PullRequest is the state of the pull request that was created for this environment. */
             pullRequest?: components["schemas"]["PullRequestCommonStatus"];
+            /** @description Verification mirrors the owning ChangeTransferPolicy status.verification and adds Current for the change the environment is running right now when it is healthy on it. Later environments consult the effective record — DryShas plus Current when present — when selecting candidates. */
+            verification?: components["schemas"]["EnvironmentVerificationStatus"];
+        };
+        /** @description EnvironmentVerificationStatus mirrors an environment's ChangeTransferPolicy status.verification on the PromotionStrategy and adds Current for the change the environment is running right now when it is healthy on it. Current is composed at reconcile time rather than stored on the CTP because it is a claim about the present. */
+        EnvironmentVerificationStatus: {
+            /** @description Current is the change the environment is running right now when every active commit status is passing and that change is not already in DryShas. Omitted when the environment is not healthy on its active change or when the active change is already recorded in DryShas. */
+            current?: components["schemas"]["HealthyDryShas"];
+            /** @description DryShas are copied from the owning ChangeTransferPolicy status.verification.dryShas: changes this environment was healthy on when it promoted past them, newest first. */
+            dryShas?: components["schemas"]["HealthyDryShas"][];
+            /** @description ObservedActiveSha is copied from the owning ChangeTransferPolicy status.verification.observedActiveSha. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats. */
+            observedActiveSha?: string;
         };
         /** @description Fake is a placeholder for a fake SCM provider, used for testing purposes. */
         Fake: {
@@ -888,14 +917,14 @@ export type components = {
              */
             urlTemplate: string;
         };
-        /** @description HealthyDryShas is a list of dry commits that were observed to be healthy in the environment. */
+        /** @description HealthyDryShas records a dry commit that an environment verified. */
         HealthyDryShas: {
             /**
              * @description Sha is the commit SHA of the dry commit that was observed to be healthy. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
              * @default
              */
             sha: string;
-            /** @description Time is the time when the proposed commit for the given dry SHA was merged into the active branch. */
+            /** @description Time is the time at which the environment was first observed to be healthy on this dry SHA. */
             time: components["schemas"]["Time"];
         };
         /** @description History describes a particular change that was promoted by the ChangeTransferPolicy. */
@@ -1159,6 +1188,26 @@ export type components = {
             /** @description Interval controls how often to retry the HTTP request while in pending state. When reportOn is "proposed": stops polling after success for a given SHA. When reportOn is "active": always polls at this interval. */
             interval?: components["schemas"]["Duration"];
         };
+        /**
+         * @description PromotionCandidateState summarizes the tip of the hydrator's proposed branch.
+         *
+         *     It is deliberately a handful of scalars rather than a CommitBranchState. Only these fields are meaningful for a change that has not been selected for promotion, and CommitBranchState carries enough validated URL fields that repeating it here would push the CRDs a long way toward the apiserver's per-schema CEL cost limit (see hack/celcost/report.md) for information nothing reads.
+         */
+        PromotionCandidateState: {
+            /** @description CommitTime is the time of the hydrated commit. */
+            commitTime?: components["schemas"]["Time"];
+            /** @description DrySha is the dry commit SHA this candidate hydrates, read from hydrator.metadata. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats. */
+            drySha?: string;
+            /** @description HydratedSha is the commit SHA at the tip of the proposed branch. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats. */
+            hydratedSha?: string;
+            /** @description NoteDrySha is the dry SHA from the git note on the hydrated commit, when there is one. It runs ahead of DrySha after a hydration that changed no manifests, because the hydrator then updates only the note and creates no new commit. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats. */
+            noteDrySha?: string;
+        };
+        /** @description PromotionCandidates lists the changes a ChangeTransferPolicy is allowed to promote. */
+        PromotionCandidates: {
+            /** @description DryShas are the dry commit SHAs that every preceding environment has verified, newest first. Only candidates whose dry SHA appears in this list may be promoted. An empty list means no change is currently eligible, which is different from a nil PromotionCandidates (unconstrained). */
+            dryShas?: string[];
+        };
         /** @description PromotionStrategy is the Schema for the promotionstrategies API */
         PromotionStrategy: {
             /** @description APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources */
@@ -1239,6 +1288,8 @@ export type components = {
              * @default {}
              */
             gitRepositoryRef: components["schemas"]["io_argoproj_promoter_v1alpha1_ObjectReference"];
+            /** @description PromotionPolicy is the default candidate selection policy for all environments in this strategy. Individual environments can override it via their own promotionPolicy field. Defaults to Latest. */
+            promotionPolicy?: string;
             /**
              * @description ProposedCommitStatuses are commit statuses describing a proposed dry commit, i.e. one that is not yet running in a live environment. If a proposed commit status is failing for a given environment, the dry commit will not be promoted to that environment.
              *
@@ -1747,6 +1798,17 @@ export type components = {
              *       {{ printf "%s/applications?labels=%s" $baseURL (urlQueryEscape $labels) }}
              */
             template?: string;
+        };
+        /**
+         * @description VerificationState is an environment's record of the changes it was healthy on when it stopped running them.
+         *
+         *     It is a cache over git rather than an accumulated log: each promotion records the outgoing change's health in its merge commit on the active branch, so all of this can be rebuilt by walking that branch, and losing the status costs nothing permanent. It deliberately excludes the change the environment is running right now — that one has no merge commit yet and is judged on live health instead, wherever the record is consumed.
+         */
+        VerificationState: {
+            /** @description DryShas are the dry commits this environment was healthy on at the point it promoted past them, newest first and capped at MaxLastHealthyDryShas. */
+            dryShas?: components["schemas"]["HealthyDryShas"][];
+            /** @description ObservedActiveSha is the active branch commit the git-derived entries were built from. While the active branch still points there the walk is skipped entirely; when it has moved, only the commits added since are examined. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats. */
+            observedActiveSha?: string;
         };
         /** @description WebRequestCommitStatus is the Schema for the webrequestcommitstatuses API */
         WebRequestCommitStatus: {

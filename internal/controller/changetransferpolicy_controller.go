@@ -631,7 +631,7 @@ const maxVerificationWalk = 200
 //
 // This is only half of what an environment has vouched for. It covers every change the environment
 // has moved past; the change it is running right now has no merge commit yet, and is composed in
-// from live health where the record is read (see verifiedDryShas in the PromotionStrategy
+// from live health where the record is read (see environmentVerificationStatus in the PromotionStrategy
 // controller). That live half is what stops a later environment from only ever seeing changes that
 // are already one promotion stale.
 //

@@ -90,18 +90,19 @@ preceding one.
 ### Where the record lives
 
 The record is kept on each environment's `ChangeTransferPolicy` at `status.verification`, and surfaced
-on the `PromotionStrategy` at `status.environments[].lastHealthyDryShas`. It holds the 50 most recent
-verifications per environment, which bounds how far behind a downstream environment can fall and still
-catch up.
+on the `PromotionStrategy` at `status.environments[].verification`. The `dryShas` list holds the 50
+most recent branch-derived verifications per environment; `current` names the change the environment
+is running right now when it is healthy on it. Together they bound how far behind a downstream
+environment can fall and still catch up.
 
 It has two halves, which say deliberately different things:
 
-- **Changes the environment has moved past** come from git. Every promotion records the outgoing
+- **Changes the environment has moved past** (`verification.dryShas`) come from git. Every promotion records the outgoing
   change's health in its merge commit on the active branch — the controller refreshes the pull request
   body and merges it in the same reconcile, so those statuses describe health *at the moment the
   environment stopped running the change*. Nothing is accumulated: the record is rebuilt by walking
   the branch whenever the status is lost, so a deleted and recreated resource costs nothing permanent.
-- **The change running right now** has no merge commit yet, so it is judged on live health and
+- **The change running right now** (`verification.current`) has no merge commit yet, so it is judged on live health and
   composed in when the record is read. This half is what closes the lag: its evidence only reaches git
   at the next promotion, and without it a later environment would only ever be offered changes that
   are already one promotion stale — which under churn is the whole problem.

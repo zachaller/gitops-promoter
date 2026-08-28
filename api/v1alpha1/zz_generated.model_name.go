@@ -216,6 +216,11 @@ func (in EnvironmentStatus) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in EnvironmentVerificationStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.EnvironmentVerificationStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in ExponentialFailure) OpenAPIModelName() string {
 	return "io.argoproj.promoter.v1alpha1.ExponentialFailure"
 }
