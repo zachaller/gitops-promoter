@@ -8,8 +8,6 @@ on:
       - 'renovate.json5'
       - '.github/workflows/renovate-config-validate.yaml'
   pull_request:
-    branches:
-      - main
     paths:
       - 'renovate.json5'
       - '.github/workflows/renovate-config-validate.yaml'
