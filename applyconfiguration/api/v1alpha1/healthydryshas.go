@@ -24,12 +24,12 @@ import (
 // HealthyDryShasApplyConfiguration represents a declarative configuration of the HealthyDryShas type for use
 // with apply.
 //
-// HealthyDryShas is a list of dry commits that were observed to be healthy in the environment.
+// HealthyDryShas records a dry commit that an environment verified.
 type HealthyDryShasApplyConfiguration struct {
 	// Sha is the commit SHA of the dry commit that was observed to be healthy.
 	// Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
 	Sha *string `json:"sha,omitempty"`
-	// Time is the time when the proposed commit for the given dry SHA was merged into the active branch.
+	// Time is the time at which the environment was first observed to be healthy on this dry SHA.
 	Time *v1.Time `json:"time,omitempty"`
 }
 

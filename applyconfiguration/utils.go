@@ -97,6 +97,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.EnvironmentApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("EnvironmentStatus"):
 		return &apiv1alpha1.EnvironmentStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("EnvironmentVerificationStatus"):
+		return &apiv1alpha1.EnvironmentVerificationStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ExponentialFailure"):
 		return &apiv1alpha1.ExponentialFailureApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Fake"):
@@ -157,6 +159,10 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.OutputSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PollingModeSpec"):
 		return &apiv1alpha1.PollingModeSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("PromotionCandidates"):
+		return &apiv1alpha1.PromotionCandidatesApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("PromotionCandidateState"):
+		return &apiv1alpha1.PromotionCandidateStateApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PromotionStrategy"):
 		return &apiv1alpha1.PromotionStrategyApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PromotionStrategyConfiguration"):
@@ -233,6 +239,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.TriggerModeSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("URLConfig"):
 		return &apiv1alpha1.URLConfigApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("VerificationState"):
+		return &apiv1alpha1.VerificationStateApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("WebRequestCommitStatus"):
 		return &apiv1alpha1.WebRequestCommitStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("WebRequestCommitStatusConfiguration"):

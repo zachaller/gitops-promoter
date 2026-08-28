@@ -182,7 +182,7 @@ func (r *PromotionStrategyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	ctps := make([]*promoterv1alpha1.ChangeTransferPolicy, len(ps.Spec.Environments))
 	for i, environment := range ps.Spec.Environments {
 		var ctp *promoterv1alpha1.ChangeTransferPolicy
-		ctp, err = r.upsertChangeTransferPolicy(ctx, &ps, environment)
+		ctp, err = r.upsertChangeTransferPolicy(ctx, &ps, environment, ctps[:i])
 		if err != nil {
 			logger.Error(err, "failed to upsert ChangeTransferPolicy")
 			return ctrl.Result{}, fmt.Errorf("failed to create ChangeTransferPolicy for branch %q: %w", environment.Branch, err)
@@ -260,7 +260,7 @@ func (r *PromotionStrategyReconciler) SetupWithManager(ctx context.Context, mgr 
 	return nil
 }
 
-func (r *PromotionStrategyReconciler) upsertChangeTransferPolicy(ctx context.Context, ps *promoterv1alpha1.PromotionStrategy, environment promoterv1alpha1.Environment) (*promoterv1alpha1.ChangeTransferPolicy, error) {
+func (r *PromotionStrategyReconciler) upsertChangeTransferPolicy(ctx context.Context, ps *promoterv1alpha1.PromotionStrategy, environment promoterv1alpha1.Environment, precedingCTPs []*promoterv1alpha1.ChangeTransferPolicy) (*promoterv1alpha1.ChangeTransferPolicy, error) {
 	logger := log.FromContext(ctx)
 
 	ctpName := utils.KubeSafeUniqueName(utils.GetChangeTransferPolicyName(ps.Name, environment.Branch))
@@ -322,6 +322,27 @@ func (r *PromotionStrategyReconciler) upsertChangeTransferPolicy(ctx context.Con
 		WithActiveCommitStatuses(activeCommitStatuses...).
 		WithProposedCommitStatuses(proposedCommitStatuses...)
 
+	// Candidate selection needs a branch the controller owns, because the proposed branch belongs to
+	// the hydrator and always carries the newest change. Only set it for the policies that select, so
+	// that switching an environment back to Latest drops the field and the branch falls out of use.
+	promotionPolicy := ps.Spec.GetPromotionPolicy(environment)
+	ctpSpec = ctpSpec.WithPromotionPolicy(promotionPolicy)
+	if promotionPolicy != promoterv1alpha1.PromotionPolicyLatest {
+		promotionBranch := fmt.Sprintf("%s-%s", environment.Branch, "promote")
+		if activePath != "" {
+			promotionBranch = path.Join(promotionBranch, activePath)
+		}
+		ctpSpec = ctpSpec.WithPromotionBranch(promotionBranch)
+
+		// The first environment has nothing upstream to wait for, so it stays unconstrained and its
+		// policy only decides the order it works through the candidate stream. Later environments may
+		// promote only what every environment before them has verified.
+		if environmentIndex > 0 {
+			verified := verifiedDryShasThrough(precedingEnvironmentStatuses(ps, precedingCTPs, environmentIndex))
+			ctpSpec = ctpSpec.WithCandidates(promotionCandidatesApplyConfiguration(verified))
+		}
+	}
+
 	if activePath != "" {
 		ctpSpec = ctpSpec.WithActivePath(activePath)
 	}
@@ -362,10 +383,66 @@ func (r *PromotionStrategyReconciler) upsertChangeTransferPolicy(ctx context.Con
 	if err := r.Patch(ctx, ctp, utils.ApplyPatch{ApplyConfig: ctpApply}, client.FieldOwner(constants.PromotionStrategyControllerFieldOwner), client.ForceOwnership); err != nil {
 		return nil, fmt.Errorf("failed to apply ChangeTransferPolicy %q: %w", ctpName, err)
 	}
+	// Patch may not populate status on the returned object; load the full resource so later
+	// environments in this reconcile pass can compose candidates from preceding verification.
+	if err := r.Get(ctx, client.ObjectKeyFromObject(ctp), ctp); err != nil {
+		return nil, fmt.Errorf("failed to get ChangeTransferPolicy %q after apply: %w", ctpName, err)
+	}
 
 	logger.V(4).Info("Applied ChangeTransferPolicy")
 
 	return ctp, nil
+}
+
+// precedingEnvironmentStatuses returns the statuses of the environments that come before
+// environmentIndex in the promotion sequence, in sequence order.
+//
+// Statuses are matched by branch rather than taken by index: this runs before calculateStatus has
+// re-aligned status with spec, so on the reconcile after an environment is added, removed, or
+// reordered the two lists can still disagree. An environment with no status yet is skipped, which
+// leaves it contributing no verified changes and holds promotions until it reports.
+//
+// precedingCTPs holds the ChangeTransferPolicies upserted earlier in this reconcile pass, in spec
+// order. When present, verification is composed from CTP status because PS status.verification is
+// only written in calculateStatus, which runs after all CTP upserts.
+func precedingEnvironmentStatuses(ps *promoterv1alpha1.PromotionStrategy, precedingCTPs []*promoterv1alpha1.ChangeTransferPolicy, environmentIndex int) []promoterv1alpha1.EnvironmentStatus {
+	if environmentIndex <= 0 {
+		return nil
+	}
+
+	preceding := make([]promoterv1alpha1.EnvironmentStatus, 0, environmentIndex)
+	for i, environment := range ps.Spec.Environments[:environmentIndex] {
+		// An environment that has no status yet contributes an empty ledger rather than being left
+		// out, so it verifies nothing and holds promotion until it reports. Dropping it instead would
+		// let a change through on the strength of the environments around it.
+		envStatus := promoterv1alpha1.EnvironmentStatus{Branch: environment.Branch}
+		for _, candidate := range ps.Status.Environments {
+			if candidate.Branch == environment.Branch {
+				envStatus = candidate
+				break
+			}
+		}
+		if i < len(precedingCTPs) && precedingCTPs[i] != nil {
+			if verification := environmentVerificationStatus(precedingCTPs[i]); verification != nil {
+				envStatus.Verification = verification
+			}
+		}
+		preceding = append(preceding, envStatus)
+	}
+	return preceding
+}
+
+// promotionCandidatesApplyConfiguration builds a non-nil PromotionCandidates apply configuration,
+// capping dryShas at MaxLastHealthyDryShas. An empty dryShas list means no change is currently
+// eligible; omitting candidates entirely means unconstrained (first environment only).
+func promotionCandidatesApplyConfiguration(verified []string) *acv1alpha1.PromotionCandidatesApplyConfiguration {
+	if verified == nil {
+		verified = []string{}
+	}
+	if len(verified) > promoterv1alpha1.MaxLastHealthyDryShas {
+		verified = verified[:promoterv1alpha1.MaxLastHealthyDryShas]
+	}
+	return acv1alpha1.PromotionCandidates().WithDryShas(verified...)
 }
 
 // cleanupOrphanedChangeTransferPolicies deletes ChangeTransferPolicies that are owned by this PromotionStrategy
@@ -451,12 +528,9 @@ func (r *PromotionStrategyReconciler) calculateStatus(ps *promoterv1alpha1.Promo
 		ps.Status.Environments[i].Proposed = ctp.Status.Proposed
 		ps.Status.Environments[i].PullRequest = ctp.Status.PullRequest
 		ps.Status.Environments[i].History = ctp.Status.History
+		ps.Status.Environments[i].Candidate = ctp.Status.Candidate
 
-		// TODO: actually implement keeping track of healthy dry sha's
-		// We only want to keep the last 10 healthy dry sha's
-		if i < len(ps.Status.Environments) && len(ps.Status.Environments[i].LastHealthyDryShas) > 10 {
-			ps.Status.Environments[i].LastHealthyDryShas = ps.Status.Environments[i].LastHealthyDryShas[:10]
-		}
+		ps.Status.Environments[i].Verification = environmentVerificationStatus(ctp)
 	}
 
 	utils.InheritNotReadyConditionFromObjects(ps, promoterConditions.ChangeTransferPolicyNotReady, ctps...)
@@ -499,8 +573,16 @@ func (r *PromotionStrategyReconciler) enqueueOutOfSyncCTPs(ctx context.Context, 
 		r.startCleanupTimer()
 	}
 
-	// Get the effective proposed dry SHA for each CTP (Note.DrySha if set, else Proposed.Dry.Sha).
+	// Get the effective proposed dry SHA for each CTP (Note.DrySha if set, else Dry.Sha).
+	//
+	// This reads the hydrator's branch, which is Candidate when the environment's policy selects
+	// candidates and Proposed otherwise. Notes are pushed onto the hydrator's branch, so that is where
+	// staleness shows up; Proposed under a selecting policy describes the candidate the controller
+	// chose, which legitimately differs between environments and would read as permanent disagreement.
 	getEffectiveProposedDrySha := func(ctp *promoterv1alpha1.ChangeTransferPolicy) string {
+		if ctp.Status.Candidate != nil {
+			return ctp.Status.Candidate.EffectiveDrySha()
+		}
 		if ctp.Status.Proposed.Note != nil && ctp.Status.Proposed.Note.DrySha != "" {
 			return ctp.Status.Proposed.Note.DrySha
 		}
@@ -519,6 +601,9 @@ func (r *PromotionStrategyReconciler) enqueueOutOfSyncCTPs(ctx context.Context, 
 			continue
 		}
 		commitTime := ctp.Status.Proposed.Hydrated.CommitTime
+		if ctp.Status.Candidate != nil {
+			commitTime = ctp.Status.Candidate.CommitTime
+		}
 		if newestEffectiveProposedDrySha == "" || commitTime.After(newestTime.Time) {
 			newestEffectiveProposedDrySha = ctpEffectiveProposedDrySha
 			newestTime = commitTime
@@ -898,6 +983,74 @@ func (r *PromotionStrategyReconciler) updatePreviousEnvironmentCommitStatus(ctx 
 	return nil
 }
 
+// environmentVerificationStatus mirrors an environment's ChangeTransferPolicy status.verification and
+// composes Current from live active health. See EnvironmentVerificationStatus for the two halves.
+func environmentVerificationStatus(ctp *promoterv1alpha1.ChangeTransferPolicy) *promoterv1alpha1.EnvironmentVerificationStatus {
+	status := &promoterv1alpha1.EnvironmentVerificationStatus{}
+	if verification := ctp.Status.Verification; verification != nil {
+		if len(verification.DryShas) > 0 {
+			status.DryShas = append([]promoterv1alpha1.HealthyDryShas(nil), verification.DryShas...)
+		}
+		status.ObservedActiveSha = verification.ObservedActiveSha
+	}
+
+	drySha := ctp.Status.Active.Dry.Sha
+	if drySha != "" && utils.AreCommitStatusesPassing(ctp.Status.Active.CommitStatuses) {
+		found := false
+		for _, entry := range status.DryShas {
+			if entry.Sha == drySha {
+				found = true
+				break
+			}
+		}
+		if !found {
+			status.Current = &promoterv1alpha1.HealthyDryShas{
+				Sha:  drySha,
+				Time: ctp.Status.Active.Hydrated.CommitTime,
+			}
+		}
+	}
+
+	if len(status.DryShas) == 0 && status.ObservedActiveSha == "" && status.Current == nil {
+		return nil
+	}
+	return status
+}
+
+// hasVerifiedDrySha reports whether the environment has ever been observed healthy on the given dry SHA.
+func hasVerifiedDrySha(envStatus promoterv1alpha1.EnvironmentStatus, drySha string) bool {
+	return envStatus.Verification.HasVerifiedDrySha(drySha)
+}
+
+// verifiedDryShasThrough returns the dry SHAs that every environment in envStatuses has verified,
+// ordered newest first by the last environment's ledger. It is the set of changes that have made it
+// all the way through the preceding environments, and therefore the set a following environment may
+// promote. A nil envStatuses (no preceding environments) yields nil, meaning unconstrained.
+func verifiedDryShasThrough(envStatuses []promoterv1alpha1.EnvironmentStatus) []string {
+	if len(envStatuses) == 0 {
+		return nil
+	}
+
+	// Order by the immediately preceding environment: it is the last to verify a change, so its
+	// ordering is the one that reflects how far the change has actually travelled.
+	last := envStatuses[len(envStatuses)-1]
+	effective := last.Verification.EffectiveVerifiedDryShas()
+	verified := make([]string, 0, len(effective))
+	for _, healthy := range effective {
+		verifiedByAll := true
+		for _, envStatus := range envStatuses[:len(envStatuses)-1] {
+			if !hasVerifiedDrySha(envStatus, healthy.Sha) {
+				verifiedByAll = false
+				break
+			}
+		}
+		if verifiedByAll {
+			verified = append(verified, healthy.Sha)
+		}
+	}
+	return verified
+}
+
 // getNoteDrySha safely returns the DrySha from a HydratorMetadata pointer, or empty string if nil.
 func getNoteDrySha(note *promoterv1alpha1.HydratorMetadata) string {
 	if note == nil {
@@ -929,6 +1082,17 @@ func isPreviousEnvironmentPending(precedingEnvStatuses []promoterv1alpha1.Enviro
 
 	// Check the last (most recent) preceding environment
 	envStatus := precedingEnvStatuses[len(precedingEnvStatuses)-1]
+
+	// The environment may have run the target change with all its gates passing and since moved on to
+	// a newer one. That past verification is as good as a current one for this particular change, and
+	// accepting it is what keeps a chain moving when the dry branch churns faster than an environment
+	// can verify a change. Return without recursing, matching the merged-and-passing case below: an
+	// environment only ever verifies a change it was allowed to promote, so its verification already
+	// implies the environments before it approved the same change.
+	if hasVerifiedDrySha(envStatus, targetDrySha) {
+		return false, ""
+	}
+
 	envHydratedForDrySha := getEffectiveHydratedDrySha(envStatus)
 	envProposedDrySha := envStatus.Proposed.Dry.Sha
 

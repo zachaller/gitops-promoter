@@ -24,6 +24,35 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// PromotionPolicy selects which hydrated change an environment promotes when several are available.
+//
+// The hydrator pushes a hydrated commit to every environment's proposed branch for each dry commit,
+// so the proposed branch is a stream of promotion candidates. This policy decides which candidate in
+// that stream an environment actually promotes.
+// +kubebuilder:validation:Enum:=Latest;LatestVerified;Sequential
+type PromotionPolicy string
+
+const (
+	// PromotionPolicyLatest always promotes the newest candidate on the proposed branch. Because the
+	// newest candidate is also the one that preceding environments have had the least time to verify,
+	// a repository with high dry-commit churn can leave later environments permanently blocked: every
+	// time the preceding environment finishes verifying a change, a newer candidate has already
+	// replaced it. This is the default and matches the behavior of releases before the policy existed.
+	PromotionPolicyLatest PromotionPolicy = "Latest"
+
+	// PromotionPolicyLatestVerified promotes the newest candidate whose dry commit every preceding
+	// environment has verified, skipping over any newer but unverified candidates. Under churn this
+	// keeps later environments moving: they advance to the high-water mark of verified change instead
+	// of chasing the branch tip.
+	PromotionPolicyLatestVerified PromotionPolicy = "LatestVerified"
+
+	// PromotionPolicySequential promotes the oldest candidate that has not been promoted yet, provided
+	// every preceding environment has verified it. Unlike LatestVerified it never skips a candidate, so
+	// every dry commit is promoted through the environment in order. Use it when each change must be
+	// observed individually; expect the environment to fall further behind under churn.
+	PromotionPolicySequential PromotionPolicy = "Sequential"
+)
+
 // PromotionStrategySpec defines the desired state of PromotionStrategy
 type PromotionStrategySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -71,6 +100,11 @@ type PromotionStrategySpec struct {
 	// PullRequest configures SCM pull request behavior for all environments in this strategy.
 	// +kubebuilder:validation:Optional
 	PullRequest *PullRequestPolicySpec `json:"pullRequest,omitempty"`
+
+	// PromotionPolicy is the default candidate selection policy for all environments in this strategy.
+	// Individual environments can override it via their own promotionPolicy field. Defaults to Latest.
+	// +kubebuilder:validation:Optional
+	PromotionPolicy PromotionPolicy `json:"promotionPolicy,omitempty"`
 }
 
 // Environment defines a single environment in the promotion sequence.
@@ -114,6 +148,23 @@ type Environment struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1
 	ActivePath string `json:"activePath,omitempty"`
+
+	// PromotionPolicy optionally overrides the strategy-level promotionPolicy for this environment.
+	// When empty, spec.promotionPolicy applies, which itself defaults to Latest.
+	// +kubebuilder:validation:Optional
+	PromotionPolicy PromotionPolicy `json:"promotionPolicy,omitempty"`
+}
+
+// GetPromotionPolicy resolves the effective promotion policy for this environment: the environment's
+// own promotionPolicy if set, otherwise the strategy-level default, otherwise Latest.
+func (ps *PromotionStrategySpec) GetPromotionPolicy(e Environment) PromotionPolicy {
+	if e.PromotionPolicy != "" {
+		return e.PromotionPolicy
+	}
+	if ps.PromotionPolicy != "" {
+		return ps.PromotionPolicy
+	}
+	return PromotionPolicyLatest
 }
 
 // GetAutoMerge returns the value of the AutoMerge field, defaulting to true if the field is nil.
@@ -218,9 +269,18 @@ type EnvironmentStatus struct {
 	// PullRequest is the state of the pull request that was created for this environment.
 	PullRequest *PullRequestCommonStatus `json:"pullRequest,omitempty"`
 
-	// LastHealthyDryShas is a list of dry commits that were observed to be healthy in the environment.
+	// Candidate is the tip of the hydrator's proposed branch for this environment: the newest change
+	// that exists, whether or not it is eligible for promotion. It is only populated when the
+	// environment's promotion policy selects candidates, because otherwise it is identical to Proposed.
+	// Comparing it with Proposed shows how far behind the newest change this environment is running.
 	// +kubebuilder:validation:Optional
-	LastHealthyDryShas []HealthyDryShas `json:"lastHealthyDryShas"`
+	Candidate *PromotionCandidateState `json:"candidate,omitempty"`
+
+	// Verification mirrors the owning ChangeTransferPolicy status.verification and adds Current for
+	// the change the environment is running right now when it is healthy on it. Later environments
+	// consult the effective record — DryShas plus Current when present — when selecting candidates.
+	// +kubebuilder:validation:Optional
+	Verification *EnvironmentVerificationStatus `json:"verification,omitempty"`
 
 	// History defines the history of promoted changes done by the PromotionStrategy for each environment.
 	// You can think of it as a list of PRs merged by GitOps Promoter. It will not include changes that were
@@ -230,14 +290,78 @@ type EnvironmentStatus struct {
 	History []History `json:"history,omitempty"`
 }
 
-// HealthyDryShas is a list of dry commits that were observed to be healthy in the environment.
+// MaxLastHealthyDryShas is the number of verified dry commits retained per environment in
+// VerificationState.DryShas and EnvironmentVerificationStatus.DryShas. The list is a lookback window
+// for downstream environments: it has to be long enough that a change stays eligible for promotion
+// while slower downstream environments work through their queue, and short enough to keep the status
+// object small. Keep it in sync with the MaxItems validation on those fields.
+const MaxLastHealthyDryShas = 50
+
+// EnvironmentVerificationStatus mirrors an environment's ChangeTransferPolicy status.verification on
+// the PromotionStrategy and adds Current for the change the environment is running right now when it
+// is healthy on it. Current is composed at reconcile time rather than stored on the CTP because it
+// is a claim about the present.
+type EnvironmentVerificationStatus struct {
+	// DryShas are copied from the owning ChangeTransferPolicy status.verification.dryShas: changes
+	// this environment was healthy on when it promoted past them, newest first.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxItems=50
+	DryShas []HealthyDryShas `json:"dryShas,omitempty"`
+
+	// ObservedActiveSha is copied from the owning ChangeTransferPolicy status.verification.observedActiveSha.
+	// Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^([a-f0-9]{40}|[a-f0-9]{64})?$`
+	ObservedActiveSha string `json:"observedActiveSha,omitempty"`
+
+	// Current is the change the environment is running right now when every active commit status is
+	// passing and that change is not already in DryShas. Omitted when the environment is not healthy
+	// on its active change or when the active change is already recorded in DryShas.
+	// +kubebuilder:validation:Optional
+	Current *HealthyDryShas `json:"current,omitempty"`
+}
+
+// HasVerifiedDrySha reports whether the environment has ever been observed healthy on the given dry SHA.
+func (v *EnvironmentVerificationStatus) HasVerifiedDrySha(drySha string) bool {
+	if drySha == "" || v == nil {
+		return false
+	}
+	if v.Current != nil && v.Current.Sha == drySha {
+		return true
+	}
+	for _, healthy := range v.DryShas {
+		if healthy.Sha == drySha {
+			return true
+		}
+	}
+	return false
+}
+
+// EffectiveVerifiedDryShas returns the dry commits this environment vouches for: DryShas with Current
+// prepended when it names a change not already recorded. Entries are newest first.
+func (v *EnvironmentVerificationStatus) EffectiveVerifiedDryShas() []HealthyDryShas {
+	if v == nil {
+		return nil
+	}
+	if v.Current == nil {
+		return v.DryShas
+	}
+	for _, entry := range v.DryShas {
+		if entry.Sha == v.Current.Sha {
+			return v.DryShas
+		}
+	}
+	return append([]HealthyDryShas{*v.Current}, v.DryShas...)
+}
+
+// HealthyDryShas records a dry commit that an environment verified.
 type HealthyDryShas struct {
 	// Sha is the commit SHA of the dry commit that was observed to be healthy.
 	// Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
 	// +kubebuilder:validation:MaxLength=64
 	// +kubebuilder:validation:Pattern=`^([a-f0-9]{40}|[a-f0-9]{64})$`
 	Sha string `json:"sha"`
-	// Time is the time when the proposed commit for the given dry SHA was merged into the active branch.
+	// Time is the time at which the environment was first observed to be healthy on this dry SHA.
 	Time metav1.Time `json:"time"`
 }
 

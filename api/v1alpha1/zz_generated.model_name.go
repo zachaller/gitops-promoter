@@ -216,6 +216,11 @@ func (in EnvironmentStatus) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in EnvironmentVerificationStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.EnvironmentVerificationStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in ExponentialFailure) OpenAPIModelName() string {
 	return "io.argoproj.promoter.v1alpha1.ExponentialFailure"
 }
@@ -373,6 +378,16 @@ func (in OutputSpec) OpenAPIModelName() string {
 // OpenAPIModelName returns the OpenAPI model name for this type.
 func (in PollingModeSpec) OpenAPIModelName() string {
 	return "io.argoproj.promoter.v1alpha1.PollingModeSpec"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in PromotionCandidateState) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.PromotionCandidateState"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in PromotionCandidates) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.PromotionCandidates"
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
@@ -603,6 +618,11 @@ func (in TriggerModeSpec) OpenAPIModelName() string {
 // OpenAPIModelName returns the OpenAPI model name for this type.
 func (in URLConfig) OpenAPIModelName() string {
 	return "io.argoproj.promoter.v1alpha1.URLConfig"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in VerificationState) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.VerificationState"
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.

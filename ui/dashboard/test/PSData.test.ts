@@ -37,7 +37,7 @@ const environmentWithReferenceCommit: Environment = {
     hydrated: {},
     commitStatuses: [],
   },
-  lastHealthyDryShas: [],
+  verification: {},
 };
 
 // Active env carrying a merged PR (state === 'merged') on the live history entry.
@@ -66,7 +66,7 @@ const environmentWithMergedPr: Environment = {
       active: { dry: {}, hydrated: {}, commitStatuses: [] },
     },
   ],
-  lastHealthyDryShas: [],
+  verification: {},
 };
 
 // Active env carrying an open PR (state === 'open') on the live history entry.
@@ -94,7 +94,7 @@ const environmentWithOpenPr: Environment = {
       active: { dry: {}, hydrated: {}, commitStatuses: [] },
     },
   ],
-  lastHealthyDryShas: [],
+  verification: {},
 };
 
 // Active env carrying a closed-but-unmerged PR (state === 'closed') on the live history entry.
@@ -122,7 +122,7 @@ const environmentWithClosedPr: Environment = {
       active: { dry: {}, hydrated: {}, commitStatuses: [] },
     },
   ],
-  lastHealthyDryShas: [],
+  verification: {},
 };
 
 // Externally merged/closed PR: state is empty ("") but a merge time is present.
@@ -148,7 +148,7 @@ const environmentWithExternallyMergedPr: Environment = {
     prCreationTime: '2026-05-22T14:00:00Z',
     prMergeTime: '2026-05-22T14:52:00Z',
   },
-  lastHealthyDryShas: [],
+  verification: {},
 };
 
 // Externally closed (not merged) PR: state is empty ("") and no merge time is present.
@@ -173,7 +173,7 @@ const environmentWithExternallyClosedPr: Environment = {
     externallyMergedOrClosed: true,
     prCreationTime: '2026-05-22T14:00:00Z',
   },
-  lastHealthyDryShas: [],
+  verification: {},
 };
 
 describe('enrichFromEnvironments', () => {

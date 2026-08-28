@@ -74,6 +74,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		apiv1alpha1.CronWindow{}.OpenAPIModelName():                                           schema_argoproj_labs_gitops_promoter_api_v1alpha1_CronWindow(ref),
 		apiv1alpha1.Environment{}.OpenAPIModelName():                                          schema_argoproj_labs_gitops_promoter_api_v1alpha1_Environment(ref),
 		apiv1alpha1.EnvironmentStatus{}.OpenAPIModelName():                                    schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentStatus(ref),
+		apiv1alpha1.EnvironmentVerificationStatus{}.OpenAPIModelName():                        schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentVerificationStatus(ref),
 		apiv1alpha1.ExponentialFailure{}.OpenAPIModelName():                                   schema_argoproj_labs_gitops_promoter_api_v1alpha1_ExponentialFailure(ref),
 		apiv1alpha1.Fake{}.OpenAPIModelName():                                                 schema_argoproj_labs_gitops_promoter_api_v1alpha1_Fake(ref),
 		apiv1alpha1.FakeRepo{}.OpenAPIModelName():                                             schema_argoproj_labs_gitops_promoter_api_v1alpha1_FakeRepo(ref),
@@ -106,6 +107,8 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		apiv1alpha1.ObjectReference{}.OpenAPIModelName():                                      schema_argoproj_labs_gitops_promoter_api_v1alpha1_ObjectReference(ref),
 		apiv1alpha1.OutputSpec{}.OpenAPIModelName():                                           schema_argoproj_labs_gitops_promoter_api_v1alpha1_OutputSpec(ref),
 		apiv1alpha1.PollingModeSpec{}.OpenAPIModelName():                                      schema_argoproj_labs_gitops_promoter_api_v1alpha1_PollingModeSpec(ref),
+		apiv1alpha1.PromotionCandidateState{}.OpenAPIModelName():                              schema_argoproj_labs_gitops_promoter_api_v1alpha1_PromotionCandidateState(ref),
+		apiv1alpha1.PromotionCandidates{}.OpenAPIModelName():                                  schema_argoproj_labs_gitops_promoter_api_v1alpha1_PromotionCandidates(ref),
 		apiv1alpha1.PromotionStrategy{}.OpenAPIModelName():                                    schema_argoproj_labs_gitops_promoter_api_v1alpha1_PromotionStrategy(ref),
 		apiv1alpha1.PromotionStrategyConfiguration{}.OpenAPIModelName():                       schema_argoproj_labs_gitops_promoter_api_v1alpha1_PromotionStrategyConfiguration(ref),
 		apiv1alpha1.PromotionStrategyList{}.OpenAPIModelName():                                schema_argoproj_labs_gitops_promoter_api_v1alpha1_PromotionStrategyList(ref),
@@ -152,6 +155,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		apiv1alpha1.TimedCommitStatusStatus{}.OpenAPIModelName():                              schema_argoproj_labs_gitops_promoter_api_v1alpha1_TimedCommitStatusStatus(ref),
 		apiv1alpha1.TriggerModeSpec{}.OpenAPIModelName():                                      schema_argoproj_labs_gitops_promoter_api_v1alpha1_TriggerModeSpec(ref),
 		apiv1alpha1.URLConfig{}.OpenAPIModelName():                                            schema_argoproj_labs_gitops_promoter_api_v1alpha1_URLConfig(ref),
+		apiv1alpha1.VerificationState{}.OpenAPIModelName():                                    schema_argoproj_labs_gitops_promoter_api_v1alpha1_VerificationState(ref),
 		apiv1alpha1.WebRequestCommitStatus{}.OpenAPIModelName():                               schema_argoproj_labs_gitops_promoter_api_v1alpha1_WebRequestCommitStatus(ref),
 		apiv1alpha1.WebRequestCommitStatusConfiguration{}.OpenAPIModelName():                  schema_argoproj_labs_gitops_promoter_api_v1alpha1_WebRequestCommitStatusConfiguration(ref),
 		apiv1alpha1.WebRequestCommitStatusEnvironmentStatus{}.OpenAPIModelName():              schema_argoproj_labs_gitops_promoter_api_v1alpha1_WebRequestCommitStatusEnvironmentStatus(ref),
@@ -1220,12 +1224,32 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ChangeTransferPolicySpec(
 							Ref:         ref(apiv1alpha1.PullRequestPolicySpec{}.OpenAPIModelName()),
 						},
 					},
+					"promotionPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PromotionPolicy selects which candidate on the proposed branch this policy promotes. Copied from the owning PromotionStrategy by the PromotionStrategy controller. Empty means Latest.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"promotionBranch": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PromotionBranch is a promoter-owned branch that carries the candidate this policy has selected for promotion. It is required by every policy other than Latest, which promotes the proposed branch tip directly and needs no separate branch.\n\nThe proposed branch belongs to the hydrator and always tracks the newest dry commit, so it cannot be used to promote anything but the newest candidate. Instead the controller picks a commit out of the proposed branch's history and force-pushes it here, and the promotion pull request is opened from this branch. Nothing but this controller may write to it.\n\nMust not start with '-', contain ':', or contain '..'.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"candidates": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Candidates constrains which hydrated changes this policy may promote. It is computed by the PromotionStrategy controller from the verification ledgers of every preceding environment. A nil value means unconstrained, which is the case for the first environment in a sequence because it has no preceding environment to wait for.",
+							Ref:         ref(apiv1alpha1.PromotionCandidates{}.OpenAPIModelName()),
+						},
+					},
 				},
 				Required: []string{"gitRepositoryRef", "proposedBranch", "activeBranch", "activeCommitStatuses", "proposedCommitStatuses"},
 			},
 		},
 		Dependencies: []string{
-			apiv1alpha1.CommitStatusSelector{}.OpenAPIModelName(), apiv1alpha1.ObjectReference{}.OpenAPIModelName(), apiv1alpha1.PullRequestPolicySpec{}.OpenAPIModelName()},
+			apiv1alpha1.CommitStatusSelector{}.OpenAPIModelName(), apiv1alpha1.ObjectReference{}.OpenAPIModelName(), apiv1alpha1.PromotionCandidates{}.OpenAPIModelName(), apiv1alpha1.PullRequestPolicySpec{}.OpenAPIModelName()},
 	}
 }
 
@@ -1261,6 +1285,12 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ChangeTransferPolicyStatu
 						SchemaProps: spec.SchemaProps{
 							Description: "PullRequest is the state of the pull request that was created for this ChangeTransferPolicy.",
 							Ref:         ref(apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName()),
+						},
+					},
+					"candidate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Candidate is the tip of the hydrator's proposed branch: the newest change that exists for this environment, whether or not it is eligible for promotion. It is only populated when the policy selects candidates, because otherwise it is identical to Proposed. Comparing it with Proposed shows how far behind the newest change this environment's current promotion is.",
+							Ref:         ref(apiv1alpha1.PromotionCandidateState{}.OpenAPIModelName()),
 						},
 					},
 					"history": {
@@ -1306,11 +1336,17 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ChangeTransferPolicyStatu
 							Format:      "",
 						},
 					},
+					"verification": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Verification records the changes this environment has vouched for. The owning PromotionStrategy mirrors it into status.environments[].verification, where later environments consult it.",
+							Ref:         ref(apiv1alpha1.VerificationState{}.OpenAPIModelName()),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.History{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName(), metav1.Condition{}.OpenAPIModelName()},
+			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.History{}.OpenAPIModelName(), apiv1alpha1.PromotionCandidateState{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName(), apiv1alpha1.VerificationState{}.OpenAPIModelName(), metav1.Condition{}.OpenAPIModelName()},
 	}
 }
 
@@ -2265,6 +2301,13 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_Environment(ref common.Re
 							Format:      "",
 						},
 					},
+					"promotionPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PromotionPolicy optionally overrides the strategy-level promotionPolicy for this environment. When empty, spec.promotionPolicy applies, which itself defaults to Latest.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"branch"},
 			},
@@ -2309,17 +2352,16 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentStatus(ref com
 							Ref:         ref(apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName()),
 						},
 					},
-					"lastHealthyDryShas": {
+					"candidate": {
 						SchemaProps: spec.SchemaProps{
-							Description: "LastHealthyDryShas is a list of dry commits that were observed to be healthy in the environment.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref(apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()),
-									},
-								},
-							},
+							Description: "Candidate is the tip of the hydrator's proposed branch for this environment: the newest change that exists, whether or not it is eligible for promotion. It is only populated when the environment's promotion policy selects candidates, because otherwise it is identical to Proposed. Comparing it with Proposed shows how far behind the newest change this environment is running.",
+							Ref:         ref(apiv1alpha1.PromotionCandidateState{}.OpenAPIModelName()),
+						},
+					},
+					"verification": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Verification mirrors the owning ChangeTransferPolicy status.verification and adds Current for the change the environment is running right now when it is healthy on it. Later environments consult the effective record — DryShas plus Current when present — when selecting candidates.",
+							Ref:         ref(apiv1alpha1.EnvironmentVerificationStatus{}.OpenAPIModelName()),
 						},
 					},
 					"history": {
@@ -2336,11 +2378,52 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentStatus(ref com
 						},
 					},
 				},
-				Required: []string{"branch", "proposed", "active", "lastHealthyDryShas"},
+				Required: []string{"branch", "proposed", "active"},
 			},
 		},
 		Dependencies: []string{
-			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.HealthyDryShas{}.OpenAPIModelName(), apiv1alpha1.History{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName()},
+			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.EnvironmentVerificationStatus{}.OpenAPIModelName(), apiv1alpha1.History{}.OpenAPIModelName(), apiv1alpha1.PromotionCandidateState{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentVerificationStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "EnvironmentVerificationStatus mirrors an environment's ChangeTransferPolicy status.verification on the PromotionStrategy and adds Current for the change the environment is running right now when it is healthy on it. Current is composed at reconcile time rather than stored on the CTP because it is a claim about the present.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"dryShas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DryShas are copied from the owning ChangeTransferPolicy status.verification.dryShas: changes this environment was healthy on when it promoted past them, newest first.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+					"observedActiveSha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedActiveSha is copied from the owning ChangeTransferPolicy status.verification.observedActiveSha. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"current": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Current is the change the environment is running right now when every active commit status is passing and that change is not already in DryShas. Omitted when the environment is not healthy on its active change or when the active change is already recorded in DryShas.",
+							Ref:         ref(apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()},
 	}
 }
 
@@ -3316,7 +3399,7 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_HealthyDryShas(ref common
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "HealthyDryShas is a list of dry commits that were observed to be healthy in the environment.",
+				Description: "HealthyDryShas records a dry commit that an environment verified.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"sha": {
@@ -3329,7 +3412,7 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_HealthyDryShas(ref common
 					},
 					"time": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Time is the time when the proposed commit for the given dry SHA was merged into the active branch.",
+							Description: "Time is the time at which the environment was first observed to be healthy on this dry SHA.",
 							Ref:         ref(metav1.Time{}.OpenAPIModelName()),
 						},
 					},
@@ -3589,6 +3672,75 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_PollingModeSpec(ref commo
 	}
 }
 
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_PromotionCandidateState(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PromotionCandidateState summarizes the tip of the hydrator's proposed branch.\n\nIt is deliberately a handful of scalars rather than a CommitBranchState. Only these fields are meaningful for a change that has not been selected for promotion, and CommitBranchState carries enough validated URL fields that repeating it here would push the CRDs a long way toward the apiserver's per-schema CEL cost limit (see hack/celcost/report.md) for information nothing reads.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"drySha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DrySha is the dry commit SHA this candidate hydrates, read from hydrator.metadata. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"hydratedSha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HydratedSha is the commit SHA at the tip of the proposed branch. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"commitTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CommitTime is the time of the hydrated commit.",
+							Ref:         ref(metav1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"noteDrySha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NoteDrySha is the dry SHA from the git note on the hydrated commit, when there is one. It runs ahead of DrySha after a hydration that changed no manifests, because the hydrator then updates only the note and creates no new commit. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			metav1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_PromotionCandidates(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PromotionCandidates lists the changes a ChangeTransferPolicy is allowed to promote.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"dryShas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DryShas are the dry commit SHAs that every preceding environment has verified, newest first. Only candidates whose dry SHA appears in this list may be promoted. An empty list means no change is currently eligible, which is different from a nil PromotionCandidates (unconstrained).",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_argoproj_labs_gitops_promoter_api_v1alpha1_PromotionStrategy(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3793,6 +3945,13 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_PromotionStrategySpec(ref
 						SchemaProps: spec.SchemaProps{
 							Description: "PullRequest configures SCM pull request behavior for all environments in this strategy.",
 							Ref:         ref(apiv1alpha1.PullRequestPolicySpec{}.OpenAPIModelName()),
+						},
+					},
+					"promotionPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PromotionPolicy is the default candidate selection policy for all environments in this strategy. Individual environments can override it via their own promotionPolicy field. Defaults to Latest.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},
@@ -5652,6 +5811,41 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_URLConfig(ref common.Refe
 				},
 			},
 		},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_VerificationState(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "VerificationState is an environment's record of the changes it was healthy on when it stopped running them.\n\nIt is a cache over git rather than an accumulated log: each promotion records the outgoing change's health in its merge commit on the active branch, so all of this can be rebuilt by walking that branch, and losing the status costs nothing permanent. It deliberately excludes the change the environment is running right now — that one has no merge commit yet and is judged on live health instead, wherever the record is consumed.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"dryShas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DryShas are the dry commits this environment was healthy on at the point it promoted past them, newest first and capped at MaxLastHealthyDryShas.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+					"observedActiveSha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedActiveSha is the active branch commit the git-derived entries were built from. While the active branch still points there the walk is skipped entirely; when it has moved, only the commits added since are examined. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.HealthyDryShas{}.OpenAPIModelName()},
 	}
 }
 

@@ -9,8 +9,14 @@ spec:
     - key: argocd-app-health
   proposedCommitStatuses:
     - key: security-scan
+  # Which change each environment promotes when several are waiting. Latest (the default) promotes the
+  # newest one, which can starve later environments when the dry branch churns faster than an
+  # environment can verify a change. See docs/promotion-policies.md.
+  promotionPolicy: LatestVerified # Latest, LatestVerified, or Sequential
   environments:
     - branch: environment/dev
+      # Overrides spec.promotionPolicy for this environment only.
+      promotionPolicy: Latest
     - branch: environment/test
     - branch: environment/prod
       autoMerge: false
@@ -90,9 +96,27 @@ status:
           id: '848'
           prCreationTime: '2025-08-04T19:50:15Z'
           url: https://github.com/org/repo/pull/848
-    lastHealthyDryShas:
-    - sha: "abcdef1234567890abcdef1234567890abcdef12"
-      time: 2023-10-01T00:00:00Z
+    candidate:
+      # The tip of the hydrator's proposed branch: the newest change that exists for this environment,
+      # whether or not it is eligible for promotion. Only populated when the environment's
+      # promotionPolicy selects candidates; comparing it with proposed shows how far behind the newest
+      # change this environment is running.
+      drySha: "1111111111111111111111111111111111111111"
+      hydratedSha: "2222222222222222222222222222222222222222"
+      commitTime: 2023-10-01T00:00:00Z
+      # Runs ahead of drySha after a hydration that changed no manifests, since the hydrator then
+      # updates only the git note and creates no new commit.
+      noteDrySha: "1111111111111111111111111111111111111111"
+    verification:
+      # Mirrors the environment's ChangeTransferPolicy status.verification, with current composed from
+      # live active health when the environment is healthy on its active change.
+      dryShas:
+      # Changes this environment was healthy on when it promoted past them, copied from the CTP.
+      # Newest first, at most 50 entries.
+      - sha: "abcdef1234567890abcdef1234567890abcdef12"
+        time: 2023-10-01T00:00:00Z
+      observedActiveSha: "2222222222222222222222222222222222222222"
+      # current is omitted here; set when the environment is healthy on a change not yet in dryShas.
   - branch: environment/test
     # same fields as dev
   - branch: environment/prod

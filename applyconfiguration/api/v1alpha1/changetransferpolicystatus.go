@@ -37,6 +37,11 @@ type ChangeTransferPolicyStatusApplyConfiguration struct {
 	Active *CommitBranchStateApplyConfiguration `json:"active,omitempty"`
 	// PullRequest is the state of the pull request that was created for this ChangeTransferPolicy.
 	PullRequest *PullRequestCommonStatusApplyConfiguration `json:"pullRequest,omitempty"`
+	// Candidate is the tip of the hydrator's proposed branch: the newest change that exists for this
+	// environment, whether or not it is eligible for promotion. It is only populated when the policy
+	// selects candidates, because otherwise it is identical to Proposed. Comparing it with Proposed
+	// shows how far behind the newest change this environment's current promotion is.
+	Candidate *PromotionCandidateStateApplyConfiguration `json:"candidate,omitempty"`
 	// History defines the history of promoted changes done by the ChangeTransferPolicy. You can think of
 	// it as a list of PRs merged by GitOps Promoter. It will not include changes that were manually merged.
 	// The history length is hard-coded to be at most 5 entries. This may change in the future.
@@ -49,6 +54,9 @@ type ChangeTransferPolicyStatusApplyConfiguration struct {
 	// reconcile attempt by this install's controller, including when Ready=False; omitted
 	// when the resource has no instance-id label (default install).
 	InstanceID *string `json:"instanceID,omitempty"`
+	// Verification records the changes this environment has vouched for. The owning PromotionStrategy
+	// mirrors it into status.environments[].verification, where later environments consult it.
+	Verification *VerificationStateApplyConfiguration `json:"verification,omitempty"`
 }
 
 // ChangeTransferPolicyStatusApplyConfiguration constructs a declarative configuration of the ChangeTransferPolicyStatus type for use with
@@ -89,6 +97,14 @@ func (b *ChangeTransferPolicyStatusApplyConfiguration) WithPullRequest(value *Pu
 	return b
 }
 
+// WithCandidate sets the Candidate field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Candidate field is set to the value of the last call.
+func (b *ChangeTransferPolicyStatusApplyConfiguration) WithCandidate(value *PromotionCandidateStateApplyConfiguration) *ChangeTransferPolicyStatusApplyConfiguration {
+	b.Candidate = value
+	return b
+}
+
 // WithHistory adds the given value to the History field in the declarative configuration
 // and returns the receiver, so that objects can be build by chaining "With" function invocations.
 // If called multiple times, values provided by each call will be appended to the History field.
@@ -120,5 +136,13 @@ func (b *ChangeTransferPolicyStatusApplyConfiguration) WithConditions(values ...
 // If called multiple times, the InstanceID field is set to the value of the last call.
 func (b *ChangeTransferPolicyStatusApplyConfiguration) WithInstanceID(value string) *ChangeTransferPolicyStatusApplyConfiguration {
 	b.InstanceID = &value
+	return b
+}
+
+// WithVerification sets the Verification field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Verification field is set to the value of the last call.
+func (b *ChangeTransferPolicyStatusApplyConfiguration) WithVerification(value *VerificationStateApplyConfiguration) *ChangeTransferPolicyStatusApplyConfiguration {
+	b.Verification = value
 	return b
 }

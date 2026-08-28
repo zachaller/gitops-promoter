@@ -432,6 +432,23 @@ spec:
               autoMerge:
                 default: true
                 type: boolean
+              candidates:
+                description: |-
+                  Candidates constrains which hydrated changes this policy may promote. It is computed by the
+                  PromotionStrategy controller from the verification ledgers of every preceding environment.
+                  A nil value means unconstrained, which is the case for the first environment in a sequence
+                  because it has no preceding environment to wait for.
+                properties:
+                  dryShas:
+                    description: |-
+                      DryShas are the dry commit SHAs that every preceding environment has verified, newest first.
+                      Only candidates whose dry SHA appears in this list may be promoted. An empty list means no
+                      change is currently eligible, which is different from a nil PromotionCandidates (unconstrained).
+                    items:
+                      type: string
+                    maxItems: 50
+                    type: array
+                type: object
               gitRepositoryRef:
                 description: RepositoryReference what repository to open the PR on.
                 properties:
@@ -444,6 +461,37 @@ spec:
                 required:
                 - name
                 type: object
+              promotionBranch:
+                description: |-
+                  PromotionBranch is a promoter-owned branch that carries the candidate this policy has selected
+                  for promotion. It is required by every policy other than Latest, which promotes the proposed
+                  branch tip directly and needs no separate branch.
+
+                  The proposed branch belongs to the hydrator and always tracks the newest dry commit, so it cannot
+                  be used to promote anything but the newest candidate. Instead the controller picks a commit out
+                  of the proposed branch's history and force-pushes it here, and the promotion pull request is
+                  opened from this branch. Nothing but this controller may write to it.
+
+                  Must not start with '-', contain ':', or contain '..'.
+                maxLength: 100
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: branch must not start with '-'
+                  rule: '!self.startsWith(''-'')'
+                - message: branch must not contain ':'
+                  rule: '!self.contains('':'')'
+                - message: branch must not contain '..'
+                  rule: '!self.contains(''..'')'
+              promotionPolicy:
+                description: |-
+                  PromotionPolicy selects which candidate on the proposed branch this policy promotes.
+                  Copied from the owning PromotionStrategy by the PromotionStrategy controller. Empty means Latest.
+                enum:
+                - Latest
+                - LatestVerified
+                - Sequential
+                type: string
               proposedBranch:
                 description: |-
                   ProposedBranch staging hydrated branch
@@ -795,6 +843,41 @@ spec:
                           that was used to hydrate the branch.
                         type: string
                     type: object
+                type: object
+              candidate:
+                description: |-
+                  Candidate is the tip of the hydrator's proposed branch: the newest change that exists for this
+                  environment, whether or not it is eligible for promotion. It is only populated when the policy
+                  selects candidates, because otherwise it is identical to Proposed. Comparing it with Proposed
+                  shows how far behind the newest change this environment's current promotion is.
+                properties:
+                  commitTime:
+                    description: CommitTime is the time of the hydrated commit.
+                    format: date-time
+                    type: string
+                  drySha:
+                    description: |-
+                      DrySha is the dry commit SHA this candidate hydrates, read from hydrator.metadata.
+                      Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                    maxLength: 64
+                    pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                    type: string
+                  hydratedSha:
+                    description: |-
+                      HydratedSha is the commit SHA at the tip of the proposed branch.
+                      Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                    maxLength: 64
+                    pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                    type: string
+                  noteDrySha:
+                    description: |-
+                      NoteDrySha is the dry SHA from the git note on the hydrated commit, when there is one. It runs
+                      ahead of DrySha after a hydration that changed no manifests, because the hydrator then updates
+                      only the note and creates no new commit.
+                      Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                    maxLength: 64
+                    pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                    type: string
                 type: object
               conditions:
                 description: Conditions Represents the observations of the current
@@ -1674,6 +1757,47 @@ spec:
                     x-kubernetes-validations:
                     - message: must be a valid URL
                       rule: self == '' || isURL(self)
+                type: object
+              verification:
+                description: |-
+                  Verification records the changes this environment has vouched for. The owning PromotionStrategy
+                  mirrors it into status.environments[].verification, where later environments consult it.
+                properties:
+                  dryShas:
+                    description: |-
+                      DryShas are the dry commits this environment was healthy on at the point it promoted past them,
+                      newest first and capped at MaxLastHealthyDryShas.
+                    items:
+                      description: HealthyDryShas records a dry commit that an environment
+                        verified.
+                      properties:
+                        sha:
+                          description: |-
+                            Sha is the commit SHA of the dry commit that was observed to be healthy.
+                            Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                          maxLength: 64
+                          pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
+                          type: string
+                        time:
+                          description: Time is the time at which the environment was
+                            first observed to be healthy on this dry SHA.
+                          format: date-time
+                          type: string
+                      required:
+                      - sha
+                      - time
+                      type: object
+                    maxItems: 50
+                    type: array
+                  observedActiveSha:
+                    description: |-
+                      ObservedActiveSha is the active branch commit the git-derived entries were built from. While the
+                      active branch still points there the walk is skipped entirely; when it has moved, only the
+                      commits added since are examined.
+                      Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                    maxLength: 64
+                    pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                    type: string
                 type: object
             type: object
         type: object
@@ -4999,6 +5123,15 @@ spec:
                         rule: '!self.contains('':'')'
                       - message: branch must not contain '..'
                         rule: '!self.contains(''..'')'
+                    promotionPolicy:
+                      description: |-
+                        PromotionPolicy optionally overrides the strategy-level promotionPolicy for this environment.
+                        When empty, spec.promotionPolicy applies, which itself defaults to Latest.
+                      enum:
+                      - Latest
+                      - LatestVerified
+                      - Sequential
+                      type: string
                     proposedCommitStatuses:
                       description: |-
                         ProposedCommitStatuses are commit statuses describing a proposed dry commit, i.e. one that is not yet running
@@ -5045,6 +5178,15 @@ spec:
                 required:
                 - name
                 type: object
+              promotionPolicy:
+                description: |-
+                  PromotionPolicy is the default candidate selection policy for all environments in this strategy.
+                  Individual environments can override it via their own promotionPolicy field. Defaults to Latest.
+                enum:
+                - Latest
+                - LatestVerified
+                - Sequential
+                type: string
               proposedCommitStatuses:
                 description: |-
                   ProposedCommitStatuses are commit statuses describing a proposed dry commit, i.e. one that is not yet running
@@ -5467,6 +5609,41 @@ spec:
                         environment.
                       minLength: 1
                       type: string
+                    candidate:
+                      description: |-
+                        Candidate is the tip of the hydrator's proposed branch for this environment: the newest change
+                        that exists, whether or not it is eligible for promotion. It is only populated when the
+                        environment's promotion policy selects candidates, because otherwise it is identical to Proposed.
+                        Comparing it with Proposed shows how far behind the newest change this environment is running.
+                      properties:
+                        commitTime:
+                          description: CommitTime is the time of the hydrated commit.
+                          format: date-time
+                          type: string
+                        drySha:
+                          description: |-
+                            DrySha is the dry commit SHA this candidate hydrates, read from hydrator.metadata.
+                            Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                          maxLength: 64
+                          pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                          type: string
+                        hydratedSha:
+                          description: |-
+                            HydratedSha is the commit SHA at the tip of the proposed branch.
+                            Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                          maxLength: 64
+                          pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                          type: string
+                        noteDrySha:
+                          description: |-
+                            NoteDrySha is the dry SHA from the git note on the hydrated commit, when there is one. It runs
+                            ahead of DrySha after a hydration that changed no manifests, because the hydrator then updates
+                            only the note and creates no new commit.
+                            Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                          maxLength: 64
+                          pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                          type: string
+                      type: object
                     history:
                       description: |-
                         History defines the history of promoted changes done by the PromotionStrategy for each environment.
@@ -5965,30 +6142,6 @@ spec:
                             type: object
                         type: object
                       type: array
-                    lastHealthyDryShas:
-                      description: LastHealthyDryShas is a list of dry commits that
-                        were observed to be healthy in the environment.
-                      items:
-                        description: HealthyDryShas is a list of dry commits that
-                          were observed to be healthy in the environment.
-                        properties:
-                          sha:
-                            description: |-
-                              Sha is the commit SHA of the dry commit that was observed to be healthy.
-                              Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
-                            maxLength: 64
-                            pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
-                            type: string
-                          time:
-                            description: Time is the time when the proposed commit
-                              for the given dry SHA was merged into the active branch.
-                            format: date-time
-                            type: string
-                        required:
-                        - sha
-                        - time
-                        type: object
-                      type: array
                     proposed:
                       description: Proposed is the state of the proposed branch for
                         the environment.
@@ -6324,6 +6477,68 @@ spec:
                           x-kubernetes-validations:
                           - message: must be a valid URL
                             rule: self == '' || isURL(self)
+                      type: object
+                    verification:
+                      description: |-
+                        Verification mirrors the owning ChangeTransferPolicy status.verification and adds Current for
+                        the change the environment is running right now when it is healthy on it. Later environments
+                        consult the effective record — DryShas plus Current when present — when selecting candidates.
+                      properties:
+                        current:
+                          description: |-
+                            Current is the change the environment is running right now when every active commit status is
+                            passing and that change is not already in DryShas. Omitted when the environment is not healthy
+                            on its active change or when the active change is already recorded in DryShas.
+                          properties:
+                            sha:
+                              description: |-
+                                Sha is the commit SHA of the dry commit that was observed to be healthy.
+                                Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                              maxLength: 64
+                              pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
+                              type: string
+                            time:
+                              description: Time is the time at which the environment
+                                was first observed to be healthy on this dry SHA.
+                              format: date-time
+                              type: string
+                          required:
+                          - sha
+                          - time
+                          type: object
+                        dryShas:
+                          description: |-
+                            DryShas are copied from the owning ChangeTransferPolicy status.verification.dryShas: changes
+                            this environment was healthy on when it promoted past them, newest first.
+                          items:
+                            description: HealthyDryShas records a dry commit that
+                              an environment verified.
+                            properties:
+                              sha:
+                                description: |-
+                                  Sha is the commit SHA of the dry commit that was observed to be healthy.
+                                  Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                                maxLength: 64
+                                pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
+                                type: string
+                              time:
+                                description: Time is the time at which the environment
+                                  was first observed to be healthy on this dry SHA.
+                                format: date-time
+                                type: string
+                            required:
+                            - sha
+                            - time
+                            type: object
+                          maxItems: 50
+                          type: array
+                        observedActiveSha:
+                          description: |-
+                            ObservedActiveSha is copied from the owning ChangeTransferPolicy status.verification.observedActiveSha.
+                            Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+                          maxLength: 64
+                          pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
+                          type: string
                       type: object
                   required:
                   - active

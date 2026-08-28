@@ -36,6 +36,16 @@ However, this technique doesn't work perfectly for all use cases. See
 Environment and proposed branches are read-only operational outputs. Use them to inspect what is deployed or about to be
 deployed, but do not edit them manually.
 
+Environments using a [promotion policy](promotion-policies.md) other than the default `Latest` get a third,
+promoter-owned branch as well: `environment/dev-promote` (or `environment/dev-promote/<activePath>` in the shared
+active branch layout). The proposed branch belongs to the hydrator and always carries the newest change, so a policy
+that promotes something older needs a branch it controls; this one carries the change currently selected for promotion,
+and the promotion pull request is opened from it.
+
+!!! warning
+    The controller force-pushes the promotion branch whenever its selection changes. Any commit pushed to it by anything
+    else will be discarded.
+
 ### One branch per app/environment
 
 In this mode, each app/environment pair gets its own active branch and proposed branch:

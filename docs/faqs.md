@@ -40,9 +40,13 @@ reduce the load on your Git server by eliminating the need for frequent polling.
 
 ## How does GitOps Promoter handle concurrent releases?
 
-GitOps Promoter always works on releasing the latest DRY commit. If a new commit is pushed while another commit is still
-moving through environments, GitOps Promoter stops working on the old commit and waits for the new commit to work its
-way through the environments.
+By default, GitOps Promoter always works on releasing the latest DRY commit. If a new commit is pushed while another
+commit is still moving through environments, GitOps Promoter stops working on the old commit and waits for the new
+commit to work its way through the environments.
+
+This is the `Latest` [promotion policy](promotion-policies.md). The two drawbacks below are inherent to it, and each has
+a policy that addresses it — set per environment, so you can keep `Latest` where it suits and change it where it does
+not.
 
 This model has some major advantages.
 
@@ -61,7 +65,13 @@ The "release latest" model has some drawbacks.
 
 1. **Delays in high-churn applications**: Frequent changes could delay releases to higher environments. An environment
    must wait the sum of all previous environments' delays before receiving a change. If commits arrive faster than that
-   sum, the environment will wait at an old state until a change can clear all prior environments.
+   sum, the environment will wait at an old state until a change can clear all prior environments. Taken far enough,
+   the higher environment stops deploying altogether: the only change it is ever offered is the newest one, which is
+   also the one preceding environments have had the least time to verify.
+
+   The `LatestVerified` policy addresses this. Instead of the newest change, the environment promotes the newest one
+   every preceding environment has *verified*, skipping over newer unverified ones. It advances to the high-water mark
+   of verified change rather than chasing the branch tip, so it keeps moving no matter how fast commits arrive.
 
 2. **Skipped commits**: There's no guarantee that every change will be released to every environment. For example, if 
    the second environment is running commit A, and active commit statuses never pass for commits B and C, then the 
@@ -69,10 +79,14 @@ The "release latest" model has some drawbacks.
    used to a queue-based deployment. It may make it more difficult to diagnose which commit caused a problem in a given
    environment.
 
-For most use cases, these tradeoffs are worth it.
+   The `Sequential` policy addresses this. The environment promotes the oldest change it has not promoted yet, once
+   every preceding environment has verified it, and never skips. Every DRY commit is promoted through the environment
+   in order and appears in its history. Expect the environment to fall further behind under churn, since it works
+   through the queue one change at a time.
 
-To mitigate the downsides, try to speed up active commit statuses (maybe by shifting more of those validations left) or
-adopting a "slower" release model, such as by batching multiple changes in a single DRY commit.
+For most use cases the `Latest` defaults are worth it, and they remain the default.
 
-Once the "release latest" model is validated in production environments, we may consider adding a queue-based model for
-users who need it.
+Other ways to mitigate the downsides: speed up active commit statuses (maybe by shifting more of those validations
+left), or adopt a "slower" release model, such as by batching multiple changes in a single DRY commit.
+
+See [Promotion Policies](promotion-policies.md) for how to configure these and what "verified" means.
