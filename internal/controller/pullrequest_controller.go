@@ -117,20 +117,20 @@ func (r *PullRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion early - if being deleted and status.ID is empty, we can skip provider setup
-	if handled, err := r.handleEmptyIDDeletion(ctx, &pr); handled || err != nil {
-		return ctrl.Result{}, err
+	// --- Deletion path ---------------------------------------------------------------------------
+	//
+	// A terminating PullRequest gets its own, self-contained reconcile. It drives the SCM pull
+	// request to a terminal outcome and releases the finalizer, and it must never create, merge,
+	// update or relabel anything. Splitting it off here means the live path below never has to ask
+	// whether the object is being deleted, and the deletion rules live in one place instead of as
+	// deletionTimestamp checks threaded through the normal flow.
+	if !pr.DeletionTimestamp.IsZero() {
+		return r.reconcileTerminating(ctx, &pr)
 	}
 
-	// A terminating PullRequest this controller holds no finalizer on is one it is already done with:
-	// it either never adopted the object or released the finalizer after recording a terminal SCM
-	// outcome. Whatever still retains the object, normally the ChangeTransferPolicy's finalizer,
-	// belongs to another controller, so there is no SCM work left and no reason to spend calls
-	// discovering that.
-	if !pr.DeletionTimestamp.IsZero() && !controllerutil.ContainsFinalizer(&pr, promoterv1alpha1.PullRequestFinalizer) {
-		logger.V(4).Info("PullRequest is terminating and no longer holds the promoter finalizer, nothing left to do")
-		return ctrl.Result{}, nil
-	}
+	// --- Live path -------------------------------------------------------------------------------
+	//
+	// Everything from here on runs only for a PullRequest that is not being deleted.
 
 	// This short-circuit avoids FindOpen (and other) SCM calls for a very narrow kind of reconcile:
 	// where the PR is marked open, the resource isn't being deleted, the spec has changed, and the
@@ -163,21 +163,12 @@ func (r *PullRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	provider, err := r.getPullRequestProvider(ctx, pr)
 	if err != nil {
-		if !pr.DeletionTimestamp.IsZero() {
-			if blockedErr := deletionBlockedByMissingDependencyError(err); blockedErr != nil {
-				return ctrl.Result{}, blockedErr
-			}
-		}
 		return ctrl.Result{}, fmt.Errorf("failed to get PullRequest provider: %w", err)
 	}
 
 	openResult, err := provider.FindOpen(ctx, pr)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to check for open PR: %w", err)
-	}
-
-	if !pr.DeletionTimestamp.IsZero() {
-		return r.reconcileDeletion(ctx, &pr, provider, openResult)
 	}
 
 	if err := r.ensureFinalizer(ctx, &pr); err != nil {
@@ -231,22 +222,6 @@ func (r *PullRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	return ctrl.Result{RequeueAfter: requeueDuration}, nil
-}
-
-// handleEmptyIDDeletion handles the case where a PullRequest is being deleted but never created a PR on the SCM.
-// Returns (handled=true, nil) if deletion was handled, (false, nil) if not applicable, or (false, err) on error.
-func (r *PullRequestReconciler) handleEmptyIDDeletion(ctx context.Context, pr *promoterv1alpha1.PullRequest) (bool, error) {
-	if pr.DeletionTimestamp.IsZero() || pr.Status.ID != "" {
-		return false, nil
-	}
-
-	if controllerutil.ContainsFinalizer(pr, promoterv1alpha1.PullRequestFinalizer) {
-		controllerutil.RemoveFinalizer(pr, promoterv1alpha1.PullRequestFinalizer)
-		if err := r.Update(ctx, pr); err != nil {
-			return true, fmt.Errorf("failed to remove finalizer: %w", err)
-		}
-	}
-	return true, nil
 }
 
 // cleanupTerminalStates deletes PullRequests that have reached terminal states (merged/closed) or were externally merged/closed.
@@ -577,6 +552,8 @@ func pullRequestSCMRelevantSpecSynced(pr *promoterv1alpha1.PullRequest) bool {
 // stay the same. If either the title/description digest or labels need syncing, fall through to
 // FindOpen and the normal SCM write path.
 func shouldSkipSCMSync(pr *promoterv1alpha1.PullRequest) bool {
+	// Defensive: Reconcile routes terminating PullRequests to reconcileTerminating before reaching
+	// here, so a deleting object should never get this far.
 	if !pr.DeletionTimestamp.IsZero() {
 		return false
 	}
@@ -739,6 +716,48 @@ func (r *PullRequestReconciler) ensureFinalizer(ctx context.Context, pr *promote
 	})
 }
 
+// reconcileTerminating is the whole reconcile for a PullRequest that is being deleted. Reconcile
+// hands off to it before any live-path work, so every deletion-only concern lives here: skipping
+// provider setup for a pull request that was never created on the SCM, standing down when another
+// controller is the one still holding the object, turning a missing dependency into an
+// operator-facing error, and finally driving to a terminal SCM outcome in reconcileDeletion.
+//
+// The caller guarantees pr.DeletionTimestamp is set.
+func (r *PullRequestReconciler) reconcileTerminating(ctx context.Context, pr *promoterv1alpha1.PullRequest) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Never made it onto the SCM, so there is no pull request to close and no provider worth
+	// resolving. Release the finalizer and let the object go.
+	if pr.Status.ID == "" {
+		return ctrl.Result{}, r.releaseFinalizer(ctx, pr)
+	}
+
+	// A terminating PullRequest this controller holds no finalizer on is one it is already done with:
+	// it either never adopted the object or released the finalizer after recording a terminal SCM
+	// outcome. Whatever still retains the object, normally the ChangeTransferPolicy's finalizer,
+	// belongs to another controller, so there is no SCM work left and no reason to spend calls
+	// discovering that.
+	if !controllerutil.ContainsFinalizer(pr, promoterv1alpha1.PullRequestFinalizer) {
+		logger.V(4).Info("PullRequest is terminating and no longer holds the promoter finalizer, nothing left to do")
+		return ctrl.Result{}, nil
+	}
+
+	provider, err := r.getPullRequestProvider(ctx, *pr)
+	if err != nil {
+		if blockedErr := deletionBlockedByMissingDependencyError(err); blockedErr != nil {
+			return ctrl.Result{}, blockedErr
+		}
+		return ctrl.Result{}, fmt.Errorf("failed to get PullRequest provider: %w", err)
+	}
+
+	openResult, err := provider.FindOpen(ctx, *pr)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to check for open PR: %w", err)
+	}
+
+	return r.reconcileDeletion(ctx, pr, provider, openResult)
+}
+
 // reconcileDeletion drives a terminating PullRequest to a terminal SCM outcome before letting the
 // resource go.
 //
@@ -755,7 +774,7 @@ func (r *PullRequestReconciler) ensureFinalizer(ctx context.Context, pr *promote
 // terminating PullRequest must never be created, merged, or relabeled on the SCM.
 //
 // The caller guarantees the finalizer is still held; a terminating PullRequest without it is short
-// circuited in Reconcile.
+// circuited in reconcileTerminating.
 func (r *PullRequestReconciler) reconcileDeletion(ctx context.Context, pr *promoterv1alpha1.PullRequest, provider scms.PullRequestProvider, openResult scms.FindOpenResult) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
