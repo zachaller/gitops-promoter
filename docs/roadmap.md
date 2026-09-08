@@ -76,7 +76,8 @@ See also: [Argo CD Commit Status](gating-promotions/built-in-gates/argocd-commit
 ### Promotion ordering safety check (planned for v1.0)
 
 The PromotionStrategy controller currently hard-fails reconcile when no `DependentsSuccessfulCommitStatus` targets a
-strategy, or when a gate's `key` is undeclared in the effective `proposedCommitStatuses` for an environment branch.
+strategy, when more than one targets the same strategy, or when a gate's `key` is undeclared in the effective
+`proposedCommitStatuses` for an environment branch.
 This guard may be relaxed in v1.0 so misconfiguration surfaces differently. See [Upgrading](upgrading.md#038-promotion-ordering-gate) for the 0.38
 migration that introduced the gate CR.
 

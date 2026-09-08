@@ -12,9 +12,10 @@ The controller reads the referenced PromotionStrategy's environment status, eval
 relationships, and updates one CommitStatus per environment.
 
 > [!IMPORTANT]
-> The gate is not created or injected automatically. You must create a `DependentsSuccessfulCommitStatus` for each
-> PromotionStrategy you want to gate, and add its `key` to that PromotionStrategy's effective `proposedCommitStatuses`
-> (globally or per environment). See [Wiring the gate into the PromotionStrategy](#wiring-the-gate-into-the-promotionstrategy) below.
+> The gate is not created or injected automatically. You must create exactly one `DependentsSuccessfulCommitStatus` for
+> each PromotionStrategy you want to gate, and add its `key` to that PromotionStrategy's effective
+> `proposedCommitStatuses` (globally or per environment). See
+> [Wiring the gate into the PromotionStrategy](#wiring-the-gate-into-the-promotionstrategy) below.
 
 ## Linear default (no graph)
 
@@ -186,7 +187,8 @@ spec:
 
 > [!IMPORTANT]
 > As a safety check, the PromotionStrategy controller fails its reconcile when no
-> `DependentsSuccessfulCommitStatus` targets the PromotionStrategy, or when a gate references the PromotionStrategy but
-> its `key` is missing from the effective `proposedCommitStatuses` for one or more environment branches (global plus
-> per-environment selectors, matching what each `ChangeTransferPolicy` enforces). This safety check is intended to be
-> removed in v1.0; see [Roadmap](../../roadmap.md).
+> `DependentsSuccessfulCommitStatus` targets the PromotionStrategy, when more than one targets the same
+> PromotionStrategy, or when a gate references the PromotionStrategy but its `key` is missing from the effective
+> `proposedCommitStatuses` for one or more environment branches (global plus per-environment selectors, matching what
+> each `ChangeTransferPolicy` enforces). This safety check is intended to be removed in v1.0; see
+> [Roadmap](../../roadmap.md).

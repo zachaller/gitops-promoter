@@ -4000,6 +4000,54 @@ var _ = Describe("PromotionStrategy DependentsSuccessfulCommitStatus key safety 
 		}, constants.EventuallyTimeout).Should(Succeed())
 	})
 
+	It("hard-fails the reconcile when more than one DependentsSuccessfulCommitStatus targets the PromotionStrategy", func() {
+		promotionStrategy.Spec.ProposedCommitStatuses = []promoterv1alpha1.CommitStatusSelector{
+			{Key: promoterv1alpha1.DependentsSuccessfulCommitStatusKey},
+		}
+		Expect(k8sClient.Create(ctx, scmSecret)).To(Succeed())
+		Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
+		Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
+		Expect(k8sClient.Create(ctx, promotionStrategy)).To(Succeed())
+
+		By("Creating two DependentsSuccessfulCommitStatus resources that reference the same PromotionStrategy")
+		firstDSC := &promoterv1alpha1.DependentsSuccessfulCommitStatus{
+			ObjectMeta: metav1.ObjectMeta{Name: name + "-dag-a", Namespace: "default"},
+			Spec: promoterv1alpha1.DependentsSuccessfulCommitStatusSpec{
+				PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: name},
+				Key:                  promoterv1alpha1.DependentsSuccessfulCommitStatusKey,
+				Environments: []promoterv1alpha1.DependentEnvironment{
+					{Branch: testBranchDevelopment},
+				},
+			},
+		}
+		secondDSC := &promoterv1alpha1.DependentsSuccessfulCommitStatus{
+			ObjectMeta: metav1.ObjectMeta{Name: name + "-dag-b", Namespace: "default"},
+			Spec: promoterv1alpha1.DependentsSuccessfulCommitStatusSpec{
+				PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: name},
+				Key:                  promoterv1alpha1.DependentsSuccessfulCommitStatusKey,
+				Environments: []promoterv1alpha1.DependentEnvironment{
+					{Branch: testBranchDevelopment},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, firstDSC)).To(Succeed())
+		Expect(k8sClient.Create(ctx, secondDSC)).To(Succeed())
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, firstDSC)
+			_ = k8sClient.Delete(ctx, secondDSC)
+		})
+
+		By("Checking that the Ready condition reports the duplicate ordering configuration")
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, promotionStrategy)).To(Succeed())
+			cond := meta.FindStatusCondition(promotionStrategy.Status.Conditions, string(promoterConditions.Ready))
+			g.Expect(cond).ToNot(BeNil())
+			g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(cond.Reason).To(Equal(string(promoterConditions.ReconciliationError)))
+			g.Expect(cond.Message).To(ContainSubstring("only one is supported per PromotionStrategy"))
+		}, constants.EventuallyTimeout).Should(Succeed())
+	})
+
 	It("hard-fails the reconcile when a DependentsSuccessfulCommitStatus key is not declared in proposedCommitStatuses", func() {
 		By("Creating a PromotionStrategy with no proposedCommitStatuses")
 		Expect(k8sClient.Create(ctx, scmSecret)).To(Succeed())

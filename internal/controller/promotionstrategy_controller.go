@@ -267,9 +267,12 @@ func (r *PromotionStrategyReconciler) SetupWithManager(ctx context.Context, mgr 
 
 // checkDependentsSuccessfulCommitStatusKeysDeclared verifies that this PromotionStrategy has valid promotion
 // ordering configured. It hard-fails the reconcile (surfacing the misconfiguration instead of
-// silently promoting environments out of order) in two cases:
+// silently promoting environments out of order) in three cases:
 //
 //   - No DependentsSuccessfulCommitStatus targets the PromotionStrategy, so no ordering applies at all.
+//   - More than one DependentsSuccessfulCommitStatus targets the PromotionStrategy. Each gate writes
+//     per-environment CommitStatuses keyed by spec.key on the same SCM commit; multiple gates would
+//     produce conflicting signals.
 //   - A DependentsSuccessfulCommitStatus targets the PromotionStrategy but its key is not declared in the
 //     proposed commit statuses that each environment's ChangeTransferPolicy would enforce (global
 //     proposedCommitStatuses plus per-environment proposedCommitStatuses), so the gate it produces is
@@ -286,6 +289,16 @@ func (r *PromotionStrategyReconciler) checkDependentsSuccessfulCommitStatusKeysD
 
 	if len(dcsList.Items) < 1 {
 		return fmt.Errorf("PromotionStrategy %q has no DependentsSuccessfulCommitStatus; configure one so promotion ordering is enforced", ps.Name)
+	}
+
+	if len(dcsList.Items) > 1 {
+		names := make([]string, 0, len(dcsList.Items))
+		for i := range dcsList.Items {
+			names = append(names, dcsList.Items[i].Name)
+		}
+		slices.Sort(names)
+		return fmt.Errorf("PromotionStrategy %q has %d DependentsSuccessfulCommitStatus resources (%s); only one is supported per PromotionStrategy",
+			ps.Name, len(dcsList.Items), strings.Join(names, ", "))
 	}
 
 	for i := range dcsList.Items {
