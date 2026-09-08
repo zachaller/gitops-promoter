@@ -97,6 +97,8 @@ Once a `DependentsSuccessfulCommitStatus` reconciles successfully for a `Promoti
 automatically deletes legacy previous-environment `CommitStatus` resources owned by that strategy's
 `ChangeTransferPolicy` objects. No manual cleanup is required after promotions are healthy on the new gate.
 
+This automatic cleanup is intended to be removed in v1.0; see [Roadmap](roadmap.md).
+
 ### Multi-install deployments
 
 Label each new `DependentsSuccessfulCommitStatus` with the same `promoter.argoproj.io/instance-id` as its

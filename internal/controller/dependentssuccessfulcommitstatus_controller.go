@@ -29,7 +29,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	acmetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -257,6 +256,7 @@ func (r *DependentsSuccessfulCommitStatusReconciler) updateDependentsSuccessfulC
 		return fmt.Errorf("failed to cleanup orphaned CommitStatus resources: %w", err)
 	}
 
+	// TODO(v1.0): remove legacy previous-environment CommitStatus cleanup once clusters are past the 0.38 ordering-gate migration.
 	if err := r.cleanupLegacyPreviousEnvironmentCommitStatuses(ctx, dcs, ps); err != nil {
 		return fmt.Errorf("failed to cleanup legacy previous-environment CommitStatus resources: %w", err)
 	}
@@ -270,37 +270,38 @@ func (r *DependentsSuccessfulCommitStatusReconciler) updateDependentsSuccessfulC
 // PromotionStrategy ≤ 0.37 linear ordering (label promoter-previous-environment, owned by
 // ChangeTransferPolicy). Once DependentsSuccessfulCommitStatus reconciles successfully for a
 // PromotionStrategy, those statuses are orphaned and safe to remove.
+//
+// Legacy CommitStatus names are deterministic from the PromotionStrategy name and environment
+// branch, so this uses per-object Get instead of namespace List. After all legacy objects are
+// gone, an annotation on the DependentsSuccessfulCommitStatus skips further cleanup work.
+//
+// TODO(v1.0): Remove once clusters are upgraded past the 0.38 promotion-ordering-gate migration.
 func (r *DependentsSuccessfulCommitStatusReconciler) cleanupLegacyPreviousEnvironmentCommitStatuses(
 	ctx context.Context,
 	dcs *promoterv1alpha1.DependentsSuccessfulCommitStatus,
 	ps *promoterv1alpha1.PromotionStrategy,
 ) error {
+	if dcs.Annotations[promoterv1alpha1.LegacyPreviousEnvironmentCleanupAnnotation] == "true" {
+		return nil
+	}
+
 	logger := logf.FromContext(ctx)
+	deletedAny := false
 
-	var ctpList promoterv1alpha1.ChangeTransferPolicyList
-	if err := r.List(ctx, &ctpList,
-		client.InNamespace(ps.Namespace),
-		client.MatchingLabels{promoterv1alpha1.PromotionStrategyLabel: utils.KubeSafeLabel(ps.Name)},
-	); err != nil {
-		return fmt.Errorf("failed to list ChangeTransferPolicies for PromotionStrategy %q: %w", ps.Name, err)
-	}
+	// The old PromotionStrategy controller only created previous-environment CommitStatuses for
+	// environments after the first (each non-root environment waits on upstreams).
+	for i := 1; i < len(ps.Spec.Environments); i++ {
+		branch := ps.Spec.Environments[i].Branch
+		commitStatusName := legacyPreviousEnvironmentCommitStatusName(ps.Name, branch)
 
-	ctpUIDs := make(map[types.UID]bool, len(ctpList.Items))
-	for i := range ctpList.Items {
-		ctpUIDs[ctpList.Items[i].UID] = true
-	}
-
-	var commitStatusList promoterv1alpha1.CommitStatusList
-	if err := r.List(ctx, &commitStatusList,
-		client.InNamespace(dcs.Namespace),
-		client.MatchingLabels{promoterv1alpha1.CommitStatusLabel: promoterv1alpha1.LegacyPreviousEnvironmentCommitStatusKey},
-	); err != nil {
-		return fmt.Errorf("failed to list legacy previous-environment CommitStatus resources: %w", err)
-	}
-
-	for i := range commitStatusList.Items {
-		cs := &commitStatusList.Items[i]
-		if !legacyPreviousEnvironmentCommitStatusOwnedByPromotionStrategy(cs, ctpUIDs) {
+		cs := &promoterv1alpha1.CommitStatus{}
+		if err := r.Get(ctx, client.ObjectKey{Namespace: dcs.Namespace, Name: commitStatusName}, cs); err != nil {
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
+			return fmt.Errorf("failed to get legacy previous-environment CommitStatus %q: %w", commitStatusName, err)
+		}
+		if cs.Labels[promoterv1alpha1.CommitStatusLabel] != promoterv1alpha1.LegacyPreviousEnvironmentCommitStatusKey {
 			continue
 		}
 
@@ -318,23 +319,41 @@ func (r *DependentsSuccessfulCommitStatusReconciler) cleanupLegacyPreviousEnviro
 			return fmt.Errorf("failed to delete legacy previous-environment CommitStatus %q: %w", cs.Name, err)
 		}
 
+		deletedAny = true
 		r.Recorder.Eventf(dcs, nil, "Normal", constants.OrphanedCommitStatusDeletedReason, "CleaningOrphanedResources", constants.OrphanedCommitStatusDeletedMessage, cs.Name)
 	}
 
-	return nil
+	if deletedAny {
+		return nil
+	}
+
+	return r.markLegacyPreviousEnvironmentCommitStatusesCleaned(ctx, dcs)
 }
 
-func legacyPreviousEnvironmentCommitStatusOwnedByPromotionStrategy(cs *promoterv1alpha1.CommitStatus, ctpUIDs map[types.UID]bool) bool {
-	for _, ownerRef := range cs.OwnerReferences {
-		if ownerRef.Kind != "ChangeTransferPolicy" {
-			continue
-		}
-		if ownerRef.Controller != nil && !*ownerRef.Controller {
-			continue
-		}
-		return ctpUIDs[ownerRef.UID]
+// legacyPreviousEnvironmentCommitStatusName returns the Kubernetes name used by PromotionStrategy ≤ 0.37
+// for a previous-environment CommitStatus on the given environment branch.
+func legacyPreviousEnvironmentCommitStatusName(psName, branch string) string {
+	ctpName := utils.KubeSafeUniqueName(utils.GetChangeTransferPolicyName(psName, branch))
+	return utils.KubeSafeUniqueName(promoterv1alpha1.PreviousEnvProposedCommitPrefixNameLabel + ctpName)
+}
+
+func (r *DependentsSuccessfulCommitStatusReconciler) markLegacyPreviousEnvironmentCommitStatusesCleaned(
+	ctx context.Context,
+	dcs *promoterv1alpha1.DependentsSuccessfulCommitStatus,
+) error {
+	if dcs.Annotations[promoterv1alpha1.LegacyPreviousEnvironmentCleanupAnnotation] == "true" {
+		return nil
 	}
-	return false
+
+	patchBase := dcs.DeepCopy()
+	if dcs.Annotations == nil {
+		dcs.Annotations = map[string]string{}
+	}
+	dcs.Annotations[promoterv1alpha1.LegacyPreviousEnvironmentCleanupAnnotation] = "true"
+	if err := r.Patch(ctx, dcs, client.MergeFrom(patchBase)); err != nil {
+		return fmt.Errorf("failed to mark legacy previous-environment CommitStatuses cleaned on DependentsSuccessfulCommitStatus %q: %w", dcs.Name, err)
+	}
+	return nil
 }
 
 // upstreamsPending reports whether any of branch's direct dependsOn upstreams is not yet
