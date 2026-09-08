@@ -30,6 +30,11 @@ const TimedCommitStatusDefaultKey = "timer"
 // dependent environments are promoted and successful.
 const DependentsSuccessfulCommitStatusKey = "dependents-successful"
 
+// LegacyPreviousEnvironmentCommitStatusKey is the commit status key used by PromotionStrategy ≤ 0.37 for
+// linear ordering. DependentsSuccessfulCommitStatus deletes orphaned CommitStatuses with this label once
+// the replacement gate is configured.
+const LegacyPreviousEnvironmentCommitStatusKey = "promoter-previous-environment"
+
 // Finalizer constants for preventing premature resource deletion
 
 // PullRequestFinalizer prevents deletion of PullRequest until the PR is closed in the SCM

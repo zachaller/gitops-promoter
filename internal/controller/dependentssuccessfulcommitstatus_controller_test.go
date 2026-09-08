@@ -30,6 +30,8 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
@@ -454,6 +456,70 @@ var _ = Describe("DependentsSuccessfulCommitStatus Controller", func() {
 				cs := &promoterv1alpha1.CommitStatus{}
 				err := k8sClient.Get(ctx, client.ObjectKey{Namespace: "default", Name: oldCommitStatusProdName}, cs)
 				g.Expect(k8serrors.IsNotFound(err)).To(BeTrue(), "production CommitStatus should be deleted")
+			}, constants.EventuallyTimeout).Should(Succeed())
+		})
+
+		It("should cleanup legacy promoter-previous-environment CommitStatuses once configured", func() {
+			By("Creating a DependentsSuccessfulCommitStatus for the PromotionStrategy")
+			dependentsSuccessfulCommitStatus = &promoterv1alpha1.DependentsSuccessfulCommitStatus{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name + "-legacy-cleanup",
+					Namespace: "default",
+				},
+				Spec: promoterv1alpha1.DependentsSuccessfulCommitStatusSpec{
+					PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: name},
+					Key:                  promoterv1alpha1.DependentsSuccessfulCommitStatusKey,
+				},
+			}
+			Expect(k8sClient.Create(ctx, dependentsSuccessfulCommitStatus)).To(Succeed())
+
+			By("Waiting for the DependentsSuccessfulCommitStatus to become Ready")
+			Eventually(func(g Gomega) {
+				updated := &promoterv1alpha1.DependentsSuccessfulCommitStatus{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(dependentsSuccessfulCommitStatus), updated)).To(Succeed())
+				readyCondition := meta.FindStatusCondition(updated.Status.Conditions, string(promoterConditions.Ready))
+				g.Expect(readyCondition).ToNot(BeNil())
+				g.Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			var stagingCTP promoterv1alpha1.ChangeTransferPolicy
+			Eventually(func(g Gomega) {
+				stagingCTPName := utils.KubeSafeUniqueName(utils.GetChangeTransferPolicyName(name, testBranchStaging))
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: stagingCTPName, Namespace: "default"}, &stagingCTP)).To(Succeed())
+			}, constants.EventuallyTimeout).Should(Succeed())
+
+			legacyCommitStatusName := utils.KubeSafeUniqueName(promoterv1alpha1.PreviousEnvProposedCommitPrefixNameLabel + stagingCTP.Name)
+			legacyCommitStatus := &promoterv1alpha1.CommitStatus{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      legacyCommitStatusName,
+					Namespace: "default",
+					Labels: map[string]string{
+						promoterv1alpha1.CommitStatusLabel: promoterv1alpha1.LegacyPreviousEnvironmentCommitStatusKey,
+					},
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion:         promoterv1alpha1.GroupVersion.String(),
+						Kind:               "ChangeTransferPolicy",
+						Name:               stagingCTP.Name,
+						UID:                stagingCTP.UID,
+						Controller:         ptr.To(true),
+						BlockOwnerDeletion: ptr.To(true),
+					}},
+				},
+				Spec: promoterv1alpha1.CommitStatusSpec{
+					RepositoryReference: promoterv1alpha1.ObjectReference{Name: gitRepo.Name},
+					Name:                promoterv1alpha1.LegacyPreviousEnvironmentCommitStatusKey,
+					Description:         "legacy previous-environment gate",
+					Phase:               promoterv1alpha1.CommitPhasePending,
+					Sha:                 "0123456789abcdef0123456789abcdef01234567",
+				},
+			}
+			Expect(k8sClient.Create(ctx, legacyCommitStatus)).To(Succeed())
+
+			By("Verifying the legacy CommitStatus is deleted after DependentsSuccessfulCommitStatus reconciles")
+			Eventually(func(g Gomega) {
+				cs := &promoterv1alpha1.CommitStatus{}
+				err := k8sClient.Get(ctx, client.ObjectKey{Namespace: "default", Name: legacyCommitStatusName}, cs)
+				g.Expect(k8serrors.IsNotFound(err)).To(BeTrue(), "legacy previous-environment CommitStatus should be deleted")
 			}, constants.EventuallyTimeout).Should(Succeed())
 		})
 	})
