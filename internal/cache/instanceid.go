@@ -33,10 +33,12 @@ var unpartitionedObjects = []client.Object{
 // set, only resources with promoter.argoproj.io/instance-id equal to *instanceID are cached.
 //
 // DefaultLabelSelector applies the same selector to informers started for types not listed in
-// ByObject (out-of-tree unstructured orderCommitStatusRef gates). ControllerConfiguration is
-// scoped to controllerNamespace only (not instance-id partitioned). Argo CD Applications stay
-// unfiltered. Secret informers additionally apply secretDataTransform so only promoter credential
-// keys are retained in cache (see secret_transform.go).
+// ByObject, so lazily started unstructured informers (out-of-tree orderCommitStatusRef gates) are
+// partitioned too. Any cached type that does not carry the label must therefore be listed in
+// unpartitionedObjects or it becomes invisible. ControllerConfiguration is scoped to
+// controllerNamespace only (not instance-id partitioned). Secret informers additionally apply
+// secretDataTransform so only promoter credential keys are retained in cache
+// (see secret_transform.go).
 func OptionsForInstanceID(instanceID *string, controllerNamespace string) cache.Options {
 	sel := instanceIDSelector(instanceID)
 	objs := PartitionedObjects()

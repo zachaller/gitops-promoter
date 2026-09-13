@@ -23,6 +23,16 @@ func TestCache(t *testing.T) {
 
 const testControllerNamespace = "gitops-promoter"
 
+var _ = Describe("ClientOptions", func() {
+	It("caches unstructured Gets so out-of-tree orderCommitStatusRef gates are instance-id filtered", func() {
+		opts := promotercache.ClientOptions()
+		Expect(opts.Cache).NotTo(BeNil())
+		Expect(opts.Cache.Unstructured).To(BeTrue())
+		Expect(opts.Cache.EnableReadYourWritesConsistency).NotTo(BeNil())
+		Expect(*opts.Cache.EnableReadYourWritesConsistency).To(BeTrue())
+	})
+})
+
 var _ = Describe("OptionsForInstanceID", func() {
 	It("scopes all partitioned types to resources without instance-id when nil", func() {
 		opts := promotercache.OptionsForInstanceID(nil, testControllerNamespace)
