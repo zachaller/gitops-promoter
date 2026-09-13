@@ -50,7 +50,9 @@ The value must be a valid Kubernetes label value (min length 1, max 63 character
 
 At startup the controller reads `instanceID` from `ControllerConfiguration` (via a direct API read, not the informer cache) and configures `cache.ByObject` label selectors for every promoter root CRD except `ControllerConfiguration`, plus `Secret` objects (SCM credentials, HTTP auth, kubeconfig, and other secrets fetched through the manager client).
 
-`ControllerConfiguration` itself is **not** filtered—the install must always read its own configuration.
+The same selector is set as `cache.DefaultLabelSelector`, so informers started later for types **not** in `ByObject` — including unstructured out-of-tree `orderCommitStatusRef` gate CRs — are partitioned the same way. Label those gate CRs like other user-created roots in multi-install mode.
+
+`ControllerConfiguration` itself is **not** instance-id filtered—the install must always read its own configuration. Argo CD `Application` watches also stay unfiltered (Applications do not carry Promoter instance labels).
 
 When `instanceID` is unset, the cache selector requires the instance-id label to **not exist**. When set, the selector requires an **exact match**.
 
@@ -93,6 +95,7 @@ Controllers propagate `instance-id` from parent to child for `PromotionStrategy`
 - `GitRepository`
 - `ScmProvider`
 - `ClusterScmProvider`
+- Out-of-tree `orderCommitStatusRef` gate CRs (watched with the same instance-id selector as promoter CRDs)
 
 If a `PromotionStrategy` is labeled but its `GitRepository` is not, promotion fails with confusing `NotFound` errors even though the repository exists in the API.
 
