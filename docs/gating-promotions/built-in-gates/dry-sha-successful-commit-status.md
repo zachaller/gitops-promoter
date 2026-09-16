@@ -52,6 +52,24 @@ The dry commit an environment is running *right now* has no note yet (one is wri
 so it is prepended each reconcile from live status with `source: live`. Git-derived entries carry `source: note`, or
 `source: commit-message` when the note is missing and the merge commit's own trailers were used instead.
 
+### Live checks versus recorded verdicts
+
+The record is not purely historical. The head entry is recomputed from live `PromotionStrategy` status on **every**
+reconcile — including reconciles where the git walk is skipped because the branch tip has not moved — because an
+environment's health changes without its active branch moving.
+
+That splits the gate's freshness by case. For upstream `U` and the dry commit `T` being promoted:
+
+| Situation | What the gate reads |
+|---|---|
+| `U` is running `T` right now | `U`'s **live** active commit statuses, re-read each reconcile |
+| `U` has already promoted past `T` | the verdict recorded in `T`'s promotion-history note |
+
+So when environments move in lockstep, this gate checks exactly what
+[DependentsSuccessfulCommitStatus](dependents-successful-commit-status.md) checks, at the same freshness. Recorded
+verdicts only come into play for commits the upstream has already left behind — where a live check is impossible,
+because nothing is running that commit any more.
+
 ## Ordering and the `allowNewerDrySha` rule
 
 The record is a **first-parent walk**, so a lower index is strictly a later promotion on that branch. That makes the
@@ -125,6 +143,15 @@ a single predictable name can be used in branch-protection rules.
 - **Promotion history is best-effort.** A pull request created and merged before the promoter ever refreshed its commit
   message carries no trailers, so that merge contributes no entry. The git note survives SCM-side message rewrites
   (squash merges, merges performed directly on the SCM); the commit-message fallback does not.
+- **A recorded verdict is a point sample, not a soak.** The trailers a note is built from are a snapshot of
+  `ctp.Status.Active.CommitStatuses` written into the pull request's commit message. That snapshot is refreshed on each
+  reconcile that applies the PR and frozen once the PR reaches merged or closed, and the note is written from the last
+  snapshot persisted. A recorded verdict therefore means *the upstream's active checks as of the last PR-message refresh
+  before the promotion that superseded this dry commit merged* — not "healthy for the whole time it was live". A commit
+  whose health flapped records only its final sample, and an upstream that degraded between that refresh and the merge
+  records the stale passing verdict. This applies only to commits the upstream has already promoted past; the one it is
+  running now is always checked live (see
+  [Live checks versus recorded verdicts](#live-checks-versus-recorded-verdicts)).
 - **This is the only built-in gate that clones the repository.** Its ServiceAccount needs read access to the
   `GitRepository`, `ScmProvider`/`ClusterScmProvider`, and the credentials `Secret`. Steady-state cost is near zero — the
   clone is reused across reconciles and the walk is skipped while branch tips are unchanged — but expect one clone per
