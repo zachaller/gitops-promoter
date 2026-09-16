@@ -26,8 +26,8 @@ type DryShaSuccessfulCommitStatusUpstreamStatusApplyConfiguration struct {
 	// Branch is the upstream environment branch name.
 	Branch *string `json:"branch,omitempty"`
 	// SatisfiedBySha is the dry commit whose recorded success satisfied this upstream. It equals the
-	// target dry SHA for an exact match, or a descendant dry SHA when spec.allowNewerDrySha applies.
-	// Omitted when the upstream is not satisfied.
+	// target dry SHA when the target itself was successful, or a descendant dry SHA when a later
+	// promotion on the upstream's active branch was. Omitted when the upstream is not satisfied.
 	SatisfiedBySha *string `json:"satisfiedBySha,omitempty"`
 	// Reason explains the verdict for this upstream. It is normally set only when the upstream is not
 	// satisfied, but a satisfied upstream also carries one when it was skipped because the proposed dry

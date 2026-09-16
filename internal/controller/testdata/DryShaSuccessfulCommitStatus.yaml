@@ -9,9 +9,6 @@ spec:
   # Walk this many first-parent commits of each environment's active branch when rebuilding the record
   # from the promotion-history git notes.
   historyDepth: 20
-  # An upstream that is successful on a dry commit descending from the target also satisfies the gate.
-  # Set to false to require the target dry commit itself to have been successful.
-  allowNewerDrySha: true
   url:
     template: "https://promoter.example.com/promotion-strategies/{{ .PromotionStrategy.Name }}?env={{ urlQueryEscape .Environment }}"
 status:

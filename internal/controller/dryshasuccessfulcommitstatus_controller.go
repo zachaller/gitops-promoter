@@ -763,12 +763,19 @@ func evaluateDryShaUpstream(
 	}
 
 	// 2. A later promotion on this branch — which therefore carries the target's content — was successful.
-	if targetIndex >= 0 && firstSuccessIndex >= 0 && firstSuccessIndex < targetIndex && dscs.Spec.IsAllowNewerDrySha() {
+	//
+	//    This is what makes the gate self-healing. A recorded verdict is a point sample: an environment's
+	//    active checks do not gate its own merge, so it can promote past a commit while that commit's
+	//    checks are still pending, freezing an unsuccessful verdict that nothing ever re-evaluates.
+	//    Accepting a later success means the environment recovers as soon as it is healthy on anything
+	//    descended from the target, rather than stalling forever on a stale sample.
+	if targetIndex >= 0 && firstSuccessIndex >= 0 && firstSuccessIndex < targetIndex {
 		return dryShaSatisfaction{Satisfied: true, SatisfiedBySha: records[firstSuccessIndex].Sha}
 	}
 
-	// 3. The target reached this environment but was not successful, and either nothing newer succeeded or
-	//    spec.allowNewerDrySha is off.
+	// 3. The target reached this environment and neither it nor anything newer has been successful, so the
+	//    environment is currently unhealthy for this change. This clears on its own once it recovers: the
+	//    live head entry is recomputed from live status every reconcile.
 	if targetIndex >= 0 {
 		return dryShaSatisfaction{
 			Reason: fmt.Sprintf("Waiting for %q to become successful on the proposed dry commit", branch),

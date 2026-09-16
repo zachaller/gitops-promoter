@@ -92,7 +92,7 @@ right. When an environment is skipped this way, its `status.environments[].upstr
 satisfied with a `reason` saying the proposed dry commit renders no change there, because no
 `dryShaHistory` entry records it.
 
-## Ordering and the `allowNewerDrySha` rule
+## Ordering and the newer-commit rule
 
 The record is a **first-parent walk**, so a lower index is strictly a later promotion on that branch. That makes the
 "newer commit" rule sound rather than a guess: if the upstream was successful on an entry newer than the target, it
@@ -101,13 +101,17 @@ demonstrably ran the target's content and has since become healthy past it.
 An upstream is satisfied when either:
 
 1. the target dry commit itself is recorded successful, or
-2. a **newer** entry is recorded successful (`spec.allowNewerDrySha`, default `true`).
+2. a **newer** entry is recorded successful.
 
 No timestamps are compared, so clock skew, second-granularity ties, and force-pushed commit times cannot affect the
 decision.
 
-Set `allowNewerDrySha: false` to require the target dry commit itself to have been successful. This is stricter, but an
-environment whose health window was never captured can stall — see the caveats below.
+Rule 2 is not a convenience — it is what keeps the gate from stalling. A recorded verdict is a point sample, and an
+environment's *active* checks do not gate its own merge; they gate downstream. So an environment can promote past a dry
+commit while that commit's checks are still running, freezing an unsuccessful verdict that nothing ever re-evaluates.
+An Argo CD sync still in progress is enough to cause it, and a deliberate soak
+([TimedCommitStatus](timed-commit-status.md)) makes it routine. Accepting a later success means the environment
+recovers as soon as it is healthy again on anything descended from the target, instead of blocking that change forever.
 
 ## Configuration
 
@@ -122,7 +126,6 @@ spec:
     name: my-promotion-strategy
   key: dry-sha-successful
   historyDepth: 20
-  allowNewerDrySha: true
 ```
 
 Attach it to the PromotionStrategy. `kind` must be set explicitly, because `orderCommitStatusRef.kind` defaults to
@@ -151,7 +154,6 @@ a single predictable name can be used in branch-protection rules.
 |-------|---------|---------|
 | `key` | required | Commit status key, and the SCM context name |
 | `historyDepth` | `20` | First-parent commits walked per active branch |
-| `allowNewerDrySha` | `true` | Allow a newer successful entry to satisfy the target |
 | `url.template` | — | Go template for the child CommitStatus details link |
 
 ## Caveats
@@ -174,6 +176,12 @@ a single predictable name can be used in branch-protection rules.
   records the stale passing verdict. This applies only to commits the upstream has already promoted past; the one it is
   running now is always checked live (see
   [Live checks versus recorded verdicts](#live-checks-versus-recorded-verdicts)).
+- **A pending check at snapshot time is recorded as a failure, and clears only when something newer
+  succeeds.** Because an environment's active checks do not gate its own merge, a promotion that lands while
+  the previous commit's checks are still running freezes an unsuccessful verdict for that commit. The
+  environment recovers as soon as it is healthy on any later commit — see
+  [Ordering and the newer-commit rule](#ordering-and-the-newer-commit-rule) — but until then that specific dry
+  commit reads as unsuccessful in `dryShaHistory`, which can be surprising when reading status.
 - **This is the only built-in gate that clones the repository.** Its ServiceAccount needs read access to the
   `GitRepository`, `ScmProvider`/`ClusterScmProvider`, and the credentials `Secret`. Steady-state cost is near zero — the
   clone is reused across reconciles and the walk is skipped while branch tips are unchanged — but expect one clone per

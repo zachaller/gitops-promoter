@@ -2934,13 +2934,6 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitSta
 							Ref:         ref(apiv1alpha1.URLConfig{}.OpenAPIModelName()),
 						},
 					},
-					"allowNewerDrySha": {
-						SchemaProps: spec.SchemaProps{
-							Description: "AllowNewerDrySha lets an upstream environment satisfy the gate when it is successful on a dry commit that descends from the target dry commit, rather than requiring the target itself to have been successful. Because the record is rebuilt from a first-parent walk of the upstream's active branch, a later entry is strictly a later promotion on that branch, so the upstream demonstrably deployed the target's content and has since become healthy past it.\n\nSet to false for exact-SHA-only semantics: the target dry commit itself must have been successful.",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
 					"historyDepth": {
 						SchemaProps: spec.SchemaProps{
 							Description: "HistoryDepth is how many first-parent commits of each environment's active branch are walked when rebuilding the dry SHA record from the promotion-history git notes. A dry commit older than this depth is not found in the record and the gate reports pending for it.",
@@ -3045,7 +3038,7 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitSta
 					},
 					"satisfiedBySha": {
 						SchemaProps: spec.SchemaProps{
-							Description: "SatisfiedBySha is the dry commit whose recorded success satisfied this upstream. It equals the target dry SHA for an exact match, or a descendant dry SHA when spec.allowNewerDrySha applies. Omitted when the upstream is not satisfied.",
+							Description: "SatisfiedBySha is the dry commit whose recorded success satisfied this upstream. It equals the target dry SHA when the target itself was successful, or a descendant dry SHA when a later promotion on the upstream's active branch was. Omitted when the upstream is not satisfied.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

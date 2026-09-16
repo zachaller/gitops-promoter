@@ -58,13 +58,12 @@ func dryShaRecord(sha string, successful bool) promoterv1alpha1.DryShaRecord {
 	}
 }
 
-// dryShaGate builds a gate CR for the unit tests, with allowNewerDrySha set explicitly.
-func dryShaGate(allowNewer bool, historyDepth int32) *promoterv1alpha1.DryShaSuccessfulCommitStatus {
+// dryShaGate builds a gate CR for the unit tests.
+func dryShaGate(historyDepth int32) *promoterv1alpha1.DryShaSuccessfulCommitStatus {
 	return &promoterv1alpha1.DryShaSuccessfulCommitStatus{
 		Spec: promoterv1alpha1.DryShaSuccessfulCommitStatusSpec{
-			Key:              promoterv1alpha1.DryShaSuccessfulCommitStatusKey,
-			AllowNewerDrySha: &allowNewer,
-			HistoryDepth:     historyDepth,
+			Key:          promoterv1alpha1.DryShaSuccessfulCommitStatusKey,
+			HistoryDepth: historyDepth,
 		},
 	}
 }
@@ -367,7 +366,7 @@ var _ = Describe("evaluateDryShaUpstream", func() {
 
 	It("is satisfied when the target dry commit itself was successful", func() {
 		records := []promoterv1alpha1.DryShaRecord{dryShaRecord(shaB, true), dryShaRecord(shaA, true)}
-		result := evalUpstream(dryShaGate(true, 20), shaA, reportedEnvStatus(shaC, true), records)
+		result := evalUpstream(dryShaGate(20), shaA, reportedEnvStatus(shaC, true), records)
 		Expect(result.Satisfied).To(BeTrue())
 		Expect(result.SatisfiedBySha).To(Equal(shaA))
 	})
@@ -380,61 +379,54 @@ var _ = Describe("evaluateDryShaUpstream", func() {
 			dryShaRecord(shaB, true),
 			dryShaRecord(shaA, true),
 		}
-		result := evalUpstream(dryShaGate(true, 20), shaA, reportedEnvStatus(shaC, true), records)
+		result := evalUpstream(dryShaGate(20), shaA, reportedEnvStatus(shaC, true), records)
 		Expect(result.Satisfied).To(BeTrue())
 		Expect(result.SatisfiedBySha).To(Equal(shaA))
 	})
 
 	It("is satisfied by a descendant that was successful when the target itself was not", func() {
 		records := []promoterv1alpha1.DryShaRecord{dryShaRecord(shaB, true), dryShaRecord(shaA, false)}
-		result := evalUpstream(dryShaGate(true, 20), shaA, reportedEnvStatus(shaC, true), records)
+		result := evalUpstream(dryShaGate(20), shaA, reportedEnvStatus(shaC, true), records)
 		Expect(result.Satisfied).To(BeTrue())
 		Expect(result.SatisfiedBySha).To(Equal(shaB),
 			"a later first-parent entry necessarily carries the target's content")
 	})
 
-	It("is not satisfied by a descendant when allowNewerDrySha is false", func() {
-		records := []promoterv1alpha1.DryShaRecord{dryShaRecord(shaB, true), dryShaRecord(shaA, false)}
-		result := evalUpstream(dryShaGate(false, 20), shaA, reportedEnvStatus(shaC, true), records)
-		Expect(result.Satisfied).To(BeFalse())
-		Expect(result.Reason).To(ContainSubstring("successful"))
-	})
-
 	It("is not satisfied when the target was unsuccessful and nothing newer succeeded", func() {
 		records := []promoterv1alpha1.DryShaRecord{dryShaRecord(shaB, false), dryShaRecord(shaA, false)}
-		result := evalUpstream(dryShaGate(true, 20), shaA, reportedEnvStatus(shaB, false), records)
+		result := evalUpstream(dryShaGate(20), shaA, reportedEnvStatus(shaB, false), records)
 		Expect(result.Satisfied).To(BeFalse())
 	})
 
 	It("does not count an older success as satisfying a newer target", func() {
 		// shaA succeeded before shaB was promoted, so it says nothing about shaB.
 		records := []promoterv1alpha1.DryShaRecord{dryShaRecord(shaB, false), dryShaRecord(shaA, true)}
-		result := evalUpstream(dryShaGate(true, 20), shaB, reportedEnvStatus(shaB, false), records)
+		result := evalUpstream(dryShaGate(20), shaB, reportedEnvStatus(shaB, false), records)
 		Expect(result.Satisfied).To(BeFalse())
 	})
 
 	It("reports a waiting-for-promotion reason when the target never reached the upstream", func() {
 		records := []promoterv1alpha1.DryShaRecord{dryShaRecord(shaA, true)}
-		result := evalUpstream(dryShaGate(true, 20), shaC, reportedEnvStatus(shaA, true), records)
+		result := evalUpstream(dryShaGate(20), shaC, reportedEnvStatus(shaA, true), records)
 		Expect(result.Satisfied).To(BeFalse())
 		Expect(result.Reason).To(ContainSubstring("to be promoted"))
 	})
 
 	It("names the history depth when the record filled the whole walk without the target", func() {
 		records := []promoterv1alpha1.DryShaRecord{dryShaRecord(shaA, true), dryShaRecord(shaB, true)}
-		result := evalUpstream(dryShaGate(true, 2), shaC, reportedEnvStatus(shaA, true), records)
+		result := evalUpstream(dryShaGate(2), shaC, reportedEnvStatus(shaA, true), records)
 		Expect(result.Satisfied).To(BeFalse())
 		Expect(result.Reason).To(ContainSubstring("historyDepth"))
 	})
 
 	It("waits for the hydrator when the target dry SHA is not yet known", func() {
-		result := evalUpstream(dryShaGate(true, 20), "", reportedEnvStatus(shaA, true), nil)
+		result := evalUpstream(dryShaGate(20), "", reportedEnvStatus(shaA, true), nil)
 		Expect(result.Satisfied).To(BeFalse())
 		Expect(result.Reason).To(ContainSubstring("hydrator"))
 	})
 
 	It("waits when the upstream has not reported any environment status", func() {
-		result := evalUpstream(dryShaGate(true, 20), shaA, promoterv1alpha1.EnvironmentStatus{}, nil)
+		result := evalUpstream(dryShaGate(20), shaA, promoterv1alpha1.EnvironmentStatus{}, nil)
 		Expect(result.Satisfied).To(BeFalse())
 		Expect(result.Reason).To(ContainSubstring("environment status to be reported"))
 	})
@@ -467,7 +459,7 @@ var _ = Describe("evaluateDryShaUpstream no-op hydration", func() {
 	It("skips a clean healthy no-op whose own upstreams are satisfied", func() {
 		// stg's note advanced to the target without new hydrated content, and stg is settled and healthy.
 		// dev ran the target successfully, so there is nothing left to wait on.
-		result := evalStg(dryShaGate(true, 20),
+		result := evalStg(dryShaGate(20),
 			map[string]promoterv1alpha1.EnvironmentStatus{
 				"stg": noOpEnvStatus(shaA, shaA, shaT, true),
 				"dev": reportedEnvStatus(shaT, true),
@@ -481,7 +473,7 @@ var _ = Describe("evaluateDryShaUpstream no-op hydration", func() {
 	})
 
 	It("holds pending when the no-op environment is unhealthy", func() {
-		result := evalStg(dryShaGate(true, 20),
+		result := evalStg(dryShaGate(20),
 			map[string]promoterv1alpha1.EnvironmentStatus{
 				"stg": noOpEnvStatus(shaA, shaA, shaT, false),
 				"dev": reportedEnvStatus(shaT, true),
@@ -496,7 +488,7 @@ var _ = Describe("evaluateDryShaUpstream no-op hydration", func() {
 	It("holds pending when the no-op environment still has a promotion of its own in flight", func() {
 		// Active and proposed dry disagree, so stg's active state is about to change and is not a safe
 		// basis for skipping it.
-		result := evalStg(dryShaGate(true, 20),
+		result := evalStg(dryShaGate(20),
 			map[string]promoterv1alpha1.EnvironmentStatus{
 				"stg": noOpEnvStatus(shaA, shaB, shaT, true),
 				"dev": reportedEnvStatus(shaT, true),
@@ -511,7 +503,7 @@ var _ = Describe("evaluateDryShaUpstream no-op hydration", func() {
 
 	It("propagates an unsatisfied upstream through the no-op", func() {
 		// Skipping stg must not also skip dev behind it: dev never ran the target.
-		result := evalStg(dryShaGate(true, 20),
+		result := evalStg(dryShaGate(20),
 			map[string]promoterv1alpha1.EnvironmentStatus{
 				"stg": noOpEnvStatus(shaA, shaA, shaT, true),
 				"dev": reportedEnvStatus(shaA, true),
@@ -528,7 +520,7 @@ var _ = Describe("evaluateDryShaUpstream no-op hydration", func() {
 		// The note agrees with the proposed dry, so there IS hydrated content for the target and a real
 		// promotion is owed. This must stay pending rather than being skipped.
 		status := noOpEnvStatus(shaA, shaT, shaT, true)
-		result := evalStg(dryShaGate(true, 20),
+		result := evalStg(dryShaGate(20),
 			map[string]promoterv1alpha1.EnvironmentStatus{
 				"stg": status,
 				"dev": reportedEnvStatus(shaT, true),
@@ -542,7 +534,7 @@ var _ = Describe("evaluateDryShaUpstream no-op hydration", func() {
 	})
 
 	It("does not treat an environment whose hydrator has not reached the target as a no-op", func() {
-		result := evalStg(dryShaGate(true, 20),
+		result := evalStg(dryShaGate(20),
 			map[string]promoterv1alpha1.EnvironmentStatus{
 				"stg": noOpEnvStatus(shaA, shaA, shaB, true),
 				"dev": reportedEnvStatus(shaT, true),
@@ -805,6 +797,51 @@ var _ = Describe("dryShaRecordForCommit", func() {
 		Expect(ok).To(BeTrue())
 		Expect(record.Sha).To(Equal(activeDry), "the note is the durable copy and must win")
 		Expect(record.Successful).To(BeFalse())
+	})
+
+	It("recovers from a verdict frozen while an active check was still pending", func() {
+		// An environment's ACTIVE checks do not gate its own merge -- they gate downstream -- so it can
+		// promote past a dry commit while that commit's checks are still running. The snapshot taken for
+		// the superseding promotion then freezes an unsuccessful verdict that nothing ever re-evaluates.
+		//
+		// A timed soak (TimedCommitStatus, key "timer") is the clearest example because the pending window
+		// is deliberate, but any active check does this: an Argo CD sync still in progress behaves the same.
+		// Accepting a later success is what keeps that from stalling the pipeline forever.
+		soakedDry := activeDry
+		liveDry := drySha("b")
+
+		sha := commitWithTrailers("promote-during-soak", nil)
+		mustRunGit(workDir, "push", "origin", branch)
+		Expect(gitOps.FetchBranch(ctx, branch)).To(Succeed())
+		addNote(sha, map[string][]string{
+			constants.TrailerShaDryActive:                                     {soakedDry},
+			constants.TrailerCommitStatusActivePrefix + "argocd-health-phase": {"success"},
+			constants.TrailerCommitStatusActivePrefix + "timer-phase":         {"pending"},
+		})
+
+		r := &DryShaSuccessfulCommitStatusReconciler{}
+		record, ok := r.dryShaRecordForCommit(ctx, gitOps, sha)
+		Expect(ok).To(BeTrue())
+		Expect(record.Sha).To(Equal(soakedDry))
+		Expect(record.Successful).To(BeFalse(), "the soak had not elapsed when the snapshot was taken")
+
+		// Notes are reused rather than rewritten once the pull request has merged, so this verdict is
+		// frozen in git: re-walking the same commit can never produce a different answer.
+		again, ok := r.dryShaRecordForCommit(ctx, gitOps, sha)
+		Expect(ok).To(BeTrue())
+		Expect(again.Successful).To(BeFalse(), "the recorded verdict is frozen in git")
+
+		// The environment has since settled, so its live head is healthy. Build the record the way the
+		// controller does: git-derived entries with the live head prepended.
+		settled := reportedEnvStatus(liveDry, true)
+		records := withLiveHeadRecord([]promoterv1alpha1.DryShaRecord{record}, settled)
+		Expect(records).To(HaveLen(2))
+		Expect(records[0].Successful).To(BeTrue(), "the live head is healthy once the environment settles")
+
+		result := evalUpstream(dryShaGate(20), soakedDry, settled, records)
+		Expect(result.Satisfied).To(BeTrue(),
+			"a frozen unsuccessful verdict must not stall the pipeline once the environment is healthy again")
+		Expect(result.SatisfiedBySha).To(Equal(liveDry))
 	})
 
 	It("skips a commit that carries no Sha-dry-active trailer", func() {

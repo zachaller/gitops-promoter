@@ -46,17 +46,6 @@ type DryShaSuccessfulCommitStatusSpec struct {
 	// +kubebuilder:validation:Optional
 	URL URLConfig `json:"url,omitempty"`
 
-	// AllowNewerDrySha lets an upstream environment satisfy the gate when it is successful on a dry
-	// commit that descends from the target dry commit, rather than requiring the target itself to have
-	// been successful. Because the record is rebuilt from a first-parent walk of the upstream's active
-	// branch, a later entry is strictly a later promotion on that branch, so the upstream demonstrably
-	// deployed the target's content and has since become healthy past it.
-	//
-	// Set to false for exact-SHA-only semantics: the target dry commit itself must have been successful.
-	// +optional
-	// +kubebuilder:default:=true
-	AllowNewerDrySha *bool `json:"allowNewerDrySha,omitempty"`
-
 	// HistoryDepth is how many first-parent commits of each environment's active branch are walked when
 	// rebuilding the dry SHA record from the promotion-history git notes. A dry commit older than this
 	// depth is not found in the record and the gate reports pending for it.
@@ -65,12 +54,6 @@ type DryShaSuccessfulCommitStatusSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=200
 	HistoryDepth int32 `json:"historyDepth,omitempty"`
-}
-
-// IsAllowNewerDrySha reports whether the descendant-success allowance is enabled. The CRD defaults the
-// field to true; a nil pointer (a resource created against a CRD without the default) is treated as true.
-func (s *DryShaSuccessfulCommitStatusSpec) IsAllowNewerDrySha() bool {
-	return s.AllowNewerDrySha == nil || *s.AllowNewerDrySha
 }
 
 // EffectiveHistoryDepth returns spec.historyDepth, or the default when it is unset.
@@ -141,8 +124,8 @@ type DryShaSuccessfulCommitStatusUpstreamStatus struct {
 	Branch string `json:"branch"`
 
 	// SatisfiedBySha is the dry commit whose recorded success satisfied this upstream. It equals the
-	// target dry SHA for an exact match, or a descendant dry SHA when spec.allowNewerDrySha applies.
-	// Omitted when the upstream is not satisfied.
+	// target dry SHA when the target itself was successful, or a descendant dry SHA when a later
+	// promotion on the upstream's active branch was. Omitted when the upstream is not satisfied.
 	// +optional
 	// +kubebuilder:validation:MaxLength=64
 	// +kubebuilder:validation:Pattern=`^([a-f0-9]{40}|[a-f0-9]{64})?$`

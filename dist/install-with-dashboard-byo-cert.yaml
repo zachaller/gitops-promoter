@@ -5070,17 +5070,6 @@ spec:
           spec:
             description: spec defines the desired state of DryShaSuccessfulCommitStatus
             properties:
-              allowNewerDrySha:
-                default: true
-                description: |-
-                  AllowNewerDrySha lets an upstream environment satisfy the gate when it is successful on a dry
-                  commit that descends from the target dry commit, rather than requiring the target itself to have
-                  been successful. Because the record is rebuilt from a first-parent walk of the upstream's active
-                  branch, a later entry is strictly a later promotion on that branch, so the upstream demonstrably
-                  deployed the target's content and has since become healthy past it.
-
-                  Set to false for exact-SHA-only semantics: the target dry commit itself must have been successful.
-                type: boolean
               historyDepth:
                 default: 20
                 description: |-
@@ -5341,8 +5330,8 @@ spec:
                           satisfiedBySha:
                             description: |-
                               SatisfiedBySha is the dry commit whose recorded success satisfied this upstream. It equals the
-                              target dry SHA for an exact match, or a descendant dry SHA when spec.allowNewerDrySha applies.
-                              Omitted when the upstream is not satisfied.
+                              target dry SHA when the target itself was successful, or a descendant dry SHA when a later
+                              promotion on the upstream's active branch was. Omitted when the upstream is not satisfied.
                             maxLength: 64
                             pattern: ^([a-f0-9]{40}|[a-f0-9]{64})?$
                             type: string

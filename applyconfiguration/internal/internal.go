@@ -762,10 +762,6 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatusSpec
   map:
     fields:
-    - name: allowNewerDrySha
-      type:
-        scalar: boolean
-      default: true
     - name: historyDepth
       type:
         scalar: numeric

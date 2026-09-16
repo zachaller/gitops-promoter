@@ -588,12 +588,6 @@ export type components = {
         /** @description DryShaSuccessfulCommitStatusSpec defines the desired state of DryShaSuccessfulCommitStatus. */
         DryShaSuccessfulCommitStatusSpec: {
             /**
-             * @description AllowNewerDrySha lets an upstream environment satisfy the gate when it is successful on a dry commit that descends from the target dry commit, rather than requiring the target itself to have been successful. Because the record is rebuilt from a first-parent walk of the upstream's active branch, a later entry is strictly a later promotion on that branch, so the upstream demonstrably deployed the target's content and has since become healthy past it.
-             *
-             *     Set to false for exact-SHA-only semantics: the target dry commit itself must have been successful.
-             */
-            allowNewerDrySha?: boolean;
-            /**
              * Format: int32
              * @description HistoryDepth is how many first-parent commits of each environment's active branch are walked when rebuilding the dry SHA record from the promotion-history git notes. A dry commit older than this depth is not found in the record and the gate reports pending for it.
              */
@@ -635,14 +629,14 @@ export type components = {
              * @default
              */
             branch: string;
-            /** @description Reason explains why the upstream is not satisfied. Omitted when satisfied is true. */
+            /** @description Reason explains the verdict for this upstream. It is normally set only when the upstream is not satisfied, but a satisfied upstream also carries one when it was skipped because the proposed dry commit renders no change there (a no-op hydration), since nothing in dryShaHistory records that. */
             reason?: string;
             /**
              * @description Satisfied is true when the upstream has been successful for this environment's target dry SHA.
              * @default false
              */
             satisfied: boolean;
-            /** @description SatisfiedBySha is the dry commit whose recorded success satisfied this upstream. It equals the target dry SHA for an exact match, or a descendant dry SHA when spec.allowNewerDrySha applies. Omitted when the upstream is not satisfied. */
+            /** @description SatisfiedBySha is the dry commit whose recorded success satisfied this upstream. It equals the target dry SHA when the target itself was successful, or a descendant dry SHA when a later promotion on the upstream's active branch was. Omitted when the upstream is not satisfied. */
             satisfiedBySha?: string;
         };
         /** @description Duration is a wrapper around time.Duration which supports correct marshaling to YAML and JSON. In particular, it marshals into strings, which can be used as map keys in json. */

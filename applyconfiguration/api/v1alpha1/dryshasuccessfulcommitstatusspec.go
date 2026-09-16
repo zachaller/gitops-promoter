@@ -36,14 +36,6 @@ type DryShaSuccessfulCommitStatusSpecApplyConfiguration struct {
 	// .Environment, .DryShaSuccessfulCommitStatus, .PromotionStrategy, .DependsOn, and .DependsOnQuery
 	// (see controller docs).
 	URL *URLConfigApplyConfiguration `json:"url,omitempty"`
-	// AllowNewerDrySha lets an upstream environment satisfy the gate when it is successful on a dry
-	// commit that descends from the target dry commit, rather than requiring the target itself to have
-	// been successful. Because the record is rebuilt from a first-parent walk of the upstream's active
-	// branch, a later entry is strictly a later promotion on that branch, so the upstream demonstrably
-	// deployed the target's content and has since become healthy past it.
-	//
-	// Set to false for exact-SHA-only semantics: the target dry commit itself must have been successful.
-	AllowNewerDrySha *bool `json:"allowNewerDrySha,omitempty"`
 	// HistoryDepth is how many first-parent commits of each environment's active branch are walked when
 	// rebuilding the dry SHA record from the promotion-history git notes. A dry commit older than this
 	// depth is not found in the record and the gate reports pending for it.
@@ -77,14 +69,6 @@ func (b *DryShaSuccessfulCommitStatusSpecApplyConfiguration) WithKey(value strin
 // If called multiple times, the URL field is set to the value of the last call.
 func (b *DryShaSuccessfulCommitStatusSpecApplyConfiguration) WithURL(value *URLConfigApplyConfiguration) *DryShaSuccessfulCommitStatusSpecApplyConfiguration {
 	b.URL = value
-	return b
-}
-
-// WithAllowNewerDrySha sets the AllowNewerDrySha field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the AllowNewerDrySha field is set to the value of the last call.
-func (b *DryShaSuccessfulCommitStatusSpecApplyConfiguration) WithAllowNewerDrySha(value bool) *DryShaSuccessfulCommitStatusSpecApplyConfiguration {
-	b.AllowNewerDrySha = &value
 	return b
 }
 
