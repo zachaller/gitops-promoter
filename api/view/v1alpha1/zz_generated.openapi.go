@@ -3052,7 +3052,7 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitSta
 					},
 					"reason": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Reason explains why the upstream is not satisfied. Omitted when satisfied is true.",
+							Description: "Reason explains the verdict for this upstream. It is normally set only when the upstream is not satisfied, but a satisfied upstream also carries one when it was skipped because the proposed dry commit renders no change there (a no-op hydration), since nothing in dryShaHistory records that.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

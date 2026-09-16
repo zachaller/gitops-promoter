@@ -148,7 +148,9 @@ type DryShaSuccessfulCommitStatusUpstreamStatus struct {
 	// +kubebuilder:validation:Pattern=`^([a-f0-9]{40}|[a-f0-9]{64})?$`
 	SatisfiedBySha string `json:"satisfiedBySha,omitempty"`
 
-	// Reason explains why the upstream is not satisfied. Omitted when satisfied is true.
+	// Reason explains the verdict for this upstream. It is normally set only when the upstream is not
+	// satisfied, but a satisfied upstream also carries one when it was skipped because the proposed dry
+	// commit renders no change there (a no-op hydration), since nothing in dryShaHistory records that.
 	// +optional
 	Reason string `json:"reason,omitempty"`
 

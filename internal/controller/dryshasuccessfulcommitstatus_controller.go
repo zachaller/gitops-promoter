@@ -704,7 +704,7 @@ func (r *DryShaSuccessfulCommitStatusReconciler) evaluateDryShaUpstreams(
 	byBranch := make(map[string]dryShaSatisfaction, len(ancestors))
 
 	for _, upstream := range ancestors {
-		result := evaluateDryShaUpstream(dscs, upstream, targetDrySha, statusByBranch[upstream], recordsByBranch[upstream])
+		result := evaluateDryShaUpstream(dscs, g, upstream, targetDrySha, statusByBranch, recordsByBranch)
 		byBranch[upstream] = result
 		snapshots = append(snapshots, promoterv1alpha1.DryShaSuccessfulCommitStatusUpstreamStatus{
 			Branch:         upstream,
@@ -732,11 +732,15 @@ func (r *DryShaSuccessfulCommitStatusReconciler) evaluateDryShaUpstreams(
 // timestamp ties, and force-pushed timestamps cannot influence the decision.
 func evaluateDryShaUpstream(
 	dscs *promoterv1alpha1.DryShaSuccessfulCommitStatus,
+	g *dag,
 	branch string,
 	targetDrySha string,
-	envStatus promoterv1alpha1.EnvironmentStatus,
-	records []promoterv1alpha1.DryShaRecord,
+	statusByBranch map[string]promoterv1alpha1.EnvironmentStatus,
+	recordsByBranch map[string][]promoterv1alpha1.DryShaRecord,
 ) dryShaSatisfaction {
+	envStatus := statusByBranch[branch]
+	records := recordsByBranch[branch]
+
 	if targetDrySha == "" {
 		return dryShaSatisfaction{Reason: "Waiting for the hydrator to finish processing the proposed dry commit"}
 	}
@@ -781,6 +785,15 @@ func evaluateDryShaUpstream(
 		return dryShaSatisfaction{Reason: fmt.Sprintf("Waiting for %q environment status to be reported", branch)}
 	}
 
+	//    A no-op is the one case the record can never answer. When the target dry commit renders no change
+	//    for this environment, its hydrator advances the git note to the target without producing a new
+	//    hydrated commit, so the environment never promotes it: the target will never appear in its active
+	//    branch history, and waiting for it to would stall forever. Detect that from live status and look
+	//    past this environment to its own upstreams, exactly as DependentsSuccessfulCommitStatus does.
+	if result, isNoOp := evaluateDryShaNoOpUpstream(dscs, g, branch, targetDrySha, statusByBranch, recordsByBranch); isNoOp {
+		return result
+	}
+
 	//    Either the upstream has not promoted the target yet, or the target is older than the configured
 	//    walk depth. Distinguish the two so the fix is discoverable: a record that filled the whole walk
 	//    means we simply did not look far enough back.
@@ -791,4 +804,68 @@ func evaluateDryShaUpstream(
 		}
 	}
 	return dryShaSatisfaction{Reason: fmt.Sprintf("Waiting for %q to be promoted", branch)}
+}
+
+// evaluateDryShaNoOpUpstream handles the one case the recorded dry SHA history cannot answer: a target dry
+// commit that renders no change for this environment.
+//
+// When that happens the environment's hydrator advances its git note to the target without producing a new
+// hydrated commit, so no promotion ever occurs, no promotion-history note is ever written naming it, and the
+// target can never enter the environment's record. Waiting for it to be promoted would stall forever.
+//
+// isNoOp reports whether this environment is in that state for the target, and therefore whether the returned
+// satisfaction is meaningful. It is only true for a CLEAN no-op: the hydrator has processed the target, the
+// note advanced past the hydrated content, and the environment has no promotion of its own still in flight.
+// A clean no-op must additionally be healthy before we look past it, and every upstream it depends on must
+// itself be satisfied — otherwise skipping it would skip the environments behind it too.
+func evaluateDryShaNoOpUpstream(
+	dscs *promoterv1alpha1.DryShaSuccessfulCommitStatus,
+	g *dag,
+	branch string,
+	targetDrySha string,
+	statusByBranch map[string]promoterv1alpha1.EnvironmentStatus,
+	recordsByBranch map[string][]promoterv1alpha1.DryShaRecord,
+) (result dryShaSatisfaction, isNoOp bool) {
+	envStatus := statusByBranch[branch]
+
+	// The hydrator must have processed the target for this environment at all. Until it has, we cannot tell
+	// a no-op from a promotion that simply has not happened yet, so leave it to the caller's messaging.
+	hydratedForDrySha := getEffectiveHydratedDrySha(envStatus)
+	if hydratedForDrySha != targetDrySha {
+		return dryShaSatisfaction{}, false
+	}
+
+	// A no-op is the note having advanced past the dry commit the hydrated content was rendered from. If
+	// they agree there is real hydrated content for the target, so a promotion is owed and the caller's
+	// "waiting to be promoted" is correct.
+	isNoOpHydration := hydratedForDrySha != envStatus.Proposed.Dry.Sha
+	if !isNoOpHydration {
+		return dryShaSatisfaction{}, false
+	}
+
+	// A no-op is only skippable when this environment is otherwise settled. With a promotion of its own
+	// still in flight, its active state is about to change and is not a safe basis for skipping it.
+	if envStatus.Active.Dry.Sha != envStatus.Proposed.Dry.Sha {
+		return dryShaSatisfaction{
+			Reason: fmt.Sprintf("Waiting for %q to finish promoting its in-flight change", branch),
+		}, true
+	}
+
+	// Even a clean no-op must be healthy before we look past it.
+	if isPending, reason := checkCommitStatusesPassing(envStatus.Active.CommitStatuses, branch); isPending {
+		return dryShaSatisfaction{Reason: reason}, true
+	}
+
+	// Clean and healthy: the target changes nothing here, so defer to this environment's own upstreams.
+	// validateDAG has already rejected cycles, so this recursion terminates.
+	for _, upstream := range g.dependsOn[branch] {
+		if upstreamResult := evaluateDryShaUpstream(dscs, g, upstream, targetDrySha, statusByBranch, recordsByBranch); !upstreamResult.Satisfied {
+			return upstreamResult, true
+		}
+	}
+
+	return dryShaSatisfaction{
+		Satisfied: true,
+		Reason:    fmt.Sprintf("Skipped %q: the proposed dry commit renders no change there", branch),
+	}, true
 }

@@ -29,7 +29,9 @@ type DryShaSuccessfulCommitStatusUpstreamStatusApplyConfiguration struct {
 	// target dry SHA for an exact match, or a descendant dry SHA when spec.allowNewerDrySha applies.
 	// Omitted when the upstream is not satisfied.
 	SatisfiedBySha *string `json:"satisfiedBySha,omitempty"`
-	// Reason explains why the upstream is not satisfied. Omitted when satisfied is true.
+	// Reason explains the verdict for this upstream. It is normally set only when the upstream is not
+	// satisfied, but a satisfied upstream also carries one when it was skipped because the proposed dry
+	// commit renders no change there (a no-op hydration), since nothing in dryShaHistory records that.
 	Reason *string `json:"reason,omitempty"`
 	// Satisfied is true when the upstream has been successful for this environment's target dry SHA.
 	Satisfied *bool `json:"satisfied,omitempty"`

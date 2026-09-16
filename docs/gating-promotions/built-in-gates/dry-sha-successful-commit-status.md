@@ -70,6 +70,28 @@ So when environments move in lockstep, this gate checks exactly what
 verdicts only come into play for commits the upstream has already left behind — where a live check is impossible,
 because nothing is running that commit any more.
 
+### No-op hydrations
+
+There is one case the record can never answer. When a dry commit renders no change for an environment — a
+change scoped to another environment's values, or to a chart path this one does not use — that environment's
+hydrator advances its git note to the dry commit **without producing a new hydrated commit**. No promotion
+happens, so no promotion-history note ever names it, and it can never enter that environment's
+`dryShaHistory`. Waiting for it to be promoted would stall forever.
+
+The gate detects this from live status and looks *past* the environment to its own upstreams, the same way
+[DependentsSuccessfulCommitStatus](dependents-successful-commit-status.md) does. An environment is only
+skipped when the no-op is clean:
+
+- its hydrator has processed the target dry commit,
+- its git note has advanced past the dry commit its hydrated content was rendered from,
+- it has no promotion of its own still in flight, and
+- its own active commit statuses are passing.
+
+Skipping it never skips what is behind it — every upstream it depends on still has to be satisfied in its own
+right. When an environment is skipped this way, its `status.environments[].upstreams[]` entry is reported
+satisfied with a `reason` saying the proposed dry commit renders no change there, because no
+`dryShaHistory` entry records it.
+
 ## Ordering and the `allowNewerDrySha` rule
 
 The record is a **first-parent walk**, so a lower index is strictly a later promotion on that branch. That makes the
