@@ -35,7 +35,10 @@ import (
 // the generic RecommendedOptions but disables etcd because the served resource is
 // virtual (computed on the fly from a controller-runtime cache).
 type Options struct {
-	RecommendedOptions *genericoptions.RecommendedOptions
+	RecommendedOptions  *genericoptions.RecommendedOptions
+	ControllerNamespace string
+	MaxHistoryEntries   int
+	HistoryWorkers      int
 }
 
 // NewOptions returns Options with sane defaults for the dashboard apiserver.
@@ -70,6 +73,9 @@ func NewOptions() *Options {
 // AddFlags registers the apiserver flags (secure serving, delegated auth, etc.).
 func (o *Options) AddFlags(fs *pflag.FlagSet) {
 	o.RecommendedOptions.AddFlags(fs)
+	fs.StringVar(&o.ControllerNamespace, "controller-namespace", "", "Namespace of the promoter controller install (for ClusterScmProvider Secret resolution). Defaults to the namespace from kubeconfig.")
+	fs.IntVar(&o.MaxHistoryEntries, "max-history-entries", 20, "Maximum promotion history entries per environment in PromotionStrategyHistory.")
+	fs.IntVar(&o.HistoryWorkers, "history-workers", 4, "Number of parallel workers rebuilding PromotionStrategyHistory.")
 }
 
 // Validate validates the options.
@@ -78,12 +84,15 @@ func (o *Options) Validate() error {
 	if len(errs) > 0 {
 		return fmt.Errorf("invalid apiserver options: %v", errs)
 	}
+	if o.HistoryWorkers < 1 {
+		return fmt.Errorf("history-workers must be at least 1")
+	}
 	return nil
 }
 
 // Config builds the apiserver Config from the options. The provided BundleProvider
 // backs the REST storage and watch fan-out.
-func (o *Options) Config(provider *BundleProvider) (*Config, error) {
+func (o *Options) Config(provider *BundleProvider, historyProvider *HistoryProvider) (*Config, error) {
 	// Allow running without externally-provided certs (dev/local); production
 	// deployments mount a serving cert and pass --tls-cert-file/--tls-private-key-file.
 	if err := o.RecommendedOptions.SecureServing.MaybeDefaultWithSelfSignedCerts(
@@ -122,7 +131,8 @@ func (o *Options) Config(provider *BundleProvider) (*Config, error) {
 	config := &Config{
 		GenericConfig: serverConfig,
 		ExtraConfig: ExtraConfig{
-			Provider: provider,
+			Provider:        provider,
+			HistoryProvider: historyProvider,
 		},
 	}
 	return config, nil

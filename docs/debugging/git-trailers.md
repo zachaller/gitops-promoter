@@ -1,6 +1,6 @@
 # Git Trailers
 
-GitOps Promoter records what it promoted as **git trailers** — `Key: value` lines in a trailing block of a commit message, the same convention as `Signed-off-by`. They are how `ChangeTransferPolicy.status.history` (and the promotion history in the dashboard) is rebuilt from Git rather than from controller memory, so a restarted or upgraded controller still shows the same history.
+GitOps Promoter records what it promoted as **git trailers** — `Key: value` lines in a trailing block of a commit message, the same convention as `Signed-off-by`. They are how `PromotionStrategyHistory` (and the promotion history in the dashboard) is rebuilt from Git rather than from controller memory, so a restarted or upgraded apiserver still shows the same history.
 
 The same trailer data is stored in up to three places, and they do not always agree. This page is the reference for what each trailer means, where it is written, and — most importantly — [which values can differ between the git note and the commit message](#note-versus-commit-message).
 
@@ -10,21 +10,21 @@ All trailer keys are Go constants in [`internal/types/constants/trailers.go`](ht
 
 | Trailer | Value | Read back into |
 | --- | --- | --- |
-| `Pull-request-id` | The SCM's pull request ID. | `status.history[].pullRequest.id` |
-| `Pull-request-url` | Link to the pull request. Ignored unless it starts with `http://` or `https://`. | `status.history[].pullRequest.url` |
-| `Pull-request-creation-time` | When the pull request was opened, RFC 3339. | `status.history[].pullRequest.prCreationTime` |
-| `Pull-request-merge-time` | When the pull request was merged, RFC 3339. See [below](#note-versus-commit-message) — this one is special. | `status.history[].pullRequest.prMergeTime` |
+| `Pull-request-id` | The SCM's pull request ID. | `PromotionStrategyHistory` `status.environments[].history[].pullRequest.id` |
+| `Pull-request-url` | Link to the pull request. Ignored unless it starts with `http://` or `https://`. | `...history[].pullRequest.url` |
+| `Pull-request-creation-time` | When the pull request was opened, RFC 3339. | `...history[].pullRequest.prCreationTime` |
+| `Pull-request-merge-time` | When the pull request was merged, RFC 3339. See [below](#note-versus-commit-message) — this one is special. | `...history[].pullRequest.prMergeTime` |
 | `Pull-request-source-branch` | The proposed branch, e.g. `environment/production-next`. | Not read back; archival only. |
 | `Pull-request-target-branch` | The active branch, e.g. `environment/production`. | Not read back; archival only. |
 | `Sha-dry-proposed` | Dry (pre-hydration) SHA of the proposed change. | Used to detect a [snapshot mismatch](finalizers.md#external-merge-scm-ui-tide-or-another-bot); no dedicated history field. |
-| `Sha-hydrated-proposed` | Hydrated SHA of the proposed change. | `status.history[].proposed.hydrated` (the entry is loaded from Git at that SHA). |
+| `Sha-hydrated-proposed` | Hydrated SHA of the proposed change. | `...history[].proposed.hydrated` (the entry is loaded from Git at that SHA). |
 | `Sha-dry-active` | Dry SHA of the active branch at snapshot time. | Not read back — the active side of a history entry is reconstructed from the merge commit itself. |
 | `Sha-hydrated-active` | Hydrated SHA of the active branch at snapshot time. | Not read back, same reason. |
-| `Commit-status-active-<key>-phase` | Phase of gate `<key>` on the active branch, e.g. `success`. | `status.history[].active.commitStatuses[]` |
-| `Commit-status-active-<key>-url` | Gate detail link. Ignored unless `http://` or `https://`. | `status.history[].active.commitStatuses[]` |
-| `Commit-status-active-<key>-description` | Gate description, **JSON-encoded** so it survives multi-line and quoted text. | `status.history[].active.commitStatuses[]` |
-| `Commit-status-proposed-<key>-*` | Same three suffixes for gates on the proposed branch. | `status.history[].proposed.commitStatuses[]` |
-| `Promoter-merge-commit-snapshot-mismatch` | `true` when snapshot proposed dry SHA disagreed with hydrator metadata on the merge commit and the note was corrected. Written **only** to the note. | `status.history[].mergeCommitSnapshotMismatch` |
+| `Commit-status-active-<key>-phase` | Phase of gate `<key>` on the active branch, e.g. `success`. | `...history[].active.commitStatuses[]` |
+| `Commit-status-active-<key>-url` | Gate detail link. Ignored unless `http://` or `https://`. | `...history[].active.commitStatuses[]` |
+| `Commit-status-active-<key>-description` | Gate description, **JSON-encoded** so it survives multi-line and quoted text. | `...history[].active.commitStatuses[]` |
+| `Commit-status-proposed-<key>-*` | Same three suffixes for gates on the proposed branch. | `...history[].proposed.commitStatuses[]` |
+| `Promoter-merge-commit-snapshot-mismatch` | `true` when snapshot proposed dry SHA disagreed with hydrator metadata on the merge commit and the note was corrected. Written **only** to the note. | `...history[].mergeCommitSnapshotMismatch` |
 
 > [!NOTE]
 > Gate keys are recovered by trimming the final `-phase`, `-url`, or `-description` segment from the trailer key, so a gate key of its own may contain dashes (`Commit-status-active-argocd-health-phase` yields key `argocd-health`). A gate key whose own last segment looks like a suffix would be parsed incorrectly.
@@ -47,7 +47,7 @@ That fragility is exactly why the note exists.
 
 At finalization — before the `PullRequest` CR is allowed to disappear — the ChangeTransferPolicy controller writes the trailers as a JSON object in a git note at `refs/notes/promoter.history`, attached to the commit named by `PullRequest.status.mergedTargetSha`. See [Promotion history git notes](finalizers.md#promotion-history-git-notes) for the finalizer mechanics, failure handling, and what happens when no merge SHA is ever obtained.
 
-When rebuilding history, the controller walks the last five first-parent commits of the active branch and, for each, **prefers the note** and falls back to the commit message's trailers when no readable note exists. That fallback is what keeps merges from before the notes feature visible.
+When rebuilding history, the dashboard apiserver walks a bounded number of first-parent commits of each environment's active branch (default 20, `--max-history-entries`) and, for each, **prefers the note** and falls back to the commit message's trailers when no readable note exists. That fallback is what keeps merges from before the notes feature visible.
 
 ## Note versus commit message
 
@@ -64,7 +64,7 @@ An **external** merge has no such guard. The proposed branch can advance after t
 | `Promoter-merge-commit-snapshot-mismatch` | **Note only.** | Never written to a commit message. Its presence is the signal that the corrections above happened. |
 | `Pull-request-id`, `-url`, `-creation-time`, `-source-branch`, `-target-branch`, `Sha-dry-active`, `Sha-hydrated-active` | **No.** | Copied into the note verbatim from the snapshot. |
 
-So when `status.history[].mergeCommitSnapshotMismatch` is `true`, the proposed **dry** SHA in that entry was re-read from the merge commit's hydrator metadata and is trustworthy. The proposed **hydrated** SHA was re-read too on a regular merge commit (second parent), but on a squash or fast-forward merge it is still the stale snapshot value. Treat **commit statuses** as possibly describing a superseded revision. The controller also emits [PromotionHistoryNoteMergeCommitSnapshotMismatch](../monitoring/events.md#changetransferpolicy) when it applies the correction.
+So when `...history[].mergeCommitSnapshotMismatch` is `true` on a `PromotionStrategyHistory` entry, the proposed **dry** SHA in that entry was re-read from the merge commit's hydrator metadata and is trustworthy. The proposed **hydrated** SHA was re-read too on a regular merge commit (second parent), but on a squash or fast-forward merge it is still the stale snapshot value. Treat **commit statuses** as possibly describing a superseded revision. The controller also emits [PromotionHistoryNoteMergeCommitSnapshotMismatch](../monitoring/events.md#changetransferpolicy) when it applies the correction.
 
 ## Inspecting trailers
 

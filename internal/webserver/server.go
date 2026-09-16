@@ -33,6 +33,7 @@ var logger = ctrl.Log.WithName("webServer")
 // promotionStrategyDetailsKind is the Kind of the aggregated bundle resource and
 // the SSE event name the dashboard UI subscribes to.
 const promotionStrategyDetailsKind = "PromotionStrategyDetails"
+const promotionStrategyHistoryKind = "PromotionStrategyHistory"
 
 // WebServer handles the web server functionality for the dashboard and API endpoints.
 type WebServer struct {
@@ -127,28 +128,51 @@ func (ws *WebServer) sendDeleteEvent(e client.Object) {
 // PromotionStrategyDetails bundle served by the dashboard aggregation apiserver and
 // forwards each bundle to clients over SSE.
 func (ws *WebServer) SetupWithManager(mgr ctrl.Manager) error {
+	detailsHandler := handler.Funcs{
+		CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			if bundle, ok := e.Object.(*viewv1alpha1.PromotionStrategyDetails); ok {
+				bundle.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyDetailsKind))
+				ws.sendEvent(bundle)
+			}
+		},
+		UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			if bundle, ok := e.ObjectNew.(*viewv1alpha1.PromotionStrategyDetails); ok {
+				bundle.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyDetailsKind))
+				ws.sendEvent(bundle)
+			}
+		},
+		DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			if bundle, ok := e.Object.(*viewv1alpha1.PromotionStrategyDetails); ok {
+				bundle.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyDetailsKind))
+				ws.sendDeleteEvent(bundle)
+			}
+		},
+	}
+	historyHandler := handler.Funcs{
+		CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			if hist, ok := e.Object.(*viewv1alpha1.PromotionStrategyHistory); ok {
+				hist.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyHistoryKind))
+				ws.sendEvent(hist)
+			}
+		},
+		UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			if hist, ok := e.ObjectNew.(*viewv1alpha1.PromotionStrategyHistory); ok {
+				hist.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyHistoryKind))
+				ws.sendEvent(hist)
+			}
+		},
+		DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+			if hist, ok := e.Object.(*viewv1alpha1.PromotionStrategyHistory); ok {
+				hist.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyHistoryKind))
+				ws.sendDeleteEvent(hist)
+			}
+		},
+	}
+
 	err := ctrl.NewControllerManagedBy(mgr).
 		Named("webServer").
-		Watches(&viewv1alpha1.PromotionStrategyDetails{}, handler.Funcs{
-			CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if bundle, ok := e.Object.(*viewv1alpha1.PromotionStrategyDetails); ok {
-					bundle.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyDetailsKind))
-					ws.sendEvent(bundle)
-				}
-			},
-			UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if bundle, ok := e.ObjectNew.(*viewv1alpha1.PromotionStrategyDetails); ok {
-					bundle.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyDetailsKind))
-					ws.sendEvent(bundle)
-				}
-			},
-			DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				if bundle, ok := e.Object.(*viewv1alpha1.PromotionStrategyDetails); ok {
-					bundle.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyDetailsKind))
-					ws.sendDeleteEvent(bundle)
-				}
-			},
-		}).
+		Watches(&viewv1alpha1.PromotionStrategyDetails{}, detailsHandler).
+		Watches(&viewv1alpha1.PromotionStrategyHistory{}, historyHandler).
 		Complete(ws)
 	if err != nil {
 		return fmt.Errorf("failed to create controller: %w", err)
@@ -318,6 +342,19 @@ func (ws *WebServer) httpList(c *gin.Context) {
 		items := bundleList.Items
 		if items == nil {
 			items = []viewv1alpha1.PromotionStrategyDetails{}
+		}
+		c.JSON(http.StatusOK, items)
+
+	case "promotionstrategyhistories":
+		historyList := &viewv1alpha1.PromotionStrategyHistoryList{}
+		err := ws.List(c, historyList, listOptions)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, err.Error())
+			return
+		}
+		items := historyList.Items
+		if items == nil {
+			items = []viewv1alpha1.PromotionStrategyHistory{}
 		}
 		c.JSON(http.StatusOK, items)
 

@@ -280,12 +280,6 @@ var schemaYAML = typed.YAMLObject(`types:
           elementRelationship: associative
           keys:
           - type
-    - name: history
-      type:
-        list:
-          elementType:
-            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.History
-          elementRelationship: atomic
     - name: instanceID
       type:
         scalar: string
@@ -336,18 +330,6 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: note
       type:
         namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.HydratorMetadata
-- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.CommitBranchStateHistoryProposed
-  map:
-    fields:
-    - name: commitStatuses
-      type:
-        list:
-          elementType:
-            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ChangeRequestPolicyCommitStatusPhase
-          elementRelationship: atomic
-    - name: hydrated
-      type:
-        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.CommitShaState
 - name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.CommitConfiguration
   map:
     fields:
@@ -720,12 +702,6 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: branch
       type:
         scalar: string
-    - name: history
-      type:
-        list:
-          elementType:
-            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.History
-          elementRelationship: atomic
     - name: lastHealthyDryShas
       type:
         list:
@@ -1048,21 +1024,6 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: time
       type:
         namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Time
-- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.History
-  map:
-    fields:
-    - name: active
-      type:
-        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.CommitBranchState
-    - name: mergeCommitSnapshotMismatch
-      type:
-        scalar: boolean
-    - name: proposed
-      type:
-        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.CommitBranchStateHistoryProposed
-    - name: pullRequest
-      type:
-        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.PullRequestCommonStatus
 - name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.HydratorMetadata
   map:
     fields:

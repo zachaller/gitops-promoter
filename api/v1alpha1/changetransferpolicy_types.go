@@ -197,14 +197,6 @@ type ChangeTransferPolicyStatus struct {
 	// PullRequest is the state of the pull request that was created for this ChangeTransferPolicy.
 	PullRequest *PullRequestCommonStatus `json:"pullRequest,omitempty"`
 
-	// History defines the history of promoted changes done by the ChangeTransferPolicy. You can think of
-	// it as a list of PRs merged by GitOps Promoter. It will not include changes that were manually merged.
-	// The history length is at most 5 entries.
-	// History is constructed on a best-effort basis and should be used for informational purposes only.
-	// History is in reverse chronological order (newest is first).
-	// +kubebuilder:validation:MaxItems=5
-	History []History `json:"history,omitempty"`
-
 	// Conditions Represents the observations of the current state.
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -223,9 +215,6 @@ type ChangeTransferPolicyStatus struct {
 }
 
 const (
-	// MaxPromotionHistory is the maximum number of promotion history entries stored on
-	// ChangeTransferPolicy.status.history and PromotionStrategy.status.environments[].history.
-	MaxPromotionHistory = 5
 	// MaxEnvironments is the maximum number of environments on a PromotionStrategy spec and status.
 	MaxEnvironments = 500
 	// MaxCommitStatuses is the maximum number of commit statuses stored on a branch state.

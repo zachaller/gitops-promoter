@@ -67,8 +67,6 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.ClusterScmProviderApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("CommitBranchState"):
 		return &apiv1alpha1.CommitBranchStateApplyConfiguration{}
-	case v1alpha1.SchemeGroupVersion.WithKind("CommitBranchStateHistoryProposed"):
-		return &apiv1alpha1.CommitBranchStateHistoryProposedApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("CommitConfiguration"):
 		return &apiv1alpha1.CommitConfigurationApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("CommitMetadata"):
@@ -153,8 +151,6 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.GitRepositoryStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("HealthyDryShas"):
 		return &apiv1alpha1.HealthyDryShasApplyConfiguration{}
-	case v1alpha1.SchemeGroupVersion.WithKind("History"):
-		return &apiv1alpha1.HistoryApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("HTTPAuthentication"):
 		return &apiv1alpha1.HTTPAuthenticationApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("HTTPRequestSpec"):

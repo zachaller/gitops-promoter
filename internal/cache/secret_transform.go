@@ -63,7 +63,17 @@ func secretDataTransform() toolscache.TransformFunc {
 	}
 }
 
-// SecretDataTransformForTest exposes secretDataTransform for unit tests.
-func SecretDataTransformForTest() toolscache.TransformFunc {
+// PromoterSecretDataKeySet returns the Secret data keys retained by SecretDataTransform.
+func PromoterSecretDataKeySet() map[string]struct{} {
+	return promoterSecretDataKeys()
+}
+
+// SecretDataTransform exposes the Secret informer transform for reuse (e.g. apiserver cache).
+func SecretDataTransform() toolscache.TransformFunc {
 	return secretDataTransform()
+}
+
+// SecretDataTransformForTest is an alias for SecretDataTransform in unit tests.
+func SecretDataTransformForTest() toolscache.TransformFunc {
+	return SecretDataTransform()
 }

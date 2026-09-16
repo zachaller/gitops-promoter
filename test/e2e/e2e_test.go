@@ -176,6 +176,16 @@ var _ = Describe("controller", Ordered, func() {
 				return nil
 			}
 			EventuallyWithOffset(1, verifyDiscoverable, time.Minute, 5*time.Second).Should(Succeed())
+
+			By("confirming PromotionStrategyHistory is discoverable")
+			verifyHistoryDiscoverable := func() error {
+				cmd = exec.Command("kubectl", "get", "promotionstrategyhistories", "-A")
+				if _, err := utils.Run(cmd); err != nil {
+					return fmt.Errorf("promotionstrategyhistories not discoverable yet: %w", err)
+				}
+				return nil
+			}
+			EventuallyWithOffset(1, verifyHistoryDiscoverable, time.Minute, 5*time.Second).Should(Succeed())
 		})
 	})
 })

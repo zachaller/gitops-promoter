@@ -1,22 +1,43 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import HistoryView from '@lib/components/HistoryView/HistoryView';
 import type { CellSelection } from '@lib/components/HistoryView/HistoryView';
 import { PromotionStrategyStore } from '../stores/PromotionStrategyStore';
+import { PromotionStrategyHistoryStore } from '../stores/PromotionStrategyHistoryStore';
+import { mergePromotionStrategyHistory } from '@shared/utils/historyMerge';
 import { useNavigateWithParams } from '../hooks/useNavigateWithParams';
 
 const HistoryPage: React.FC = () => {
   const { namespace, name } = useParams();
   const navigate = useNavigateWithParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { items, fetchItems } = PromotionStrategyStore();
+  const { items, fetchItems, subscribe, unsubscribe } = PromotionStrategyStore();
+  const {
+    items: historyItems,
+    fetchItems: fetchHistory,
+    subscribe: subscribeHistory,
+    unsubscribe: unsubscribeHistory,
+  } = PromotionStrategyHistoryStore();
 
   useEffect(() => {
-    if (namespace) fetchItems(namespace);
+    if (!namespace) return;
+    fetchItems(namespace);
+    fetchHistory(namespace);
+    subscribe(namespace);
+    subscribeHistory(namespace);
+    return () => {
+      unsubscribe();
+      unsubscribeHistory();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [namespace]);
 
-  const strategy = items.find((ps) => ps.metadata.name === name);
+  const strategy = useMemo(() => {
+    const ps = items.find((p) => p.metadata.name === name);
+    if (!ps) return undefined;
+    const hist = historyItems.find((h) => h.metadata.name === name);
+    return mergePromotionStrategyHistory(ps, hist);
+  }, [items, historyItems, name]);
 
   const commit = searchParams.get('commit');
   const env = searchParams.get('env');

@@ -27,6 +27,8 @@ import (
 var rootModels = []string{
 	"io.argoproj.promoter.view.v1alpha1.PromotionStrategyDetails",
 	"io.argoproj.promoter.view.v1alpha1.PromotionStrategyDetailsList",
+	"io.argoproj.promoter.view.v1alpha1.PromotionStrategyHistory",
+	"io.argoproj.promoter.view.v1alpha1.PromotionStrategyHistoryList",
 }
 
 func main() {
@@ -65,7 +67,7 @@ func main() {
 		}
 		sanitizeSchema(schema)
 		rewriteRefs(schema, shortNames)
-		if short == "PromotionStrategyDetails" || short == "PromotionStrategy" {
+		if short == "PromotionStrategyDetails" || short == "PromotionStrategy" || short == "PromotionStrategyHistory" {
 			postProcessRootSchema(schema)
 		}
 		schemas[short] = schema

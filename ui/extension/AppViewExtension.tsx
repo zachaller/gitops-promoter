@@ -4,7 +4,8 @@ import Card from '@components-lib/components/Card';
 import HistoryView from '@components-lib/components/HistoryView/HistoryView';
 import type { CellSelection } from '@components-lib/components/HistoryView/HistoryView';
 import { PromotionStrategy } from '@shared/types/promotion';
-import type { ChangeTransferPolicy, PromotionStrategyDetails } from '@shared/types/view';
+import type { ChangeTransferPolicy, PromotionStrategyDetails, PromotionStrategyHistory } from '@shared/types/view';
+import { mergePromotionStrategyHistory } from '@shared/utils/historyMerge';
 import type { Environment } from '@shared/types/promotion';
 import { mergeCommitStatusManagers } from '@shared/utils/PSData';
 import type { CommitStatusManagerBundle } from '@shared/utils/PSData';
@@ -16,6 +17,7 @@ type ViewMode = 'card' | 'history';
 
 const GROUP = 'view.promoter.argoproj.io';
 const KIND = 'PromotionStrategyDetails';
+const HISTORY_KIND = 'PromotionStrategyHistory';
 const PARAM = 'promotionstrategy';
 const STORAGE_PREFIX = 'gitops-promoter:lastStrategy:';
 
@@ -40,7 +42,6 @@ function environmentsFromCTPs(
       active: status.active ?? { dry: {}, hydrated: {} },
       proposed: status.proposed ?? { dry: {}, hydrated: {} },
       pullRequest: status.pullRequest,
-      history: status.history,
       lastHealthyDryShas: [],
     };
   });
@@ -141,6 +142,7 @@ const setStored = (appNamespace: string, appName: string, name: string) => {
 };
 
 const strategyKey = (s: PromotionStrategy) => `${s.metadata.namespace}/${s.metadata.name}`;
+const strategyKeyFromParts = (namespace: string, name: string) => `${namespace}/${name}`;
 
 const AppViewExtension = ({ application, tree }: AppViewComponentProps) => {
   const [strategies, setStrategies] = useState<StrategyItem[]>([]);
@@ -148,6 +150,7 @@ const AppViewExtension = ({ application, tree }: AppViewComponentProps) => {
     () => getParam() || getStored(application.metadata.namespace, application.metadata.name),
   );
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [historyByKey, setHistoryByKey] = useState<Record<string, PromotionStrategyHistory>>({});
   const [view, setView] = useState<ViewMode>(() => (getSelectionFromUrl() ? 'history' : 'card'));
 
   useEffect(() => {
@@ -168,14 +171,13 @@ const AppViewExtension = ({ application, tree }: AppViewComponentProps) => {
     }
 
     setFetchError(null);
-    Promise.all(
-      strategyNodes.map(async (node) => {
+    const fetchResource = async (node: { namespace: string; name: string; version?: string }, kind: string) => {
         const params = new URLSearchParams({
           appNamespace,
           namespace: node.namespace,
           resourceName: node.name,
           version: node.version || '',
-          kind: KIND,
+          kind,
           group: GROUP,
         });
         const response = await fetch(`/api/v1/applications/${appName}/resource?${params}`);
@@ -193,11 +195,29 @@ const AppViewExtension = ({ application, tree }: AppViewComponentProps) => {
           throw new Error(messageParts.join(' - '));
         }
         const data: { manifest: string } = await response.json();
-        return bundleToItem(JSON.parse(data.manifest) as PromotionStrategyDetails);
+        return JSON.parse(data.manifest);
+    };
+
+    Promise.all(
+      strategyNodes.map(async (node) => {
+        const manifest = await fetchResource(node, KIND);
+        return bundleToItem(manifest as PromotionStrategyDetails);
       }),
     )
       .then((parsed) => {
         setStrategies(parsed);
+        const historyMap: Record<string, PromotionStrategyHistory> = {};
+        Promise.all(
+          strategyNodes.map(async (node) => {
+            try {
+              const manifest = await fetchResource(node, HISTORY_KIND);
+              historyMap[strategyKeyFromParts(node.namespace, node.name)] =
+                manifest as PromotionStrategyHistory;
+            } catch {
+              // History may not be synced into the app yet.
+            }
+          }),
+        ).then(() => setHistoryByKey(historyMap));
         const keys = parsed.map((item) => strategyKey(item.promotionStrategy));
         const fromUrl = getParam();
         const fromStored = getStored(appNamespace, appName);
@@ -227,6 +247,16 @@ const AppViewExtension = ({ application, tree }: AppViewComponentProps) => {
   }
 
   const selected = strategies.find((s) => strategyKey(s.promotionStrategy) === selectedKey);
+  const selectedWithHistory =
+    selected && historyByKey[selectedKey]
+      ? {
+          ...selected,
+          promotionStrategy: mergePromotionStrategyHistory(
+            selected.promotionStrategy,
+            historyByKey[selectedKey],
+          ),
+        }
+      : selected;
 
   const hasDuplicateNames =
     new Set(strategies.map((s) => s.promotionStrategy.metadata.name)).size < strategies.length;
@@ -285,10 +315,10 @@ const AppViewExtension = ({ application, tree }: AppViewComponentProps) => {
       {selected && view === 'card' && (
         <Card environments={selected.promotionStrategy.status?.environments || []} />
       )}
-      {selected && view === 'history' && (
+      {selectedWithHistory && view === 'history' && (
         <div className="gp-history-wrapper">
           <HistoryView
-            strategy={selected.promotionStrategy}
+            strategy={selectedWithHistory.promotionStrategy}
             initialSelection={getSelectionFromUrl()}
             onSelectionChange={setSelectionInUrl}
           />

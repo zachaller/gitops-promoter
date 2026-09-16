@@ -175,7 +175,7 @@ function processHistory(rowsById: Map<string, CommitRow>, env: StatusEnvironment
 // The CRD caps per-environment history at 5 entries. A commit older than a capped
 // env's oldest surviving entry may have run there but its record was dropped, so such
 // cells render as 'unknown-history' rather than claiming 'no-changes'.
-const HISTORY_CAP = 5;
+const HISTORY_CAP = 20;
 
 interface EnvHorizon {
   oldestKnownAt: number;

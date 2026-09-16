@@ -317,6 +317,7 @@ run-apiserver: ## Run the dashboard aggregation apiserver locally (out-of-cluste
 		--authentication-kubeconfig "$(APISERVER_KUBECONFIG)" \
 		--authorization-kubeconfig "$(APISERVER_KUBECONFIG)" \
 		--secure-port $(APISERVER_SECURE_PORT) \
+		--history-workers=8 \
 		--cert-dir "$(APISERVER_CERT_DIR)"
 
 # Register/unregister the APIService so a kind/Docker-Desktop cluster routes the

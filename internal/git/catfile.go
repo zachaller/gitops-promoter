@@ -55,6 +55,18 @@ func (g *EnvironmentOperations) LoadCommits(ctx context.Context, shas ...string)
 	return nil
 }
 
+// CachedCommitCount reports how many of the given SHAs are present in this reconcile's commit cache.
+func (g *EnvironmentOperations) CachedCommitCount(shas ...string) int {
+	n := 0
+	for _, sha := range shas {
+		key := strings.ToLower(sha)
+		if _, ok := g.commits[key]; ok {
+			n++
+		}
+	}
+	return n
+}
+
 // LoadCommitAndMetadataBlobs prefetches each commit and its activePath hydrator.metadata blob.
 func (g *EnvironmentOperations) LoadCommitAndMetadataBlobs(ctx context.Context, activePath string, shas ...string) error {
 	if g.ClonePath() == "" {

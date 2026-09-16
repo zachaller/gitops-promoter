@@ -33,6 +33,9 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizerfactory"
 	"k8s.io/client-go/dynamic"
 	clientrest "k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 )
 
 // promotionStrategyDetailsGVR is the served resource the dynamic client targets.
@@ -71,7 +74,8 @@ func startInProcessAPIServer(provider *BundleProvider) (*clientrest.Config, cont
 	opts.RecommendedOptions.Authentication.RemoteKubeConfigFileOptional = true
 	opts.RecommendedOptions.Authorization.RemoteKubeConfigFileOptional = true
 
-	config, err := opts.Config(provider)
+	historyProvider := newHistoryProviderForTests(provider.Reader(), fake.NewClientBuilder().WithScheme(utils.GetScheme()).Build())
+	config, err := opts.Config(provider, historyProvider)
 	Expect(err).NotTo(HaveOccurred())
 	// Allow-all so the loopback client is authorized without a delegated SAR backend.
 	config.GenericConfig.Authorization.Authorizer = authorizerfactory.NewAlwaysAllowAuthorizer()
@@ -101,7 +105,8 @@ func startInProcessAPIServerWithDone(provider *BundleProvider) (cfgCancel contex
 	opts.RecommendedOptions.Authentication.RemoteKubeConfigFileOptional = true
 	opts.RecommendedOptions.Authorization.RemoteKubeConfigFileOptional = true
 
-	config, err := opts.Config(provider)
+	historyProvider := newHistoryProviderForTests(provider.Reader(), fake.NewClientBuilder().WithScheme(utils.GetScheme()).Build())
+	config, err := opts.Config(provider, historyProvider)
 	Expect(err).NotTo(HaveOccurred())
 	config.GenericConfig.Authorization.Authorizer = authorizerfactory.NewAlwaysAllowAuthorizer()
 

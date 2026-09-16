@@ -428,13 +428,6 @@ func (in *ChangeTransferPolicyStatus) DeepCopyInto(out *ChangeTransferPolicyStat
 		*out = new(PullRequestCommonStatus)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.History != nil {
-		in, out := &in.History, &out.History
-		*out = make([]History, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]v1.Condition, len(*in))
@@ -1123,13 +1116,6 @@ func (in *EnvironmentStatus) DeepCopyInto(out *EnvironmentStatus) {
 	if in.LastHealthyDryShas != nil {
 		in, out := &in.LastHealthyDryShas, &out.LastHealthyDryShas
 		*out = make([]HealthyDryShas, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
-	if in.History != nil {
-		in, out := &in.History, &out.History
-		*out = make([]History, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

@@ -21,6 +21,11 @@ limitations under the License.
 package v1alpha1
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in EnvironmentHistory) OpenAPIModelName() string {
+	return "io.argoproj.promoter.view.v1alpha1.EnvironmentHistory"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in PromotionStrategyDetails) OpenAPIModelName() string {
 	return "io.argoproj.promoter.view.v1alpha1.PromotionStrategyDetails"
 }
@@ -28,4 +33,14 @@ func (in PromotionStrategyDetails) OpenAPIModelName() string {
 // OpenAPIModelName returns the OpenAPI model name for this type.
 func (in PromotionStrategyDetailsList) OpenAPIModelName() string {
 	return "io.argoproj.promoter.view.v1alpha1.PromotionStrategyDetailsList"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in PromotionStrategyHistory) OpenAPIModelName() string {
+	return "io.argoproj.promoter.view.v1alpha1.PromotionStrategyHistory"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in PromotionStrategyHistoryList) OpenAPIModelName() string {
+	return "io.argoproj.promoter.view.v1alpha1.PromotionStrategyHistoryList"
 }

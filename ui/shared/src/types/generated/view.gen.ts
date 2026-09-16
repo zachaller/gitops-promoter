@@ -224,8 +224,6 @@ export type components = {
             active?: components["schemas"]["CommitBranchState"];
             /** @description Conditions Represents the observations of the current state. */
             conditions?: components["schemas"]["Condition"][];
-            /** @description History defines the history of promoted changes done by the ChangeTransferPolicy. You can think of it as a list of PRs merged by GitOps Promoter. It will not include changes that were manually merged. The history length is at most 5 entries. History is constructed on a best-effort basis and should be used for informational purposes only. History is in reverse chronological order (newest is first). */
-            history?: components["schemas"]["History"][];
             /** @description InstanceID mirrors metadata.labels[promoter.argoproj.io/instance-id] stamped on each reconcile attempt by this install's controller, including when Ready=False; omitted when the resource has no instance-id label (default install). */
             instanceID?: string;
             /**
@@ -545,6 +543,13 @@ export type components = {
              */
             proposedCommitStatuses?: components["schemas"]["CommitStatusSelector"][];
         };
+        /** @description EnvironmentHistory is promotion history for one environment (active branch). */
+        EnvironmentHistory: {
+            /** @description Branch is the active branch for this environment (from the ChangeTransferPolicy). */
+            branch?: string;
+            /** @description History is reverse chronological (newest first). */
+            history?: components["schemas"]["History"][];
+        };
         /** @description EnvironmentStatus defines the observed state of an environment in a PromotionStrategy. */
         EnvironmentStatus: {
             /**
@@ -557,8 +562,6 @@ export type components = {
              * @default
              */
             branch: string;
-            /** @description History defines the history of promoted changes done by the PromotionStrategy for each environment. You can think of it as a list of PRs merged by GitOps Promoter. It will not include changes that were manually merged. The history length is at most 5 entries. History is constructed on a best-effort basis and should be used for informational purposes only. History is in reverse chronological order (newest is first). */
-            history?: components["schemas"]["History"][];
             /** @description LastHealthyDryShas is a list of dry commits that were observed to be healthy in the environment. */
             lastHealthyDryShas: components["schemas"]["HealthyDryShas"][];
             /**
@@ -1330,6 +1333,27 @@ export type components = {
             /** @description APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources */
             apiVersion?: string;
             items: components["schemas"]["PromotionStrategyDetails"][];
+            /** @description Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds */
+            kind?: string;
+            /** @default {} */
+            metadata?: components["schemas"]["ListMeta"];
+        };
+        /** @description PromotionStrategyHistory is a read-only, server-computed view of promotion history for all environments of a PromotionStrategy. It is served by the view aggregation layer and is not persisted in etcd. The name always matches the PromotionStrategy (1:1 within a namespace). */
+        PromotionStrategyHistory: {
+            /** @description APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources */
+            apiVersion: string;
+            /** @description Environments holds per-environment promotion history in PromotionStrategy spec order. */
+            environments?: components["schemas"]["EnvironmentHistory"][];
+            /** @description Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds */
+            kind: string;
+            /** @default {} */
+            metadata: components["schemas"]["ObjectMeta"];
+        };
+        /** @description PromotionStrategyHistoryList contains a list of PromotionStrategyHistory. */
+        PromotionStrategyHistoryList: {
+            /** @description APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources */
+            apiVersion?: string;
+            items: components["schemas"]["PromotionStrategyHistory"][];
             /** @description Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds */
             kind?: string;
             /** @default {} */

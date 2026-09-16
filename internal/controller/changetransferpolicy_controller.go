@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"path"
 	"reflect"
-	"slices"
 	"strings"
 	"time"
 
@@ -33,6 +32,7 @@ import (
 
 	"github.com/argoproj-labs/gitops-promoter/internal/git"
 	"github.com/argoproj-labs/gitops-promoter/internal/gitauth"
+	"github.com/argoproj-labs/gitops-promoter/internal/promotionhistory"
 	"github.com/argoproj-labs/gitops-promoter/internal/settings"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -226,13 +226,6 @@ func (r *ChangeTransferPolicyReconciler) Reconcile(ctx context.Context, req ctrl
 		utils.InheritNotReadyConditionFromObjects(&ctp, promoterConditions.PullRequestNotReady, pr)
 	}
 
-	if shouldSkipHistoryRecalculation(ctp.Status.History, ctp.Status.Active.Hydrated.Sha) {
-		logger.V(4).Info("skipping history recalculation, newest history entry describes the active tip")
-	} else {
-		// calculateHistory is done at a best effort so we do not return any errors here, we just log them instead.
-		r.calculateHistory(ctx, &ctp, gitOperations)
-	}
-
 	requeueDuration, err := settings.GetRequeueDuration[promoterv1alpha1.ChangeTransferPolicyConfiguration](ctx, r.SettingsMgr)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get global promotion configuration: %w", err)
@@ -243,154 +236,12 @@ func (r *ChangeTransferPolicyReconciler) Reconcile(ctx context.Context, req ctrl
 	}, nil
 }
 
-// shouldSkipHistoryRecalculation reports whether Status.History already fully describes the current
-// active hydrated tip. History is derived from the top of the active branch; when the newest entry
-// carries a pull request ID and its active and merged-target SHAs match the current tip, the rev-list
-// window and trailer content on those commits are immutable in git.
-//
-// calculateHistory is best effort, so a reconcile may have left Status.History describing a previous
-// tip (rev-list or the object prefetch failed) or holding a half-populated newest entry (a per-sha
-// metadata read failed). Requiring the newest entry to fully describe the current tip makes those
-// failures self-healing on the next reconcile.
-//
-// A newest entry without a pull request ID is never trusted. The note-writing reconcile rebuilds
-// history correctly, but the PullRequest deletion enqueues another reconcile right behind it, and
-// that reconcile's cached read of the CTP can predate the status patch. Its History then still holds
-// the trailer-less entry (SHAs matching the tip, no PR ID); skipping there would re-apply the stale
-// entry over the correct one and pin it until the active tip moves. Rebuilding whenever the PR ID
-// is missing keeps that path self-healing: the note is on the remote, so the rebuild picks it up.
-// Commits that genuinely carry no PR metadata (direct pushes to the active branch) simply keep the
-// pre-optimization behavior of recalculating every reconcile.
-//
-// A Spec.ActivePath change without a new active tip is not detected here; history is refreshed on
-// the next promotion that moves the active branch.
-func shouldSkipHistoryRecalculation(history []promoterv1alpha1.History, activeSha string) bool {
-	if activeSha == "" || len(history) == 0 {
-		return false
-	}
-	newest := history[0]
-	return newest.PullRequest != nil && newest.PullRequest.ID != "" &&
-		newest.PullRequest.MergedTargetSha == activeSha &&
-		newest.Active.Hydrated.Sha == activeSha
-}
-
-// calculateHistory calculates the history by getting the first parents on the active branch and using the trailers to reconstruct the history.
-// This function is best effort and will log errors but continue processing if it encounters issues with individual commits. This is because history is stored in git
-// in order to get out of a bad state requires re-writing git history or pushing a bunch of commits greater than the max history limit.
-func (r *ChangeTransferPolicyReconciler) calculateHistory(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy, gitOperations *git.EnvironmentOperations) {
-	logger := log.FromContext(ctx)
-
-	shaListActive, err := gitOperations.GetRevListFirstParent(ctx, "origin/"+ctp.Spec.ActiveBranch, promoterv1alpha1.MaxPromotionHistory)
-	if err != nil {
-		logger.V(4).Info("failed to get rev-list commit history for active branch", "branch", ctp.Spec.ActiveBranch, "err", err)
-		return
-	}
-	logger.V(4).Info("Rev-list history for active branch", "shaList", shaListActive)
-
-	// We know which active commits we'll need, so pre-load them.
-	if err := gitOperations.LoadCommitAndMetadataBlobs(ctx, ctp.Spec.ActivePath, shaListActive...); err != nil {
-		logger.V(4).Info("failed to prefetch history commit objects", "err", err)
-		return
-	}
-
-	// Each active commit has a corresponding proposed commit. Get those shas so we can preload them.
-	var proposedHistoryShas []string
-	for _, sha := range shaListActive {
-		trailers, err := gitOperations.GetTrailers(ctx, sha)
-		if err != nil {
-			logger.V(4).Info("failed to get trailers while prefetching proposed history commits", "sha", sha, "err", err)
-			continue
-		}
-		if proposedSha := getFirstTrailerValue(trailers, constants.TrailerShaHydratedProposed); proposedSha != "" {
-			proposedHistoryShas = append(proposedHistoryShas, proposedSha)
-		}
-	}
-	if len(proposedHistoryShas) > 0 {
-		if err := gitOperations.LoadCommits(ctx, proposedHistoryShas...); err != nil {
-			logger.V(4).Info("failed to prefetch proposed history commit objects", "err", err)
-			return
-		}
-	}
-
-	history := make([]promoterv1alpha1.History, 0, len(shaListActive))
-	for _, sha := range shaListActive {
-		historyEntry, shouldInclude, err := r.buildHistoryEntry(ctx, sha, ctp.Spec.ActivePath, gitOperations)
-		if err != nil {
-			logger.V(4).Info("failed to build history entry", "sha", sha, "err", err)
-			continue
-		}
-
-		if shouldInclude {
-			history = append(history, historyEntry)
-		}
-	}
-
-	ctp.Status.History = history
-}
-
-// buildHistoryEntry creates a single history entry for the given SHA. The trailer data comes from the
-// promotion-history git note when one exists (written at PR finalization, surviving SCM-side message
-// rewrites). When no note is readable — commits predating the notes, or a note that was never written
-// because finalization failed — it falls back to the commit message trailers, which the promoter still
-// writes on every managed pull request and which survive any merge style that preserves the message.
-func (r *ChangeTransferPolicyReconciler) buildHistoryEntry(ctx context.Context, sha, activePath string, gitOperations *git.EnvironmentOperations) (promoterv1alpha1.History, bool, error) {
-	logger := log.FromContext(ctx)
-
-	activeTrailers, err := gitOperations.GetHistoryNote(ctx, sha)
-	if err != nil {
-		logger.V(4).Info("failed to get history note, falling back to commit message trailers", "sha", sha, "err", err)
-	}
-	if len(activeTrailers) == 0 {
-		activeTrailers, err = gitOperations.GetTrailers(ctx, sha)
-		if err != nil {
-			return promoterv1alpha1.History{}, false, fmt.Errorf("failed to get trailers for SHA %q: %w", sha, err)
-		}
-	}
-
-	historyEntry := promoterv1alpha1.History{
-		Proposed:    promoterv1alpha1.CommitBranchStateHistoryProposed{},
-		Active:      promoterv1alpha1.CommitBranchState{},
-		PullRequest: &promoterv1alpha1.PullRequestCommonStatus{},
-	}
-
-	r.populateActiveMetadata(ctx, &historyEntry, sha, activePath, gitOperations)
-	r.populateProposedMetadata(ctx, &historyEntry, activeTrailers, gitOperations)
-	r.populatePullRequestMetadata(ctx, &historyEntry, activeTrailers)
-	r.populateCommitStatuses(ctx, &historyEntry, activeTrailers)
-	historyEntry.MergeCommitSnapshotMismatch = getFirstTrailerValue(activeTrailers, constants.TrailerMergeCommitSnapshotMismatch) == "true"
-	// The note is written on the merged target sha and history walks first-parent commits of the active
-	// branch, so the entry's own sha is that commit; no trailer records it.
-	historyEntry.PullRequest.MergedTargetSha = sha
-
-	return historyEntry, true, nil
-}
-
-// getFirstTrailerValue returns the first value for a given trailer key, or an empty string if not found.
-func getFirstTrailerValue(trailers map[string][]string, key string) string {
-	if values, ok := trailers[key]; ok && len(values) > 0 {
-		return values[0]
-	}
-	return ""
-}
-
 func encodeTrailerDescription(description string) (string, error) {
 	encoded, err := json.Marshal(description)
 	if err != nil {
 		return "", fmt.Errorf("encode commit status description: %w", err)
 	}
 	return string(encoded), nil
-}
-
-func decodeTrailerDescription(ctx context.Context, encoded string) string {
-	if encoded == "" {
-		return ""
-	}
-	var description string
-	if err := json.Unmarshal([]byte(encoded), &description); err != nil {
-		log.FromContext(ctx).Error(err, "failed to decode commit status description trailer", "encoded", encoded)
-		return ""
-	}
-	return description
 }
 
 func addCommitStatusTrailers(commitTrailers trailers, prefix string, statuses []promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase) error {
@@ -407,192 +258,6 @@ func addCommitStatusTrailers(commitTrailers trailers, prefix string, statuses []
 		commitTrailers[prefix+status.Key+"-description"] = encoded
 	}
 	return nil
-}
-
-// populateActiveMetadata populates the active metadata for a history entry
-func (r *ChangeTransferPolicyReconciler) populateActiveMetadata(ctx context.Context, h *promoterv1alpha1.History, sha, activePath string, gitOperations *git.EnvironmentOperations) {
-	logger := log.FromContext(ctx)
-	activeHydrated, err := gitOperations.GetShaMetadataFromGit(ctx, sha)
-	if err != nil {
-		logger.V(4).Info("failed to get active historic metadata from git", "sha", sha, "error", err)
-	}
-	h.Active.Hydrated = activeHydrated
-	h.Active.Hydrated.Body = removeKnownTrailers(h.Active.Hydrated.Body)
-
-	activeDry, err := gitOperations.GetShaMetadataFromFile(ctx, sha, activePath)
-	if err != nil {
-		logger.V(4).Info("failed to get active historic metadata from file", "sha", sha, "error", err)
-	}
-	h.Active.Dry = activeDry
-}
-
-// populateProposedMetadata populates the proposed metadata for a history entry
-func (r *ChangeTransferPolicyReconciler) populateProposedMetadata(ctx context.Context, h *promoterv1alpha1.History, activeTrailers map[string][]string, gitOperations *git.EnvironmentOperations) {
-	logger := log.FromContext(ctx)
-
-	proposedHydratedSha := getFirstTrailerValue(activeTrailers, constants.TrailerShaHydratedProposed)
-	if proposedHydratedSha == "" {
-		logger.V(4).Info("No " + constants.TrailerShaHydratedProposed + " trailer found")
-		return
-	}
-
-	meta, err := gitOperations.GetShaMetadataFromGit(ctx, proposedHydratedSha)
-	if err != nil {
-		logger.V(4).Info("failed to get proposed historic metadata from git", "sha", proposedHydratedSha, "error", err)
-	}
-	h.Proposed.Hydrated = meta
-}
-
-// populatePullRequestMetadata populates the pull request metadata for a history entry
-func (r *ChangeTransferPolicyReconciler) populatePullRequestMetadata(ctx context.Context, h *promoterv1alpha1.History, activeTrailers map[string][]string) {
-	logger := log.FromContext(ctx)
-
-	if pullRequestID := getFirstTrailerValue(activeTrailers, constants.TrailerPullRequestID); pullRequestID != "" {
-		h.PullRequest.ID = pullRequestID
-	} else {
-		logger.V(4).Info("No " + constants.TrailerPullRequestID + " found in trailers")
-	}
-
-	if pullRequestUrl := getFirstTrailerValue(activeTrailers, constants.TrailerPullRequestUrl); pullRequestUrl != "" {
-		if !strings.HasPrefix(pullRequestUrl, "http://") && !strings.HasPrefix(pullRequestUrl, "https://") {
-			logger.V(4).Info("pull request URL does not start with http:// or https://", "url", pullRequestUrl)
-		} else {
-			h.PullRequest.Url = pullRequestUrl
-		}
-	} else {
-		logger.V(4).Info("No " + constants.TrailerPullRequestUrl + " found in trailers")
-	}
-
-	if timeStr := getFirstTrailerValue(activeTrailers, constants.TrailerPullRequestCreationTime); timeStr != "" {
-		if creationTime, err := time.Parse(time.RFC3339, timeStr); err != nil {
-			logger.V(4).Info("failed to parse "+constants.TrailerPullRequestCreationTime, "time", timeStr, "err", err)
-		} else {
-			h.PullRequest.PRCreationTime = metav1.NewTime(creationTime)
-		}
-	} else {
-		logger.V(4).Info("No " + constants.TrailerPullRequestCreationTime + " found in trailers")
-	}
-
-	if timeStr := getFirstTrailerValue(activeTrailers, constants.TrailerPullRequestMergeTime); timeStr != "" {
-		if mergeTime, err := time.Parse(time.RFC3339, timeStr); err != nil {
-			logger.V(4).Info("failed to parse "+constants.TrailerPullRequestMergeTime, "time", timeStr, "err", err)
-		} else {
-			h.PullRequest.PRMergeTime = metav1.NewTime(mergeTime)
-		}
-	} else {
-		logger.V(4).Info("No " + constants.TrailerPullRequestMergeTime + " found in trailers")
-	}
-}
-
-// populateCommitStatuses populates the commit statuses for a history entry
-func (r *ChangeTransferPolicyReconciler) populateCommitStatuses(ctx context.Context, h *promoterv1alpha1.History, activeTrailers map[string][]string) {
-	activeKeys, proposedKeys := getCommitStatusKeysFromTrailers(ctx, activeTrailers)
-
-	h.Active.CommitStatuses = make([]promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase, 0, len(activeKeys))
-	for _, key := range activeKeys {
-		url := getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusActivePrefix+key+"-url")
-		if url != "" && !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-			log.FromContext(ctx).Error(errors.New("invalid URL"), "active commit status URL does not start with http:// or https://", "url", url, "key", key)
-			url = ""
-		}
-		h.Active.CommitStatuses = append(h.Active.CommitStatuses, promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase{
-			Key:         key,
-			Phase:       getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusActivePrefix+key+"-phase"),
-			Url:         url,
-			Description: decodeTrailerDescription(ctx, getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusActivePrefix+key+"-description")),
-		})
-	}
-
-	h.Proposed.CommitStatuses = make([]promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase, 0, len(proposedKeys))
-	for _, key := range proposedKeys {
-		url := getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusProposedPrefix+key+"-url")
-		if url != "" && !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-			log.FromContext(ctx).Error(errors.New("invalid URL"), "proposed commit status URL does not start with http:// or https://", "url", url, "key", key)
-			url = ""
-		}
-		h.Proposed.CommitStatuses = append(h.Proposed.CommitStatuses, promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase{
-			Key:         key,
-			Phase:       getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusProposedPrefix+key+"-phase"),
-			Url:         url,
-			Description: decodeTrailerDescription(ctx, getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusProposedPrefix+key+"-description")),
-		})
-	}
-}
-
-// getCommitStatusKeysFromTrailers extracts the commit status keys from the trailers in the given context.
-func getCommitStatusKeysFromTrailers(ctx context.Context, trailers map[string][]string) (activeKeys []string, proposedKeys []string) {
-	logger := log.FromContext(ctx)
-
-	// This function extracts commit status keys from trailers with the given prefix.
-	// It looks for keys that start with the prefix, trims the prefix, splits by "-", and joins all but the last part to form the commit status key.
-	// This is under the assumption that the last part is always "-phase", "-url", or "-description" and that it does not go over multiple "-" aka the ending can not be
-	// -what-am-i-doing. This would return a bad key because it would contain -what-am-i.
-	extractKeys := func(prefix string) []string {
-		keys := []string{}
-		for key := range trailers {
-			if !strings.HasPrefix(key, prefix) {
-				continue
-			}
-			key = strings.TrimPrefix(key, prefix)
-			if key == "" {
-				logger.V(4).Info("Skipping empty trailer key", "key", key)
-				continue
-			}
-			parts := strings.Split(key, "-")
-			if len(parts) < 2 {
-				logger.V(4).Info("Skipping trailer with unexpected format", "key", key)
-				continue
-			}
-			csKey := strings.Join(parts[:len(parts)-1], "-")
-			// Append if it does not exist in keys
-			if !slices.Contains(keys, csKey) {
-				keys = append(keys, csKey)
-			}
-		}
-		return keys
-	}
-
-	activeKeys = extractKeys(constants.TrailerCommitStatusActivePrefix)
-	proposedKeys = extractKeys(constants.TrailerCommitStatusProposedPrefix)
-
-	return activeKeys, proposedKeys
-}
-
-func removeKnownTrailers(input string) string {
-	toRemove := []string{
-		constants.TrailerPullRequestID,
-		constants.TrailerPullRequestSourceBranch,
-		constants.TrailerPullRequestTargetBranch,
-		constants.TrailerPullRequestCreationTime,
-		constants.TrailerPullRequestUrl,
-		constants.TrailerCommitStatusActivePrefix,
-		constants.TrailerCommitStatusProposedPrefix,
-		constants.TrailerShaHydratedActive,
-		constants.TrailerShaHydratedProposed,
-		constants.TrailerShaDryActive,
-		constants.TrailerShaDryProposed,
-		constants.TrailerMergeCommitSnapshotMismatch,
-	}
-
-	lines := strings.Split(input, "\n")
-	filtered := make([]string, 0, len(lines))
-
-	for _, line := range lines {
-		shouldKeep := true
-		for _, rm := range toRemove {
-			if strings.HasPrefix(line, rm) {
-				shouldKeep = false
-				break
-			}
-		}
-		if shouldKeep {
-			filtered = append(filtered, line)
-		}
-	}
-
-	result := strings.Join(filtered, "\n")
-	result = strings.TrimSpace(result)
-	return result
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -884,7 +549,7 @@ func (r *ChangeTransferPolicyReconciler) setCommitMetadata(ctx context.Context, 
 		return fmt.Errorf("failed to get commit active metadata for hydrated SHA %q: %w", activeHydratedSha, err)
 	}
 	ctp.Status.Active.Hydrated = activeCommitMetadata
-	ctp.Status.Active.Hydrated.Body = removeKnownTrailers(ctp.Status.Active.Hydrated.Body)
+	ctp.Status.Active.Hydrated.Body = promotionhistory.RemoveKnownTrailers(ctp.Status.Active.Hydrated.Body)
 	proposedCommitMetadata, err = gitOperations.GetShaMetadataFromGit(ctx, proposedHydratedSha)
 	if err != nil {
 		return fmt.Errorf("failed to get commit proposed metadata for hydrated SHA %q: %w", proposedHydratedSha, err)
@@ -1197,13 +862,13 @@ func (r *ChangeTransferPolicyReconciler) ensurePromotionHistoryNote(ctx context.
 	if err != nil {
 		return fmt.Errorf("failed to check for an existing history note on merge commit %q: %w", mergedTargetSha, err)
 	}
-	if len(existing) > 0 && shouldSkipHistoryRecalculation(ctp.Status.History, mergedTargetSha) {
-		logger.V(4).Info("Promotion history note already present and history describes the merge commit",
+	if len(existing) > 0 {
+		logger.V(4).Info("Promotion history note already present on merge commit",
 			"mergeCommit", mergedTargetSha, "prID", livePR.Status.ID)
 		return nil
 	}
 
-	// writePromotionHistoryNote and calculateHistory read from origin/<activeBranch>, and the blob-less
+	// writePromotionHistoryNote reads from origin/<activeBranch>, and the blob-less
 	// clone may not hold the merge commit yet: calculateStatus only fetches the branch later in this
 	// reconcile. GetBranchSha skips the fetch when a live ls-remote confirms the remote tip still matches
 	// Status.Active.Hydrated.Sha from a prior reconcile (same cache as calculateStatus).
@@ -1216,11 +881,6 @@ func (r *ChangeTransferPolicyReconciler) ensurePromotionHistoryNote(ctx context.
 		}
 	}
 
-	// Rebuild history from the note now rather than signalling the caller to do it: a persisted entry for
-	// this merge commit may predate the note and carry trailer-derived metadata that the note corrects.
-	// Use mergedTargetSha, not Status.Active.Hydrated.Sha: calculateStatus has not run yet on this pass
-	// and the persisted active tip may still lag.
-	r.calculateHistory(ctx, ctp, gitOperations)
 	return nil
 }
 
@@ -1313,7 +973,7 @@ func reconcileProposedTrailersWithMergeCommit(ctx context.Context, recorder even
 		return nil
 	}
 
-	snapshotDrySha := getFirstTrailerValue(trailers, constants.TrailerShaDryProposed)
+	snapshotDrySha := promotionhistory.FirstTrailerValue(trailers, constants.TrailerShaDryProposed)
 	if snapshotDrySha == mergedDrySha {
 		// The actually-merged dry sha didn't change since the trailer snapshot. Keep the snapshot.
 		return nil

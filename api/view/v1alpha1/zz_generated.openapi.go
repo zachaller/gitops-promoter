@@ -174,8 +174,11 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		apiv1alpha1.WhenWithOutputSpec{}.OpenAPIModelName():                                   schema_argoproj_labs_gitops_promoter_api_v1alpha1_WhenWithOutputSpec(ref),
 		apiv1alpha1.WindowStatus{}.OpenAPIModelName():                                         schema_argoproj_labs_gitops_promoter_api_v1alpha1_WindowStatus(ref),
 		apiv1alpha1.WorkQueue{}.OpenAPIModelName():                                            schema_argoproj_labs_gitops_promoter_api_v1alpha1_WorkQueue(ref),
+		EnvironmentHistory{}.OpenAPIModelName():                                               schema_gitops_promoter_api_view_v1alpha1_EnvironmentHistory(ref),
 		PromotionStrategyDetails{}.OpenAPIModelName():                                         schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyDetails(ref),
 		PromotionStrategyDetailsList{}.OpenAPIModelName():                                     schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyDetailsList(ref),
+		PromotionStrategyHistory{}.OpenAPIModelName():                                         schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyHistory(ref),
+		PromotionStrategyHistoryList{}.OpenAPIModelName():                                     schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyHistoryList(ref),
 		v1.AWSElasticBlockStoreVolumeSource{}.OpenAPIModelName():                              schema_k8sio_api_core_v1_AWSElasticBlockStoreVolumeSource(ref),
 		v1.Affinity{}.OpenAPIModelName():                                                      schema_k8sio_api_core_v1_Affinity(ref),
 		v1.AppArmorProfile{}.OpenAPIModelName():                                               schema_k8sio_api_core_v1_AppArmorProfile(ref),
@@ -1279,19 +1282,6 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ChangeTransferPolicyStatu
 							Ref:         ref(apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName()),
 						},
 					},
-					"history": {
-						SchemaProps: spec.SchemaProps{
-							Description: "History defines the history of promoted changes done by the ChangeTransferPolicy. You can think of it as a list of PRs merged by GitOps Promoter. It will not include changes that were manually merged. The history length is at most 5 entries. History is constructed on a best-effort basis and should be used for informational purposes only. History is in reverse chronological order (newest is first).",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref(apiv1alpha1.History{}.OpenAPIModelName()),
-									},
-								},
-							},
-						},
-					},
 					"conditions": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
@@ -1326,7 +1316,7 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ChangeTransferPolicyStatu
 			},
 		},
 		Dependencies: []string{
-			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.History{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName(), metav1.Condition{}.OpenAPIModelName()},
+			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName(), metav1.Condition{}.OpenAPIModelName()},
 	}
 }
 
@@ -2754,25 +2744,12 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentStatus(ref com
 							},
 						},
 					},
-					"history": {
-						SchemaProps: spec.SchemaProps{
-							Description: "History defines the history of promoted changes done by the PromotionStrategy for each environment. You can think of it as a list of PRs merged by GitOps Promoter. It will not include changes that were manually merged. The history length is at most 5 entries. History is constructed on a best-effort basis and should be used for informational purposes only. History is in reverse chronological order (newest is first).",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref(apiv1alpha1.History{}.OpenAPIModelName()),
-									},
-								},
-							},
-						},
-					},
 				},
 				Required: []string{"branch", "proposed", "active", "lastHealthyDryShas"},
 			},
 		},
 		Dependencies: []string{
-			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.HealthyDryShas{}.OpenAPIModelName(), apiv1alpha1.History{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName()},
+			apiv1alpha1.CommitBranchState{}.OpenAPIModelName(), apiv1alpha1.HealthyDryShas{}.OpenAPIModelName(), apiv1alpha1.PullRequestCommonStatus{}.OpenAPIModelName()},
 	}
 }
 
@@ -6797,6 +6774,41 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_WorkQueue(ref common.Refe
 	}
 }
 
+func schema_gitops_promoter_api_view_v1alpha1_EnvironmentHistory(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "EnvironmentHistory is promotion history for one environment (active branch).",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"branch": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Branch is the active branch for this environment (from the ChangeTransferPolicy).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"history": {
+						SchemaProps: spec.SchemaProps{
+							Description: "History is reverse chronological (newest first).",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.History{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.History{}.OpenAPIModelName()},
+	}
+}
+
 func schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyDetails(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -7020,6 +7032,102 @@ func schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyDetailsList(ref c
 		},
 		Dependencies: []string{
 			PromotionStrategyDetails{}.OpenAPIModelName(), metav1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyHistory(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PromotionStrategyHistory is a read-only, server-computed view of promotion history for all environments of a PromotionStrategy. It is served by the view aggregation layer and is not persisted in etcd. The name always matches the PromotionStrategy (1:1 within a namespace).",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(metav1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"environments": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Environments holds per-environment promotion history in PromotionStrategy spec order.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(EnvironmentHistory{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			EnvironmentHistory{}.OpenAPIModelName(), metav1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyHistoryList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PromotionStrategyHistoryList contains a list of PromotionStrategyHistory.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(metav1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(PromotionStrategyHistory{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			PromotionStrategyHistory{}.OpenAPIModelName(), metav1.ListMeta{}.OpenAPIModelName()},
 	}
 }
 

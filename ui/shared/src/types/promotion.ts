@@ -17,7 +17,10 @@ export type RelativeTimeAgo = string;
 export type PromotionStrategy = PromotionStrategyResource;
 
 /** Per-environment status assembled for Card/PSData (from CTP status + spec branch). */
-export type Environment = components['schemas']['EnvironmentStatus'];
+export type Environment = components['schemas']['EnvironmentStatus'] & {
+  /** Populated from PromotionStrategyHistory when rendering the history view. */
+  history?: History[];
+};
 
 export type History = components['schemas']['History'];
 

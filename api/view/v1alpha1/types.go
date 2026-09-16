@@ -90,3 +90,36 @@ type PromotionStrategyDetailsList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PromotionStrategyDetails `json:"items"`
 }
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:generate=false
+
+// PromotionStrategyHistory is a read-only, server-computed view of promotion history
+// for all environments of a PromotionStrategy. It is served by the view aggregation
+// layer and is not persisted in etcd. The name always matches the PromotionStrategy
+// (1:1 within a namespace).
+type PromotionStrategyHistory struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// Environments holds per-environment promotion history in PromotionStrategy spec order.
+	Environments []EnvironmentHistory `json:"environments,omitempty"`
+}
+
+// EnvironmentHistory is promotion history for one environment (active branch).
+type EnvironmentHistory struct {
+	// Branch is the active branch for this environment (from the ChangeTransferPolicy).
+	Branch string `json:"branch,omitempty"`
+	// History is reverse chronological (newest first).
+	History []promoterv1alpha1.History `json:"history,omitempty"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:generate=false
+
+// PromotionStrategyHistoryList contains a list of PromotionStrategyHistory.
+type PromotionStrategyHistoryList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []PromotionStrategyHistory `json:"items"`
+}

@@ -23,6 +23,10 @@ type Schemas = components['schemas'];
 /** Dashboard aggregation resource (view.promoter.argoproj.io/v1alpha1). */
 export type PromotionStrategyDetails = KubernetesResource<Schemas['PromotionStrategyDetails']>;
 
+export type PromotionStrategyHistory = KubernetesResource<Schemas['PromotionStrategyHistory']>;
+
+export type EnvironmentHistory = Schemas['EnvironmentHistory'];
+
 /** PromotionStrategy CRD (embedded in the bundle; also used by the Argo CD extension). */
 export type PromotionStrategy = KubernetesResource<Schemas['PromotionStrategy']>;
 

@@ -29,6 +29,7 @@ import (
 
 	promoterv1alpha1 "github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
 	"github.com/argoproj-labs/gitops-promoter/internal/git"
+	"github.com/argoproj-labs/gitops-promoter/internal/promotionhistory"
 	"github.com/argoproj-labs/gitops-promoter/internal/scms/fake"
 	"github.com/argoproj-labs/gitops-promoter/internal/settings"
 	promoterConditions "github.com/argoproj-labs/gitops-promoter/internal/types/conditions"
@@ -1088,18 +1089,6 @@ var _ = Describe("ChangeTransferPolicy Controller", func() {
 					g.Expect(note[constants.TrailerPullRequestMergeTime]).ToNot(BeEmpty())
 				}, constants.EventuallyTimeout).Should(Succeed())
 
-				By("Verifying the CTP history is populated")
-				Eventually(func(g Gomega) {
-					g.Expect(k8sClient.Get(ctx, typeNamespacedName, changeTransferPolicy)).To(Succeed())
-					g.Expect(changeTransferPolicy.Status.History).ToNot(BeEmpty())
-					entry := changeTransferPolicy.Status.History[0]
-					g.Expect(entry.PullRequest).ToNot(BeNil())
-					g.Expect(entry.PullRequest.ID).To(Equal(prID))
-					g.Expect(entry.PullRequest.PRMergeTime.IsZero()).To(BeFalse())
-					g.Expect(entry.Proposed.Hydrated.Sha).To(Equal(mergeSha))
-					g.Expect(entry.Active.Hydrated.Sha).To(Equal(mergeCommitSha))
-					g.Expect(entry.PullRequest.MergedTargetSha).To(Equal(mergeCommitSha))
-				}, constants.EventuallyTimeout).Should(Succeed())
 			})
 
 			It("writes a history note for an externally squash-merged PR and builds history without trailers", func() {
@@ -1153,18 +1142,6 @@ var _ = Describe("ChangeTransferPolicy Controller", func() {
 					g.Expect(note[constants.TrailerPullRequestMergeTime]).ToNot(BeEmpty())
 				}, constants.EventuallyTimeout).Should(Succeed())
 
-				By("Verifying the CTP history is populated from the note despite the trailer-less merge commit")
-				Eventually(func(g Gomega) {
-					g.Expect(k8sClient.Get(ctx, typeNamespacedName, changeTransferPolicy)).To(Succeed())
-					g.Expect(changeTransferPolicy.Status.History).ToNot(BeEmpty())
-					entry := changeTransferPolicy.Status.History[0]
-					g.Expect(entry.PullRequest).ToNot(BeNil())
-					g.Expect(entry.PullRequest.ID).To(Equal(prID))
-					g.Expect(entry.PullRequest.PRMergeTime.IsZero()).To(BeFalse())
-					g.Expect(entry.Proposed.Hydrated.Sha).To(Equal(mergeSha))
-					g.Expect(entry.Active.Hydrated.Sha).To(Equal(squashSha))
-					g.Expect(entry.PullRequest.MergedTargetSha).To(Equal(squashSha))
-				}, constants.EventuallyTimeout).Should(Succeed())
 			})
 
 			It("skips the note but still releases the PR when it was closed without merging", func() {
@@ -2653,8 +2630,7 @@ var _ = Describe("buildHistoryEntry trailer sources", func() {
 	})
 
 	It("falls back to commit message trailers when no history note exists", func() {
-		r := &ChangeTransferPolicyReconciler{}
-		entry, include, err := r.buildHistoryEntry(ctx, commitSha, "", gitOps)
+		entry, include, err := promotionhistory.BuildHistoryEntry(ctx, commitSha, "", gitOps)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(include).To(BeTrue())
 		Expect(entry.PullRequest.ID).To(Equal("77"))
@@ -2667,8 +2643,7 @@ var _ = Describe("buildHistoryEntry trailer sources", func() {
 		mustRunGit(workDir, "push", "origin", git.PromoterHistoryNotesRef)
 		Expect(gitOps.FetchNotes(ctx)).To(Succeed())
 
-		r := &ChangeTransferPolicyReconciler{}
-		entry, include, err := r.buildHistoryEntry(ctx, commitSha, "", gitOps)
+		entry, include, err := promotionhistory.BuildHistoryEntry(ctx, commitSha, "", gitOps)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(include).To(BeTrue())
 		Expect(entry.PullRequest.ID).To(Equal("88"), "the note must win over the commit message trailers")
@@ -2811,7 +2786,7 @@ var _ = Describe("writePromotionHistoryNote merge commit snapshot mismatch", fun
 		Eventually(recorder.Events).Should(Receive(ContainSubstring(constants.PromotionHistoryNoteMergeCommitSnapshotMismatchReason)))
 
 		By("Verifying the rebuilt history entry is flagged with mergeCommitSnapshotMismatch")
-		entry, include, err := r.buildHistoryEntry(ctx, mergeSha, "", gitOps)
+		entry, include, err := promotionhistory.BuildHistoryEntry(ctx, mergeSha, "", gitOps)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(include).To(BeTrue())
 		Expect(entry.MergeCommitSnapshotMismatch).To(BeTrue())
@@ -2834,7 +2809,7 @@ var _ = Describe("writePromotionHistoryNote merge commit snapshot mismatch", fun
 
 		Consistently(recorder.Events).ShouldNot(Receive())
 
-		entry, include, err := r.buildHistoryEntry(ctx, mergeSha, "", gitOps)
+		entry, include, err := promotionhistory.BuildHistoryEntry(ctx, mergeSha, "", gitOps)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(include).To(BeTrue())
 		Expect(entry.MergeCommitSnapshotMismatch).To(BeFalse())
@@ -2994,10 +2969,6 @@ var _ = Describe("handlePRFinalizerRemoval early promotion history note", func()
 		Expect(note[constants.TrailerShaHydratedProposed]).To(Equal([]string{proposedSha}))
 		Expect(note[constants.TrailerPullRequestMergeTime]).ToNot(BeEmpty())
 
-		By("Verifying history was rebuilt from the note in this same reconcile")
-		Expect(ctp.Status.History).ToNot(BeEmpty())
-		Expect(ctp.Status.History[0].PullRequest.ID).To(Equal(prID))
-
 		By("Verifying the finalizer is still held because the CTP status has not caught up")
 		var livePR promoterv1alpha1.PullRequest
 		Expect(r.Get(ctx, ctrlclient.ObjectKeyFromObject(pr), &livePR)).To(Succeed())
@@ -3016,22 +2987,8 @@ var _ = Describe("handlePRFinalizerRemoval early promotion history note", func()
 		Expect(notesRefSha()).To(Equal(firstNotesRef), "the notes ref must not be pushed again for an unchanged note")
 	})
 
-	It("rebuilds trailer-derived history when writing the note for the first time", func() {
-		const sentinelURL = "https://example.com/sentinel-from-trailers"
+	It("writes the note from PR trailers when writing for the first time", func() {
 		const noteURL = "https://example.com/pr/" + prID
-
-		// A prior reconcile persisted a trailer-derived entry before the note existed: the SHAs and PR ID
-		// match the merge commit, so the skip guard would have suppressed the note-driven rebuild.
-		ctp.Status.History = []promoterv1alpha1.History{{
-			Active: promoterv1alpha1.CommitBranchState{
-				Hydrated: promoterv1alpha1.CommitShaState{Sha: squashSha},
-			},
-			PullRequest: &promoterv1alpha1.PullRequestCommonStatus{
-				ID:              prID,
-				MergedTargetSha: squashSha,
-				Url:             sentinelURL,
-			},
-		}}
 
 		pr := newPR(promoterv1alpha1.PullRequestMerged, squashSha)
 		pr.Spec.Commit.Message += "\n" + constants.TrailerPullRequestUrl + ": " + noteURL
@@ -3040,10 +2997,9 @@ var _ = Describe("handlePRFinalizerRemoval early promotion history note", func()
 		err := r.handlePRFinalizerRemoval(ctx, ctp, gitOps)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(ctp.Status.History).ToNot(BeEmpty())
-		Expect(ctp.Status.History[0].PullRequest.ID).To(Equal(prID))
-		Expect(ctp.Status.History[0].PullRequest.Url).To(Equal(noteURL))
-		Expect(ctp.Status.History[0].PullRequest.Url).ToNot(Equal(sentinelURL))
+		note, err := fetchPromotionHistoryNote(workDir, squashSha)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(note[constants.TrailerPullRequestUrl]).To(Equal([]string{noteURL}))
 	})
 
 	It("writes nothing while the SCM has not reported the merge commit", func() {
@@ -3051,7 +3007,6 @@ var _ = Describe("handlePRFinalizerRemoval early promotion history note", func()
 
 		err := r.handlePRFinalizerRemoval(ctx, ctp, gitOps)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ctp.Status.History).To(BeEmpty())
 		_, err = fetchPromotionHistoryNote(workDir, squashSha)
 		Expect(err).To(HaveOccurred(), "no notes ref should exist yet")
 	})
@@ -3061,7 +3016,6 @@ var _ = Describe("handlePRFinalizerRemoval early promotion history note", func()
 
 		err := r.handlePRFinalizerRemoval(ctx, ctp, gitOps)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ctp.Status.History).To(BeEmpty())
 		_, err = fetchPromotionHistoryNote(workDir, squashSha)
 		Expect(err).To(HaveOccurred(), "no notes ref should exist")
 	})
@@ -3244,18 +3198,18 @@ var _ = Describe("commit status description trailers", func() {
 		} {
 			encoded, err := encodeTrailerDescription(original)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(decodeTrailerDescription(ctx, encoded)).To(Equal(original))
+			Expect(promotionhistory.DecodeTrailerDescription(ctx, encoded)).To(Equal(original))
 		}
 	})
 
 	It("returns empty string for empty or malformed encoded values", func() {
-		Expect(decodeTrailerDescription(ctx, "")).To(Equal(""))
-		Expect(decodeTrailerDescription(ctx, "not-json")).To(Equal(""))
+		Expect(promotionhistory.DecodeTrailerDescription(ctx, "")).To(Equal(""))
+		Expect(promotionhistory.DecodeTrailerDescription(ctx, "not-json")).To(Equal(""))
 	})
 
 	DescribeTable("shouldSkipHistoryRecalculation",
 		func(history []promoterv1alpha1.History, activeSha string, expected bool) {
-			Expect(shouldSkipHistoryRecalculation(history, activeSha)).To(Equal(expected))
+			Expect(promotionhistory.ShouldSkipHistoryRecalculation(history, activeSha)).To(Equal(expected))
 		},
 		Entry("skips when newest history entry describes the active tip",
 			[]promoterv1alpha1.History{{
@@ -3319,7 +3273,7 @@ var _ = Describe("commit status description trailers", func() {
 			constants.TrailerCommitStatusActivePrefix + "argocd-health-description":      {`"healthy"`},
 			constants.TrailerCommitStatusProposedPrefix + "no-deployments-allowed-phase": {"pending"},
 		}
-		activeKeys, proposedKeys := getCommitStatusKeysFromTrailers(ctx, trailers)
+		activeKeys, proposedKeys := promotionhistory.CommitStatusKeysFromTrailers(ctx, trailers)
 		Expect(activeKeys).To(ConsistOf("argocd-health"))
 		Expect(proposedKeys).To(ConsistOf("no-deployments-allowed"))
 	})
@@ -3338,7 +3292,7 @@ var _ = Describe("commit status description trailers", func() {
 		}
 
 		history := promoterv1alpha1.History{}
-		(&ChangeTransferPolicyReconciler{}).populateCommitStatuses(ctx, &history, trailers)
+		promotionhistory.PopulateCommitStatuses(ctx, &history, trailers)
 
 		Expect(history.Active.CommitStatuses).To(HaveLen(1))
 		Expect(history.Active.CommitStatuses[0].Key).To(Equal(healthCheckCSKey))

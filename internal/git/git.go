@@ -98,9 +98,12 @@ import (
 type EnvironmentOperations struct {
 	gap      scms.GitOperationsProvider
 	gitRepo  *v1alpha1.GitRepository
-	blobs    map[string]blobObject
-	commits  map[string]commitObject
-	identity string
+	blobs        map[string]blobObject
+	commits      map[string]commitObject
+	historyNotes map[string]historyNoteEntry
+	identity     string
+	// branchFetchDepth, when > 0, keeps origin/<branch> fetches shallow (history clones only).
+	branchFetchDepth int
 }
 
 // HydratorMetadata is an alias to v1alpha1.HydratorMetadata for convenience.
@@ -146,8 +149,9 @@ func NewEnvironmentOperations(gitRepo *v1alpha1.GitRepository, gap scms.GitOpera
 		gap:      gap,
 		gitRepo:  gitRepo,
 		identity: identity,
-		blobs:    make(map[string]blobObject),
-		commits:  make(map[string]commitObject),
+		blobs:        make(map[string]blobObject),
+		commits:      make(map[string]commitObject),
+		historyNotes: make(map[string]historyNoteEntry),
 	}
 }
 
@@ -312,7 +316,12 @@ func (g *EnvironmentOperations) FetchBranch(ctx context.Context, branch string) 
 	}
 
 	start := time.Now()
-	_, stderr, err := g.runCmd(ctx, gitPath, "fetch", "origin", branch)
+	fetchArgs := []string{"fetch", "origin"}
+	if g.branchFetchDepth > 0 {
+		fetchArgs = append(fetchArgs, "--depth", strconv.Itoa(g.branchFetchDepth))
+	}
+	fetchArgs = append(fetchArgs, branch)
+	_, stderr, err := g.runCmd(ctx, gitPath, fetchArgs...)
 	metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationFetch, metrics.GitOperationResultFromError(err), time.Since(start))
 	if err != nil {
 		logger.Error(err, "could not fetch branch", "gitError", stderr)
@@ -346,6 +355,12 @@ func (g *EnvironmentOperations) GetShaMetadataFromFile(ctx context.Context, sha,
 	}
 	if obj.Missing {
 		// cat-file --batch reports both "path absent from tree" and "unknown SHA" as missing.
+		// When the commit was already prefetched (history rebuild), a missing blob is a absent path.
+		commitKey := strings.ToLower(sha)
+		if _, ok := g.commits[commitKey]; ok {
+			logger.V(4).Info("hydrator metadata path not present in commit", "sha", sha, "path", metaPath)
+			return v1alpha1.CommitShaState{}, nil
+		}
 		// Only degrade when the commit itself exists; unknown revisions must stay errors.
 		if g.CommitExists(ctx, sha) {
 			logger.V(4).Info("hydrator metadata path not present in commit", "sha", sha, "path", metaPath)
@@ -850,11 +865,22 @@ func (g *EnvironmentOperations) GetHistoryNote(ctx context.Context, sha string) 
 		return nil, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
 
+	key := strings.ToLower(sha)
+	if entry, ok := g.historyNotes[key]; ok {
+		if entry.missing {
+			logger.V(4).Info("No history note found for commit (cached)", "sha", sha)
+			return nil, nil
+		}
+		logger.V(4).Info("Got history note (cached)", "sha", sha, "trailers", entry.trailers)
+		return entry.trailers, nil
+	}
+
 	stdout, stderr, err := g.runCmd(ctx, gitPath, "notes", "--ref="+PromoterHistoryNotesRef, "show", sha)
 	if err != nil {
 		// No note for this commit is not an error - git outputs "error: no note found for object <sha>"
 		if strings.Contains(strings.ToLower(stderr), "no note found") {
 			logger.V(4).Info("No history note found for commit", "sha", sha)
+			g.historyNotes[key] = historyNoteEntry{missing: true}
 			return nil, nil
 		}
 		logger.Error(err, "Failed to read history note", "sha", sha, "stderr", stderr)
@@ -864,10 +890,12 @@ func (g *EnvironmentOperations) GetHistoryNote(ctx context.Context, sha string) 
 	var trailers map[string][]string
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &trailers); err != nil {
 		logger.V(4).Info("Failed to parse history note as JSON, ignoring", "sha", sha, "content", stdout, "error", err)
+		g.historyNotes[key] = historyNoteEntry{missing: true}
 		return nil, nil
 	}
 
 	logger.V(4).Info("Got history note", "sha", sha, "trailers", trailers)
+	g.historyNotes[key] = historyNoteEntry{trailers: trailers}
 	return trailers, nil
 }
 
@@ -917,6 +945,7 @@ func (g *EnvironmentOperations) SetHistoryNote(ctx context.Context, sha string, 
 		_, stderr, err = g.runCmd(ctx, gitPath, "push", "origin", PromoterHistoryNotesRef+":"+PromoterHistoryNotesRef)
 		metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationPushNotes, metrics.GitOperationResultFromError(err), time.Since(start))
 		if err == nil {
+			delete(g.historyNotes, strings.ToLower(sha))
 			logger.V(4).Info("Pushed history note", "sha", sha, "attempt", attempt)
 			return nil
 		}

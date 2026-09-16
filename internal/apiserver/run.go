@@ -25,16 +25,19 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	clientrest "k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	promotercache "github.com/argoproj-labs/gitops-promoter/internal/cache"
 	"github.com/argoproj-labs/gitops-promoter/internal/controller"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 )
 
 // dashboardRuntime holds the components started by Run.
 type dashboardRuntime struct {
-	readCache cache.Cache
-	provider  *BundleProvider
-	server    *PromoterAPIServer
+	readCache       cache.Cache
+	provider        *BundleProvider
+	historyProvider *HistoryProvider
+	server          *PromoterAPIServer
 }
 
 // newDashboardRuntime wires the read cache, bundle provider, and extension apiserver.
@@ -43,9 +46,24 @@ func newDashboardRuntime(ctx context.Context, restConfig *clientrest.Config, opt
 	readCache, err := cache.New(restConfig, cache.Options{
 		Scheme:           utils.GetScheme(),
 		DefaultTransform: cacheTransform(),
+		ByObject: map[client.Object]cache.ByObject{
+			promotercache.PartitionedSecretObject(): {
+				Transform: promotercache.SecretDataTransform(),
+			},
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create read cache: %w", err)
+	}
+
+	k8sClient, err := client.New(restConfig, client.Options{
+		Scheme: utils.GetScheme(),
+		Cache: &client.CacheOptions{
+			Reader: readCache,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache client: %w", err)
 	}
 
 	if err := controller.RegisterGatePromotionStrategyRefFieldIndexes(ctx, readCache); err != nil {
@@ -57,7 +75,12 @@ func newDashboardRuntime(ctx context.Context, restConfig *clientrest.Config, opt
 		return nil, fmt.Errorf("failed to set up informers: %w", err)
 	}
 
-	config, err := opts.Config(provider)
+	historyProvider := NewHistoryProvider(readCache, k8sClient, opts.ControllerNamespace, opts.MaxHistoryEntries, opts.HistoryWorkers)
+	if err := historyProvider.SetupInformers(ctx); err != nil {
+		return nil, fmt.Errorf("failed to set up history informers: %w", err)
+	}
+
+	config, err := opts.Config(provider, historyProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build apiserver config: %w", err)
 	}
@@ -71,9 +94,10 @@ func newDashboardRuntime(ctx context.Context, restConfig *clientrest.Config, opt
 	}
 
 	return &dashboardRuntime{
-		readCache: readCache,
-		provider:  provider,
-		server:    server,
+		readCache:       readCache,
+		provider:        provider,
+		historyProvider: historyProvider,
+		server:          server,
 	}, nil
 }
 
@@ -93,8 +117,19 @@ func (d *dashboardRuntime) run(ctx context.Context) error {
 		return errors.New("failed to sync read cache")
 	}
 
+	if err := d.historyProvider.EnqueueAllPromotionStrategies(ctx); err != nil {
+		_ = g.Wait()
+		return fmt.Errorf("failed to enqueue initial promotion strategy histories: %w", err)
+	}
+	d.historyProvider.EnableInformerEvents()
+
 	g.Go(func() error {
 		d.provider.Run(ctx)
+		return nil
+	})
+
+	g.Go(func() error {
+		d.historyProvider.Run(ctx)
 		return nil
 	})
 

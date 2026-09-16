@@ -1,10 +1,11 @@
 # Dashboard Aggregation API
 
 The dashboard is backed by a Kubernetes **aggregation layer**: an extension
-apiserver that serves a single, read-only, server-computed resource that bundles a
-`PromotionStrategy` together with everything related to it.
+apiserver that serves read-only, server-computed view resources.
 
-- **Group / Version / Kind:** `view.promoter.argoproj.io/v1alpha1`, `PromotionStrategyDetails`
+- **Group / Version / Kinds:** `view.promoter.argoproj.io/v1alpha1`
+  - `PromotionStrategyDetails` — bundles a `PromotionStrategy` with related resources
+  - `PromotionStrategyHistory` — per-environment promotion history (from git notes/trailers)
 - **Scope:** namespaced; the name of a `PromotionStrategyDetails` always equals the
   name of the `PromotionStrategy` it describes (1:1 mapping).
 - **Backing store:** none. The resource is *virtual* - it is computed on demand from
@@ -18,10 +19,12 @@ Each bundle contains the `PromotionStrategy`, its `ChangeTransferPolicy`,
 `ScmProvider` or `ClusterScmProvider`).
 
 > [!WARNING]
-> *Secrets are never included*
+> *Secrets are never included in served objects*
 >
-> The bundle resolves the SCM provider but **never** reads or includes the
-> credentials `Secret` it references.
+> `PromotionStrategyDetails` resolves the SCM provider but does not embed credential
+> `Secret` data in the bundle. The apiserver process reads SCM `Secret` objects via
+> informers (credential keys only, via a cache transform) to build
+> `PromotionStrategyHistory` from git.
 
 The dashboard process watches `PromotionStrategyDetails` and forwards each bundle to
 the browser over Server-Sent Events (SSE). SSE does not flow through the

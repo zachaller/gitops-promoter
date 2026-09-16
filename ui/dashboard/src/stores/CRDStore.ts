@@ -30,7 +30,6 @@ function environmentsFromCTPs(
       active: status.active ?? { dry: {}, hydrated: {} },
       proposed: status.proposed ?? { dry: {}, hydrated: {} },
       pullRequest: status.pullRequest,
-      history: status.history,
       lastHealthyDryShas: [],
     };
   });

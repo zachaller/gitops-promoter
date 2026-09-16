@@ -52,6 +52,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&PromotionStrategyDetails{},
 		&PromotionStrategyDetailsList{},
+		&PromotionStrategyHistory{},
+		&PromotionStrategyHistoryList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil

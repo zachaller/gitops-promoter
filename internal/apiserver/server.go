@@ -29,6 +29,8 @@ import (
 type ExtraConfig struct {
 	// Provider backs the REST storage and the watch fan-out.
 	Provider *BundleProvider
+	// HistoryProvider backs PromotionStrategyHistory REST storage.
+	HistoryProvider *HistoryProvider
 }
 
 // Config is the configuration for the dashboard extension apiserver.
@@ -79,8 +81,10 @@ func (c CompletedConfig) New() (*PromoterAPIServer, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(viewv1alpha1.GroupName, Scheme, ParameterCodec, Codecs)
 
 	store := NewREST(c.ExtraConfig.Provider)
+	historyStore := NewHistoryREST(c.ExtraConfig.HistoryProvider)
 	v1alpha1storage := map[string]rest.Storage{
-		"promotionstrategydetails": store,
+		"promotionstrategydetails":   store,
+		"promotionstrategyhistories": historyStore,
 	}
 	apiGroupInfo.VersionedResourcesStorageMap["v1alpha1"] = v1alpha1storage
 

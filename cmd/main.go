@@ -557,11 +557,28 @@ func newAPIServerCommand(clientConfig clientcmd.ClientConfig) *cobra.Command {
 				return fmt.Errorf("failed to get client config: %w", err)
 			}
 
+			controllerNamespace, _, err := clientConfig.Namespace()
+			if err != nil {
+				return fmt.Errorf("failed to get namespace: %w", err)
+			}
+			if opts.ControllerNamespace == "" {
+				opts.ControllerNamespace = controllerNamespace
+			}
+
 			ctx := ctrl.SetupSignalHandler()
 
 			setupLog.Info("starting dashboard aggregation apiserver")
 			if err := apiserver.Run(ctx, restConfig, opts); err != nil {
 				return fmt.Errorf("apiserver exited with error: %w", err)
+			}
+
+			setupLog.Info("Cleaning up cloned directories")
+			for _, path := range gitpaths.GetValues() {
+				err := os.RemoveAll(path)
+				if err != nil {
+					setupLog.Error(err, "failed to cleanup directory")
+				}
+				setupLog.Info("cleaning directory", "directory", path)
 			}
 			return nil
 		},

@@ -81,6 +81,11 @@ func NewBundleProvider(c cache.Cache) *BundleProvider {
 	return p
 }
 
+// Reader returns the read-only client backing this provider (for tests).
+func (p *BundleProvider) Reader() client.Reader {
+	return p.reader
+}
+
 // newProviderWithReader creates a provider backed by an arbitrary read-only client.
 // The cache is left nil (SetupInformers/Run require a real cache); this is primarily
 // used by tests and by NewBundleProvider.
