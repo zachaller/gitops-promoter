@@ -38,6 +38,10 @@ const (
 	// performed by the DependentsSuccessfulCommitStatus controller.
 	DependentsSuccessfulCommitStatusControllerFieldOwner = "promoter.argoproj.io/dependentssuccessfulcommitstatus-controller"
 
+	// DryShaSuccessfulCommitStatusControllerFieldOwner is the field owner for Server-Side Apply operations
+	// performed by the DryShaSuccessfulCommitStatus controller.
+	DryShaSuccessfulCommitStatusControllerFieldOwner = "promoter.argoproj.io/dryshasuccessfulcommitstatus-controller"
+
 	// ScmProviderControllerFieldOwner is the field owner for Server-Side Apply operations
 	// performed by the ScmProvider controller.
 	ScmProviderControllerFieldOwner = "promoter.argoproj.io/scmprovider-controller"

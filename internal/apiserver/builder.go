@@ -139,6 +139,12 @@ func buildBundle(ctx context.Context, reader client.Reader, namespace, name, res
 	}
 	bundle.ScheduledCommitStatuses = nilIfEmpty(scheduledCSList.Items)
 
+	dryShaCSList := &promoterv1alpha1.DryShaSuccessfulCommitStatusList{}
+	if err := reader.List(ctx, dryShaCSList, client.InNamespace(namespace), client.MatchingFields{controller.PromotionStrategyRefField: name}); err != nil {
+		return nil, fmt.Errorf("failed to list DryShaSuccessfulCommitStatuses: %w", err)
+	}
+	bundle.DryShaSuccessfulCommitStatuses = nilIfEmpty(dryShaCSList.Items)
+
 	// Git config: GitRepository -> ScmProvider / ClusterScmProvider.
 	// The credentials Secret referenced by the provider is intentionally never read.
 	if err := attachGitConfig(ctx, reader, namespace, ps, bundle); err != nil {

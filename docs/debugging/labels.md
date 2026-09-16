@@ -33,6 +33,7 @@ Built-in parent-gate label keys (derived from Kind):
 | Parent gate Kind | Label key |
 | ---------------- | --------- |
 | `DependentsSuccessfulCommitStatus` | `promoter.argoproj.io/dependents-successful-commit-status` |
+| `DryShaSuccessfulCommitStatus` | `promoter.argoproj.io/dry-sha-successful-commit-status` |
 | `TimedCommitStatus` | `promoter.argoproj.io/timed-commit-status` |
 | `ScheduledCommitStatus` | `promoter.argoproj.io/scheduled-commit-status` |
 | `ArgoCDCommitStatus` | `promoter.argoproj.io/argo-cd-commit-status` |
@@ -41,7 +42,7 @@ Built-in parent-gate label keys (derived from Kind):
 
 The prefix `promoter.argoproj.io/` is `CommitStatusGateLabelPrefix`; the middle segment is a kebab-case stem from the Kind (for example `ArgoCDCommitStatus` → `argo-cd`). Custom gate controllers should use the same pattern; see [Developing a CommitStatus](../contributing/developing-a-commitstatus.md).
 
-**Ordering gates:** Promotion ordering CommitStatuses (commonly keyed `dependents-successful`) are created directly by the [DependentsSuccessfulCommitStatus](../gating-promotions/built-in-gates/dependents-successful-commit-status.md) controller. They carry all three standard labels, including `promoter.argoproj.io/dependents-successful-commit-status` pointing at the parent gate CR name.
+**Ordering gates:** Promotion ordering CommitStatuses are created directly by whichever ordering gate controller the PromotionStrategy references: [DependentsSuccessfulCommitStatus](../gating-promotions/built-in-gates/dependents-successful-commit-status.md) (commonly keyed `dependents-successful`) or [DryShaSuccessfulCommitStatus](../gating-promotions/built-in-gates/dry-sha-successful-commit-status.md) (commonly keyed `dry-sha-successful`). They carry all three standard labels, including the parent-gate label pointing at the gate CR name.
 
 ### Integration labels (user- or operator-set)
 
@@ -54,7 +55,7 @@ This label is **not** defined in `constants.go`; it is a convention for Argo CD 
 ## How controllers use labels
 
 - **ChangeTransferPolicy** evaluates `activeCommitStatuses` and `proposedCommitStatuses` by listing `CommitStatus` resources with `promoter.argoproj.io/commit-status=<key>` and field-selecting on `.spec.sha`.
-- **Gate controllers** (DependentsSuccessfulCommitStatus, Argo CD, timed, web request, git commit, scheduled) set all three standard labels via `utils.CommitStatusStandardLabels(parent, branch, key)` and use the parent-gate label when cleaning up orphaned CommitStatuses.
+- **Gate controllers** (DependentsSuccessfulCommitStatus, DryShaSuccessfulCommitStatus, Argo CD, timed, web request, git commit, scheduled) set all three standard labels via `utils.CommitStatusStandardLabels(parent, branch, key)` and use the parent-gate label when cleaning up orphaned CommitStatuses.
 - **PromotionStrategy** lists `ChangeTransferPolicy` objects with `promoter.argoproj.io/promotion-strategy=<strategy>` to remove orphaned policies when environments change.
 
 ## Useful queries
@@ -139,7 +140,7 @@ A Promoter CR labeled with `promoter.argoproj.io/instance-id=""`, a typo, or a d
 
 1. **Which object** — Kind, name, namespace, and controller version / chart version.
 2. **Expected vs actual labels** — `kubectl get <kind> <name> -n <namespace> -o yaml` (redact secrets), focusing on `metadata.labels` and relevant spec (branch, key, sha).
-3. **Owning gate or policy** — Name of the `DependentsSuccessfulCommitStatus`, `ArgoCDCommitStatus`, `TimedCommitStatus`, `WebRequestCommitStatus`, `GitCommitStatus`, `PromotionStrategy`, or `ChangeTransferPolicy` involved.
+3. **Owning gate or policy** — Name of the `DependentsSuccessfulCommitStatus`, `DryShaSuccessfulCommitStatus`, `ArgoCDCommitStatus`, `TimedCommitStatus`, `WebRequestCommitStatus`, `GitCommitStatus`, `PromotionStrategy`, or `ChangeTransferPolicy` involved.
 4. **Controller logs** — gitops-promoter manager logs around the reconcile window; related `kubectl get events`.
 5. **Open an issue** on [argoproj-labs/gitops-promoter](https://github.com/argoproj-labs/gitops-promoter/issues) with the label keys/values you expected and what you see instead.
 

@@ -518,6 +518,9 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: dependentsSuccessfulCommitStatus
       type:
         namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DependentsSuccessfulCommitStatusConfiguration
+    - name: dryShaSuccessfulCommitStatus
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatusConfiguration
     - name: gitCommitStatus
       type:
         namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.GitCommitStatusConfiguration
@@ -676,6 +679,146 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: satisfied
       type:
         scalar: boolean
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaRecord
+  map:
+    fields:
+    - name: mergeSha
+      type:
+        scalar: string
+    - name: mergedAt
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Time
+    - name: sha
+      type:
+        scalar: string
+    - name: source
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaRecordSource
+    - name: successful
+      type:
+        scalar: boolean
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaRecordSource
+  scalar: string
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatus
+  map:
+    fields:
+    - name: apiVersion
+      type:
+        scalar: string
+    - name: kind
+      type:
+        scalar: string
+    - name: metadata
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta
+    - name: spec
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatusSpec
+    - name: status
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatusStatus
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatusConfiguration
+  map:
+    fields:
+    - name: workQueue
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.WorkQueue
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatusEnvironmentStatus
+  map:
+    fields:
+    - name: branch
+      type:
+        scalar: string
+    - name: description
+      type:
+        scalar: string
+    - name: dryShaHistory
+      type:
+        list:
+          elementType:
+            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaRecord
+          elementRelationship: atomic
+    - name: phase
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.CommitStatusPhase
+    - name: rebuiltAt
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Time
+    - name: rebuiltFromSha
+      type:
+        scalar: string
+    - name: reportedSha
+      type:
+        scalar: string
+    - name: upstreams
+      type:
+        list:
+          elementType:
+            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatusUpstreamStatus
+          elementRelationship: atomic
+    - name: url
+      type:
+        scalar: string
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatusSpec
+  map:
+    fields:
+    - name: allowNewerDrySha
+      type:
+        scalar: boolean
+      default: true
+    - name: historyDepth
+      type:
+        scalar: numeric
+      default: 20
+    - name: key
+      type:
+        scalar: string
+    - name: promotionStrategyRef
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ObjectReference
+    - name: url
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.URLConfig
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatusStatus
+  map:
+    fields:
+    - name: conditions
+      type:
+        list:
+          elementType:
+            namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Condition
+          elementRelationship: associative
+          keys:
+          - type
+    - name: environments
+      type:
+        list:
+          elementType:
+            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatusEnvironmentStatus
+          elementRelationship: associative
+          keys:
+          - branch
+    - name: instanceID
+      type:
+        scalar: string
+    - name: observedGeneration
+      type:
+        scalar: numeric
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.DryShaSuccessfulCommitStatusUpstreamStatus
+  map:
+    fields:
+    - name: branch
+      type:
+        scalar: string
+    - name: reason
+      type:
+        scalar: string
+    - name: satisfied
+      type:
+        scalar: boolean
+    - name: satisfiedBySha
+      type:
+        scalar: string
 - name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.Environment
   map:
     fields:

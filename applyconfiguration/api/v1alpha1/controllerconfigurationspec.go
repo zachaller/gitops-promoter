@@ -66,6 +66,9 @@ type ControllerConfigurationSpecApplyConfiguration struct {
 	// ScheduledCommitStatus contains the configuration for the ScheduledCommitStatus controller,
 	// including WorkQueue settings that control reconciliation behavior.
 	ScheduledCommitStatus *ScheduledCommitStatusConfigurationApplyConfiguration `json:"scheduledCommitStatus,omitempty"`
+	// DryShaSuccessfulCommitStatus contains the configuration for the DryShaSuccessfulCommitStatus controller,
+	// including WorkQueue settings that control reconciliation behavior.
+	DryShaSuccessfulCommitStatus *DryShaSuccessfulCommitStatusConfigurationApplyConfiguration `json:"dryShaSuccessfulCommitStatus,omitempty"`
 }
 
 // ControllerConfigurationSpecApplyConfiguration constructs a declarative configuration of the ControllerConfigurationSpec type for use with
@@ -159,5 +162,13 @@ func (b *ControllerConfigurationSpecApplyConfiguration) WithDependentsSuccessful
 // If called multiple times, the ScheduledCommitStatus field is set to the value of the last call.
 func (b *ControllerConfigurationSpecApplyConfiguration) WithScheduledCommitStatus(value *ScheduledCommitStatusConfigurationApplyConfiguration) *ControllerConfigurationSpecApplyConfiguration {
 	b.ScheduledCommitStatus = value
+	return b
+}
+
+// WithDryShaSuccessfulCommitStatus sets the DryShaSuccessfulCommitStatus field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the DryShaSuccessfulCommitStatus field is set to the value of the last call.
+func (b *ControllerConfigurationSpecApplyConfiguration) WithDryShaSuccessfulCommitStatus(value *DryShaSuccessfulCommitStatusConfigurationApplyConfiguration) *ControllerConfigurationSpecApplyConfiguration {
+	b.DryShaSuccessfulCommitStatus = value
 	return b
 }

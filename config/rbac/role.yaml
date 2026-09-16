@@ -42,6 +42,7 @@ rules:
   resources:
   - argocdcommitstatuses
   - dependentssuccessfulcommitstatuses
+  - dryshasuccessfulcommitstatuses
   - gitcommitstatuses
   - promotionstrategies
   - revertcommits
@@ -59,6 +60,7 @@ rules:
   - changetransferpolicies/finalizers
   - clusterscmproviders/finalizers
   - dependentssuccessfulcommitstatuses/finalizers
+  - dryshasuccessfulcommitstatuses/finalizers
   - gitcommitstatuses/finalizers
   - gitrepositories/finalizers
   - promotionstrategies/finalizers
@@ -77,6 +79,7 @@ rules:
   - clusterscmproviders/status
   - commitstatuses/status
   - dependentssuccessfulcommitstatuses/status
+  - dryshasuccessfulcommitstatuses/status
   - gitcommitstatuses/status
   - gitrepositories/status
   - promotionstrategies/status

@@ -105,6 +105,20 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.DependentsSuccessfulCommitStatusStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("DependentsSuccessfulCommitStatusUpstreamStatus"):
 		return &apiv1alpha1.DependentsSuccessfulCommitStatusUpstreamStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DryShaRecord"):
+		return &apiv1alpha1.DryShaRecordApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DryShaSuccessfulCommitStatus"):
+		return &apiv1alpha1.DryShaSuccessfulCommitStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DryShaSuccessfulCommitStatusConfiguration"):
+		return &apiv1alpha1.DryShaSuccessfulCommitStatusConfigurationApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DryShaSuccessfulCommitStatusEnvironmentStatus"):
+		return &apiv1alpha1.DryShaSuccessfulCommitStatusEnvironmentStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DryShaSuccessfulCommitStatusSpec"):
+		return &apiv1alpha1.DryShaSuccessfulCommitStatusSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DryShaSuccessfulCommitStatusStatus"):
+		return &apiv1alpha1.DryShaSuccessfulCommitStatusStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DryShaSuccessfulCommitStatusUpstreamStatus"):
+		return &apiv1alpha1.DryShaSuccessfulCommitStatusUpstreamStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Environment"):
 		return &apiv1alpha1.EnvironmentApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("EnvironmentStatus"):

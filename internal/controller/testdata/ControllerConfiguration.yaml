@@ -128,6 +128,17 @@ spec:
           baseDelay: "500ms"
           maxDelay: "1m"
 
+  # DryShaSuccessfulCommitStatus controller gates promotion on whether the dry commit being promoted has
+  # already been successful in an environment's upstream environments, rebuilt from promotion-history git notes
+  dryShaSuccessfulCommitStatus:
+    workQueue:
+      requeueDuration: "5m"
+      maxConcurrentReconciles: 5
+      rateLimiter:
+        exponentialFailure:
+          baseDelay: "500ms"
+          maxDelay: "1m"
+
   # TimedCommitStatus controller enforces soak-time gates via CommitStatus resources
   timedCommitStatus:
     workQueue:

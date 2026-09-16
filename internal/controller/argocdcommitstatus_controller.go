@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net/url"
 	"reflect"
 	"slices"
 	"strings"
@@ -709,24 +708,12 @@ func (r *ArgoCDCommitStatusReconciler) updateAggregatedCommitStatus(ctx context.
 			ArgoCDCommitStatus: argoCDCommitStatus,
 		}
 
-		renderedURL, err := utils.RenderStringTemplate(argoCDCommitStatus.Spec.URL.Template, data, argoCDCommitStatus.Spec.URL.Options...)
+		renderedURL, err := renderGateCommitStatusURL(ctx, argoCDCommitStatus.Spec.URL, data, targetBranch, resourceName, argoCDCommitStatus.Namespace)
 		if err != nil {
-			return nil, fmt.Errorf("failed to render URL template: %w", err)
-		}
-
-		// Parse the URL to check that it's valid
-		parsedURL, err := url.Parse(renderedURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse URL: %w", err)
-		}
-
-		// Check that the URL scheme is http or https
-		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-			return nil, fmt.Errorf("URL scheme is not http or https: %s", parsedURL.Scheme)
+			return nil, err
 		}
 
 		// Set the URL in the CommitStatus
-		logger.V(4).Info("Rendered URL template", "url", renderedURL, "environment", targetBranch, "commitStatus", resourceName, "namespace", argoCDCommitStatus.Namespace)
 		commitStatusSpec = commitStatusSpec.WithUrl(renderedURL)
 	}
 

@@ -69,6 +69,9 @@ type PromotionStrategyDetails struct {
 	// ScheduledCommitStatuses are the ScheduledCommitStatus managers that reference the PromotionStrategy.
 	ScheduledCommitStatuses []promoterv1alpha1.ScheduledCommitStatus `json:"scheduledCommitStatuses,omitempty"`
 
+	// DryShaSuccessfulCommitStatuses are the DryShaSuccessfulCommitStatus managers that reference the PromotionStrategy.
+	DryShaSuccessfulCommitStatuses []promoterv1alpha1.DryShaSuccessfulCommitStatus `json:"dryShaSuccessfulCommitStatuses,omitempty"`
+
 	// GitRepository is the GitRepository referenced by the PromotionStrategy, if resolvable.
 	GitRepository *promoterv1alpha1.GitRepository `json:"gitRepository,omitempty"`
 

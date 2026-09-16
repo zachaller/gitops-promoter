@@ -26,7 +26,12 @@ type OrderCommitStatusRefApplyConfiguration struct {
 	// out-of-tree ordering gates may use any valid API group and are resolved via the generic gate contract.
 	Group *string `json:"group,omitempty"`
 	// Kind is the type of resource being referenced. Must name a CommitStatus gate CR registered as an
-	// ordering gate. DependentsSuccessfulCommitStatus is supported today; additional kinds may be added later.
+	// ordering gate. Two in-tree kinds are supported: DependentsSuccessfulCommitStatus (the default), which
+	// requires each upstream environment to be currently running the target dry commit and healthy, and
+	// DryShaSuccessfulCommitStatus, which instead asks whether the target dry commit has already been
+	// successful in each upstream, rebuilt from the promotion-history git notes on their active branches.
+	// Out-of-tree kinds are resolved through the generic gate contract (spec.key and
+	// spec.promotionStrategyRef.name).
 	Kind *string `json:"kind,omitempty"`
 	// Name is the name of the resource being referenced.
 	Name *string `json:"name,omitempty"`

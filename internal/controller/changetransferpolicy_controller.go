@@ -488,35 +488,32 @@ func (r *ChangeTransferPolicyReconciler) populatePullRequestMetadata(ctx context
 func (r *ChangeTransferPolicyReconciler) populateCommitStatuses(ctx context.Context, h *promoterv1alpha1.History, activeTrailers map[string][]string) {
 	activeKeys, proposedKeys := getCommitStatusKeysFromTrailers(ctx, activeTrailers)
 
-	h.Active.CommitStatuses = make([]promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase, 0, len(activeKeys))
-	for _, key := range activeKeys {
-		url := getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusActivePrefix+key+"-url")
-		if url != "" && !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-			log.FromContext(ctx).Error(errors.New("invalid URL"), "active commit status URL does not start with http:// or https://", "url", url, "key", key)
-			url = ""
-		}
-		h.Active.CommitStatuses = append(h.Active.CommitStatuses, promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase{
-			Key:         key,
-			Phase:       getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusActivePrefix+key+"-phase"),
-			Url:         url,
-			Description: decodeTrailerDescription(ctx, getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusActivePrefix+key+"-description")),
-		})
-	}
+	h.Active.CommitStatuses = commitStatusPhasesFromTrailers(ctx, activeTrailers, constants.TrailerCommitStatusActivePrefix, activeKeys)
+	h.Proposed.CommitStatuses = commitStatusPhasesFromTrailers(ctx, activeTrailers, constants.TrailerCommitStatusProposedPrefix, proposedKeys)
+}
 
-	h.Proposed.CommitStatuses = make([]promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase, 0, len(proposedKeys))
-	for _, key := range proposedKeys {
-		url := getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusProposedPrefix+key+"-url")
+// commitStatusPhasesFromTrailers decodes the <prefix><key>-phase/-url/-description trailers for the given
+// keys into commit status phases. A URL that is not http(s) is logged and dropped rather than propagated.
+//
+// This is shared by the ChangeTransferPolicy history builder and by DryShaSuccessfulCommitStatus, which
+// reads the same trailers off the promotion-history git notes. Keeping one decoder means the two cannot
+// drift on how a recorded commit status is interpreted.
+func commitStatusPhasesFromTrailers(ctx context.Context, trailers map[string][]string, prefix string, keys []string) []promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase {
+	statuses := make([]promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase, 0, len(keys))
+	for _, key := range keys {
+		url := getFirstTrailerValue(trailers, prefix+key+"-url")
 		if url != "" && !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-			log.FromContext(ctx).Error(errors.New("invalid URL"), "proposed commit status URL does not start with http:// or https://", "url", url, "key", key)
+			log.FromContext(ctx).Error(errors.New("invalid URL"), "commit status URL does not start with http:// or https://", "url", url, "key", key, "trailerPrefix", prefix)
 			url = ""
 		}
-		h.Proposed.CommitStatuses = append(h.Proposed.CommitStatuses, promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase{
+		statuses = append(statuses, promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase{
 			Key:         key,
-			Phase:       getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusProposedPrefix+key+"-phase"),
+			Phase:       getFirstTrailerValue(trailers, prefix+key+"-phase"),
 			Url:         url,
-			Description: decodeTrailerDescription(ctx, getFirstTrailerValue(activeTrailers, constants.TrailerCommitStatusProposedPrefix+key+"-description")),
+			Description: decodeTrailerDescription(ctx, getFirstTrailerValue(trailers, prefix+key+"-description")),
 		})
 	}
+	return statuses
 }
 
 // getCommitStatusKeysFromTrailers extracts the commit status keys from the trailers in the given context.

@@ -36,6 +36,18 @@ const DefaultOrderCommitStatusGroup = "promoter.argoproj.io"
 // DefaultOrderCommitStatusKind is the default kind for PromotionStrategy.spec.orderCommitStatusRef.
 const DefaultOrderCommitStatusKind = "DependentsSuccessfulCommitStatus"
 
+// OrderCommitStatusKindDryShaSuccessful is the kind of the git-backed ordering gate, which reports whether
+// the dry commit being promoted has already been successful in an environment's upstream environments.
+const OrderCommitStatusKindDryShaSuccessful = "DryShaSuccessfulCommitStatus"
+
+// DryShaSuccessfulCommitStatusKey is the commit status key name conventionally used for the
+// DryShaSuccessfulCommitStatus ordering gate.
+const DryShaSuccessfulCommitStatusKey = "dry-sha-successful"
+
+// DryShaSuccessfulDefaultHistoryDepth is the number of first-parent commits of an environment's active
+// branch walked when rebuilding its dry SHA record, when spec.historyDepth is unset.
+const DryShaSuccessfulDefaultHistoryDepth = 20
+
 // LegacyPreviousEnvironmentCommitStatusKey is the commit status key used by PromotionStrategy ≤ 0.37 for
 // linear ordering. DependentsSuccessfulCommitStatus deletes orphaned CommitStatuses with this label once
 // the replacement gate is configured.

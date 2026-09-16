@@ -16,6 +16,7 @@ resources:
 - bases/promoter.argoproj.io_gitcommitstatuses.yaml
 - bases/promoter.argoproj.io_webrequestcommitstatuses.yaml
 - bases/promoter.argoproj.io_dependentssuccessfulcommitstatuses.yaml
+- bases/promoter.argoproj.io_dryshasuccessfulcommitstatuses.yaml
 - bases/promoter.argoproj.io_scheduledcommitstatuses.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 

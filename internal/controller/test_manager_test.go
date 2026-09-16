@@ -155,6 +155,13 @@ func startPartitionedManager(ctx context.Context, cfg *rest.Config, namespace st
 		SettingsMgr: settingsMgr,
 	}).SetupWithManager(mgrCtx, localMgr)).To(Succeed())
 
+	Expect((&DryShaSuccessfulCommitStatusReconciler{
+		Client:      localMgr.GetClient(),
+		Scheme:      localMgr.GetScheme(),
+		Recorder:    localMgr.GetEventRecorder("DryShaSuccessfulCommitStatus"),
+		SettingsMgr: settingsMgr,
+	}).SetupWithManager(mgrCtx, localMgr)).To(Succeed())
+
 	Expect((&PromotionStrategyReconciler{
 		Client:      localMgr.GetClient(),
 		Scheme:      localMgr.GetScheme(),

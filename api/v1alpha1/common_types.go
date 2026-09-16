@@ -94,7 +94,12 @@ type OrderCommitStatusRef struct {
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
 	Group string `json:"group"`
 	// Kind is the type of resource being referenced. Must name a CommitStatus gate CR registered as an
-	// ordering gate. DependentsSuccessfulCommitStatus is supported today; additional kinds may be added later.
+	// ordering gate. Two in-tree kinds are supported: DependentsSuccessfulCommitStatus (the default), which
+	// requires each upstream environment to be currently running the target dry commit and healthy, and
+	// DryShaSuccessfulCommitStatus, which instead asks whether the target dry commit has already been
+	// successful in each upstream, rebuilt from the promotion-history git notes on their active branches.
+	// Out-of-tree kinds are resolved through the generic gate contract (spec.key and
+	// spec.promotionStrategyRef.name).
 	// +kubebuilder:validation:Required
 	// +kubebuilder:default:=DependentsSuccessfulCommitStatus
 	// +kubebuilder:validation:XValidation:rule=`self.endsWith('CommitStatus')`,message="kind must name a CommitStatus gate CR"

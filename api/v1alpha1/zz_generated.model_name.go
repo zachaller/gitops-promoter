@@ -246,6 +246,46 @@ func (in DependentsSuccessfulCommitStatusUpstreamStatus) OpenAPIModelName() stri
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in DryShaRecord) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.DryShaRecord"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in DryShaSuccessfulCommitStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.DryShaSuccessfulCommitStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in DryShaSuccessfulCommitStatusConfiguration) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.DryShaSuccessfulCommitStatusConfiguration"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in DryShaSuccessfulCommitStatusEnvironmentStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.DryShaSuccessfulCommitStatusEnvironmentStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in DryShaSuccessfulCommitStatusList) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.DryShaSuccessfulCommitStatusList"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in DryShaSuccessfulCommitStatusSpec) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.DryShaSuccessfulCommitStatusSpec"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in DryShaSuccessfulCommitStatusStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.DryShaSuccessfulCommitStatusStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in DryShaSuccessfulCommitStatusUpstreamStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.DryShaSuccessfulCommitStatusUpstreamStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in Environment) OpenAPIModelName() string {
 	return "io.argoproj.promoter.v1alpha1.Environment"
 }

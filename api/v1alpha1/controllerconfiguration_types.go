@@ -92,6 +92,11 @@ type ControllerConfigurationSpec struct {
 	// including WorkQueue settings that control reconciliation behavior.
 	// +required
 	ScheduledCommitStatus ScheduledCommitStatusConfiguration `json:"scheduledCommitStatus"`
+
+	// DryShaSuccessfulCommitStatus contains the configuration for the DryShaSuccessfulCommitStatus controller,
+	// including WorkQueue settings that control reconciliation behavior.
+	// +required
+	DryShaSuccessfulCommitStatus DryShaSuccessfulCommitStatusConfiguration `json:"dryShaSuccessfulCommitStatus"`
 }
 
 // PromotionStrategyConfiguration defines the configuration for the PromotionStrategy controller.
@@ -179,6 +184,17 @@ type TimedCommitStatusConfiguration struct {
 // requests, including requeue intervals, concurrency limits, and rate limiting behavior.
 type DependentsSuccessfulCommitStatusConfiguration struct {
 	// WorkQueue contains the work queue configuration for the DependentsSuccessfulCommitStatus controller.
+	// This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.
+	// +required
+	WorkQueue WorkQueue `json:"workQueue"`
+}
+
+// DryShaSuccessfulCommitStatusConfiguration defines the configuration for the DryShaSuccessfulCommitStatus controller.
+//
+// This configuration controls how the DryShaSuccessfulCommitStatus controller processes reconciliation
+// requests, including requeue intervals, concurrency limits, and rate limiting behavior.
+type DryShaSuccessfulCommitStatusConfiguration struct {
+	// WorkQueue contains the work queue configuration for the DryShaSuccessfulCommitStatus controller.
 	// This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.
 	// +required
 	WorkQueue WorkQueue `json:"workQueue"`

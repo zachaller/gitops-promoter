@@ -504,32 +504,16 @@ func (r *DependentsSuccessfulCommitStatusReconciler) createOrUpdateDependentsSuc
 	labels := utils.CommitStatusStandardLabels(dcs, branch, key)
 	description := utils.GateEnvironmentCommitStatusDescription(branch, phase, pendingReason)
 
-	var renderedURL string
-	if dcs.Spec.URL.Template != "" {
-		data := DAGURLTemplateData{
-			Environment:                      branch,
-			DependentsSuccessfulCommitStatus: *dcs,
-			PromotionStrategy:                ps,
-			DependsOn:                        dependsOn,
-			DependsOnQuery:                   buildDependsOnQuery(dependsOn),
-		}
-		var err error
-		renderedURL, err = utils.RenderStringTemplate(dcs.Spec.URL.Template, data, dcs.Spec.URL.Options...)
-		if err != nil {
-			return nil, promoterv1alpha1.GateEnvironmentCommitStatus{}, fmt.Errorf("failed to render URL template: %w", err)
-		}
-		parsedURL, err := url.Parse(renderedURL)
-		if err != nil {
-			return nil, promoterv1alpha1.GateEnvironmentCommitStatus{}, fmt.Errorf("failed to parse URL: %w", err)
-		}
-		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-			return nil, promoterv1alpha1.GateEnvironmentCommitStatus{}, fmt.Errorf("URL scheme is not http or https: %s", parsedURL.Scheme)
-		}
-		logf.FromContext(ctx).V(4).Info("Rendered URL template",
-			"url", renderedURL,
-			"environment", branch,
-			"commitStatus", commitStatusName,
-			"namespace", dcs.Namespace)
+	urlData := DAGURLTemplateData{
+		Environment:                      branch,
+		DependentsSuccessfulCommitStatus: *dcs,
+		PromotionStrategy:                ps,
+		DependsOn:                        dependsOn,
+		DependsOnQuery:                   buildDependsOnQuery(dependsOn),
+	}
+	renderedURL, err := renderGateCommitStatusURL(ctx, dcs.Spec.URL, urlData, branch, commitStatusName, dcs.Namespace)
+	if err != nil {
+		return nil, promoterv1alpha1.GateEnvironmentCommitStatus{}, err
 	}
 
 	// Use the stable gate key as the SCM commit status context (spec.Name) so users can
@@ -587,6 +571,8 @@ func (r *DependentsSuccessfulCommitStatusReconciler) createOrUpdateDependentsSuc
 }
 
 // SetupWithManager sets up the controller with the Manager.
+//
+//nolint:dupl // Gate controllers share the same controller-builder wiring by design.
 func (r *DependentsSuccessfulCommitStatusReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Use Direct methods to read configuration from the API server without cache during setup.
 	// The cache is not started during SetupWithManager, so we must use the non-cached API reader.

@@ -115,6 +115,26 @@ fields (`phase`, `description`, `url`, `reportedSha`) when a child exists. See
 {!internal/controller/testdata/DependentsSuccessfulCommitStatus.yaml!}
 ```
 
+### DryShaSuccessfulCommitStatus
+
+A DryShaSuccessfulCommitStatus is an alternative ordering gate to
+[DependentsSuccessfulCommitStatus](#dependentssuccessfulcommitstatus). It resolves the dependency graph the same way
+(explicit `dependsOn`, otherwise a linear chain from `spec.environments` order) and uses the same definition of
+[success](gating-promotions/index.md#environment-success) — the upstream environment's **active** commit statuses all
+passing. The difference is *when* that success is measured: DependentsSuccessfulCommitStatus requires the upstream to be
+sitting on the target dry commit and healthy right now, whereas this gate asks whether the target dry commit has
+**already been successful** there, so an upstream that has since promoted past it still satisfies the gate.
+
+The record is rebuilt from the promotion-history git notes (`refs/notes/promoter.history`) on each upstream's active
+branch and cached on `status.environments[].dryShaHistory`. That cache is regenerable — deleting it costs one extra
+walk, nothing more. Attach the gate with `PromotionStrategy.spec.orderCommitStatusRef` (set `kind` explicitly, since the
+field defaults to `DependentsSuccessfulCommitStatus`). See
+[Dry Sha Successful Commit Status](gating-promotions/built-in-gates/dry-sha-successful-commit-status.md).
+
+```yaml
+{!internal/controller/testdata/DryShaSuccessfulCommitStatus.yaml!}
+```
+
 ### ArgoCDCommitStatus
 
 An ArgoCDCommitStatus is used as a way to aggregate all the Argo CD Applications that are being used in the promotion strategy. It is used

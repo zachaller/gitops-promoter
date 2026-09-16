@@ -1,0 +1,11 @@
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: DryShaSuccessfulCommitStatus
+metadata:
+  labels:
+    app.kubernetes.io/name: promoter
+    app.kubernetes.io/managed-by: kustomize
+  name: dryshasuccessfulcommitstatus-sample
+spec:
+  key: dry-sha-successful
+  promotionStrategyRef:
+    name: promotionstrategy-sample

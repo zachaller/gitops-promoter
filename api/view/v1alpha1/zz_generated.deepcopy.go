@@ -94,6 +94,13 @@ func (in *PromotionStrategyDetails) DeepCopyInto(out *PromotionStrategyDetails) 
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.DryShaSuccessfulCommitStatuses != nil {
+		in, out := &in.DryShaSuccessfulCommitStatuses, &out.DryShaSuccessfulCommitStatuses
+		*out = make([]apiv1alpha1.DryShaSuccessfulCommitStatus, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.GitRepository != nil {
 		in, out := &in.GitRepository, &out.GitRepository
 		*out = new(apiv1alpha1.GitRepository)

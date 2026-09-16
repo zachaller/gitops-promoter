@@ -28,7 +28,11 @@ Upgrading from a release before 0.39? See [Upgrading](../upgrading.md#039-promot
 Promotion ordering (which environments may promote relative to others) is also expressed as a proposed commit
 status. Set required `spec.orderCommitStatusRef` on the PromotionStrategy. The controller injects that gate's
 `spec.key` onto every `ChangeTransferPolicy`; without a resolvable ref the PromotionStrategy fails reconcile.
-The built-in ordering gate is [DependentsSuccessfulCommitStatus](built-in-gates/dependents-successful-commit-status.md).
+Two built-in ordering gates are available:
+[DependentsSuccessfulCommitStatus](built-in-gates/dependents-successful-commit-status.md) (the default) checks that each
+upstream environment is running the dry commit being promoted and is healthy right now;
+[DryShaSuccessfulCommitStatus](built-in-gates/dry-sha-successful-commit-status.md) instead checks whether that dry commit
+has already been successful upstream, so an upstream that has promoted past it does not block the gate.
 
 Gate controller authors: see [Commit Status Controller Best Practices](../contributing/developing-a-commitstatus.md#gate-statusenvironments-standard).
 

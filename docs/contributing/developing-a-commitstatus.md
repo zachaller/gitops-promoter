@@ -379,13 +379,14 @@ Upsert the child `CommitStatus`, then mirror `phase`, `description`, `url`, and 
 | Gate CR | `branch` | `phase` | `description` | `url` | `reportedSha` | Gate-specific |
 |---------|----------|---------|---------------|-------|---------------|---------------|
 | DependentsSuccessfulCommitStatus | yes | yes | yes | yes | yes (proposed hydrated) | `activeCommitStatuses`, `upstreams` (`reason` when unsatisfied) |
+| DryShaSuccessfulCommitStatus | yes | yes | yes | yes | yes (proposed hydrated) | `dryShaHistory`, `rebuiltFromSha`, `rebuiltAt`, `upstreams` (`satisfiedBySha` / `reason`) |
 | TimedCommitStatus | yes | yes | — | — | — (`sha`, active hydrated) | timer fields |
 | ScheduledCommitStatus | yes | yes | — | — | — (`sha`, proposed hydrated) | window fields |
 | WebRequestCommitStatus | yes | yes | — | — | — (`reportedSha`) | HTTP outputs |
 | GitCommitStatus | yes | yes | — | — | — (`proposedHydratedSha`) | `expressionResult`, `targetedSha` |
 | ArgoCDCommitStatus | — | — | — | — | — | `applicationsSelected` |
 
-DependentsSuccessfulCommitStatus is the first gate with the full `GateEnvironmentCommitStatus` embed; other gates may converge in follow-up work.
+DependentsSuccessfulCommitStatus and DryShaSuccessfulCommitStatus are the gates with the full `GateEnvironmentCommitStatus` embed; other gates may converge in follow-up work.
 
 ## Dashboard view bundle
 

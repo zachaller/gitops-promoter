@@ -11,6 +11,15 @@ environment, it writes a proposed `CommitStatus` (the ordering gate) whose `phas
 The controller reads the referenced PromotionStrategy's environment status, evaluates the configured dependency
 relationships, and updates one CommitStatus per environment.
 
+!!! tip "If lower environments move faster than higher ones"
+
+    This gate is a point-in-time check: a dependent that has already promoted *past* the dry commit being gated no
+    longer matches it, and the gate stays pending. When that is a problem — a busy `dev` that takes several changes a
+    day while `prod` promotes weekly — use
+    [DryShaSuccessfulCommitStatus](dry-sha-successful-commit-status.md) instead. It applies the same success criterion
+    but asks whether the dry commit has *already been* successful in the dependent, reading the promotion-history git
+    notes on its active branch.
+
 > [!IMPORTANT]
 > Create a `DependentsSuccessfulCommitStatus` for each PromotionStrategy you want to gate, and set required
 > `spec.orderCommitStatusRef` on that PromotionStrategy. The PromotionStrategy controller injects `spec.key` onto every

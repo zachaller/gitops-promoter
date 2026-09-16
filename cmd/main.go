@@ -381,6 +381,15 @@ func runController(
 		setupLog.Error(err, "unable to create controller", "controller", "DependentsSuccessfulCommitStatus")
 		panic(fmt.Errorf("unable to create DependentsSuccessfulCommitStatus controller: %w", err))
 	}
+	if err := (&controller.DryShaSuccessfulCommitStatusReconciler{
+		Client:      localManager.GetClient(),
+		Scheme:      localManager.GetScheme(),
+		Recorder:    localManager.GetEventRecorder("DryShaSuccessfulCommitStatus"),
+		SettingsMgr: settingsMgr,
+	}).SetupWithManager(runCtx, localManager); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DryShaSuccessfulCommitStatus")
+		panic(fmt.Errorf("unable to create DryShaSuccessfulCommitStatus controller: %w", err))
+	}
 	if err := (&controller.ScheduledCommitStatusReconciler{
 		Client:      localManager.GetClient(),
 		Scheme:      localManager.GetScheme(),

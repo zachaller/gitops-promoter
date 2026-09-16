@@ -102,6 +102,51 @@ var _ = Describe("Resolve", func() {
 		Expect(err).To(MatchError(ContainSubstring("promotionStrategyRef.name is \"other\"")))
 	})
 
+	It("resolves DryShaSuccessfulCommitStatus via a typed Get", func() {
+		ps := testPromotionStrategy(promoterv1alpha1.OrderCommitStatusRef{
+			Kind: promoterv1alpha1.OrderCommitStatusKindDryShaSuccessful,
+			Name: "demo",
+		})
+		gate := &promoterv1alpha1.DryShaSuccessfulCommitStatus{
+			ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
+			Spec: promoterv1alpha1.DryShaSuccessfulCommitStatusSpec{
+				PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: "demo"},
+				Key:                  promoterv1alpha1.DryShaSuccessfulCommitStatusKey,
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(promoterScheme()).WithObjects(gate).Build()
+		key, err := Resolve(context.Background(), c, nil, ps)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(key).To(Equal(promoterv1alpha1.DryShaSuccessfulCommitStatusKey))
+	})
+
+	It("rejects a typed DryShaSuccessfulCommitStatus whose promotionStrategyRef does not match", func() {
+		ps := testPromotionStrategy(promoterv1alpha1.OrderCommitStatusRef{
+			Kind: promoterv1alpha1.OrderCommitStatusKindDryShaSuccessful,
+			Name: "demo",
+		})
+		gate := &promoterv1alpha1.DryShaSuccessfulCommitStatus{
+			ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
+			Spec: promoterv1alpha1.DryShaSuccessfulCommitStatusSpec{
+				PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: "other"},
+				Key:                  promoterv1alpha1.DryShaSuccessfulCommitStatusKey,
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(promoterScheme()).WithObjects(gate).Build()
+		_, err := Resolve(context.Background(), c, nil, ps)
+		Expect(err).To(MatchError(ContainSubstring("promotionStrategyRef.name is \"other\"")))
+	})
+
+	It("reports a not-found DryShaSuccessfulCommitStatus without falling through to unstructured", func() {
+		ps := testPromotionStrategy(promoterv1alpha1.OrderCommitStatusRef{
+			Kind: promoterv1alpha1.OrderCommitStatusKindDryShaSuccessful,
+			Name: "missing",
+		})
+		c := fake.NewClientBuilder().WithScheme(promoterScheme()).Build()
+		_, err := Resolve(context.Background(), c, nil, ps)
+		Expect(err).To(MatchError(ContainSubstring("it was not found")))
+	})
+
 	It("resolves out-of-tree gate CRs at v1alpha1", func() {
 		ps := &promoterv1alpha1.PromotionStrategy{
 			ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},

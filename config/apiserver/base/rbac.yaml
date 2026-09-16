@@ -22,6 +22,7 @@ rules:
       - webrequestcommitstatuses
       - scheduledcommitstatuses
       - dependentssuccessfulcommitstatuses
+      - dryshasuccessfulcommitstatuses
       - gitrepositories
       - scmproviders
       - clusterscmproviders

@@ -12,5 +12,6 @@ resources:
 - promoter_v1alpha1_timedcommitstatus.yaml
 - promoter_v1alpha1_gitcommitstatus.yaml
 - promoter_v1alpha1_dependentssuccessfulcommitstatus.yaml
+- promoter_v1alpha1_dryshasuccessfulcommitstatus.yaml
 - promoter_v1alpha1_scheduledcommitstatus.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

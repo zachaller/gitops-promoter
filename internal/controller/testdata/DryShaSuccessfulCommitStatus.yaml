@@ -1,0 +1,73 @@
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: DryShaSuccessfulCommitStatus
+metadata:
+  name: example-dry-sha-successful
+spec:
+  key: dry-sha-successful
+  promotionStrategyRef:
+    name: example-promotion-strategy
+  # Walk this many first-parent commits of each environment's active branch when rebuilding the record
+  # from the promotion-history git notes.
+  historyDepth: 20
+  # An upstream that is successful on a dry commit descending from the target also satisfies the gate.
+  # Set to false to require the target dry commit itself to have been successful.
+  allowNewerDrySha: true
+  url:
+    template: "https://promoter.example.com/promotion-strategies/{{ .PromotionStrategy.Name }}?env={{ urlQueryEscape .Environment }}"
+status:
+  observedGeneration: 1
+  environments:
+    - branch: environment/dev
+      # The dry SHA record is a cache rebuilt from git; deleting it is safe.
+      rebuiltFromSha: a1b2c3d4e5f60718293a4b5c6d7e8f9012345678
+      rebuiltAt: "2026-09-15T10:00:00Z"
+      dryShaHistory:
+        # Index 0 is the dry commit running right now. It has no promotion-history note yet, so it comes
+        # from live PromotionStrategy status.
+        - sha: cccccccccccccccccccccccccccccccccccccccc
+          mergeSha: a1b2c3d4e5f60718293a4b5c6d7e8f9012345678
+          source: live
+          successful: true
+        - sha: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          mergeSha: b2c3d4e5f60718293a4b5c6d7e8f901234567890
+          source: note
+          mergedAt: "2026-09-14T12:00:00Z"
+          successful: true
+        - sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          mergeSha: c3d4e5f60718293a4b5c6d7e8f90123456789012
+          source: note
+          mergedAt: "2026-09-13T12:00:00Z"
+          successful: false
+      upstreams: []
+    - branch: environment/staging
+      rebuiltFromSha: d4e5f60718293a4b5c6d7e8f9012345678901234
+      rebuiltAt: "2026-09-15T10:00:00Z"
+      dryShaHistory:
+        - sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          mergeSha: d4e5f60718293a4b5c6d7e8f9012345678901234
+          source: live
+          successful: true
+      upstreams:
+        # dev has promoted past this dry commit, but it was successful there, so the gate passes.
+        - branch: environment/dev
+          satisfied: true
+          satisfiedBySha: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      phase: success
+      description: environment/staging - all dependent environments promoted and successful
+      url: https://promoter.example.com/promotion-strategies/example-promotion-strategy?env=environment%2Fdev
+      reportedSha: abc123def4567890abcdef1234567890abcdef12
+    - branch: environment/prod
+      rebuiltFromSha: e5f60718293a4b5c6d7e8f901234567890123456
+      rebuiltAt: "2026-09-15T10:00:00Z"
+      dryShaHistory: []
+      upstreams:
+        - branch: environment/dev
+          satisfied: true
+          satisfiedBySha: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        - branch: environment/staging
+          satisfied: false
+          reason: Waiting for "environment/staging" to be promoted
+      phase: pending
+      description: Waiting for "environment/staging" to be promoted
+      url: https://promoter.example.com/promotion-strategies/example-promotion-strategy?env=environment%2Fstaging
+      reportedSha: def4567890abcdef1234567890abcdef12abc123

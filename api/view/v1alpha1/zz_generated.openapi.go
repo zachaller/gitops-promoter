@@ -80,6 +80,14 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		apiv1alpha1.DependentsSuccessfulCommitStatusSpec{}.OpenAPIModelName():                 schema_argoproj_labs_gitops_promoter_api_v1alpha1_DependentsSuccessfulCommitStatusSpec(ref),
 		apiv1alpha1.DependentsSuccessfulCommitStatusStatus{}.OpenAPIModelName():               schema_argoproj_labs_gitops_promoter_api_v1alpha1_DependentsSuccessfulCommitStatusStatus(ref),
 		apiv1alpha1.DependentsSuccessfulCommitStatusUpstreamStatus{}.OpenAPIModelName():       schema_argoproj_labs_gitops_promoter_api_v1alpha1_DependentsSuccessfulCommitStatusUpstreamStatus(ref),
+		apiv1alpha1.DryShaRecord{}.OpenAPIModelName():                                         schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaRecord(ref),
+		apiv1alpha1.DryShaSuccessfulCommitStatus{}.OpenAPIModelName():                         schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatus(ref),
+		apiv1alpha1.DryShaSuccessfulCommitStatusConfiguration{}.OpenAPIModelName():            schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusConfiguration(ref),
+		apiv1alpha1.DryShaSuccessfulCommitStatusEnvironmentStatus{}.OpenAPIModelName():        schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusEnvironmentStatus(ref),
+		apiv1alpha1.DryShaSuccessfulCommitStatusList{}.OpenAPIModelName():                     schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusList(ref),
+		apiv1alpha1.DryShaSuccessfulCommitStatusSpec{}.OpenAPIModelName():                     schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusSpec(ref),
+		apiv1alpha1.DryShaSuccessfulCommitStatusStatus{}.OpenAPIModelName():                   schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusStatus(ref),
+		apiv1alpha1.DryShaSuccessfulCommitStatusUpstreamStatus{}.OpenAPIModelName():           schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusUpstreamStatus(ref),
 		apiv1alpha1.Environment{}.OpenAPIModelName():                                          schema_argoproj_labs_gitops_promoter_api_v1alpha1_Environment(ref),
 		apiv1alpha1.EnvironmentStatus{}.OpenAPIModelName():                                    schema_argoproj_labs_gitops_promoter_api_v1alpha1_EnvironmentStatus(ref),
 		apiv1alpha1.ExponentialFailure{}.OpenAPIModelName():                                   schema_argoproj_labs_gitops_promoter_api_v1alpha1_ExponentialFailure(ref),
@@ -2114,12 +2122,19 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ControllerConfigurationSp
 							Ref:         ref(apiv1alpha1.ScheduledCommitStatusConfiguration{}.OpenAPIModelName()),
 						},
 					},
+					"dryShaSuccessfulCommitStatus": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DryShaSuccessfulCommitStatus contains the configuration for the DryShaSuccessfulCommitStatus controller, including WorkQueue settings that control reconciliation behavior.",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.DryShaSuccessfulCommitStatusConfiguration{}.OpenAPIModelName()),
+						},
+					},
 				},
-				Required: []string{"promotionStrategy", "changeTransferPolicy", "pullRequest", "commitStatus", "argocdCommitStatus", "timedCommitStatus", "gitCommitStatus", "webRequestCommitStatus", "dependentsSuccessfulCommitStatus", "scheduledCommitStatus"},
+				Required: []string{"promotionStrategy", "changeTransferPolicy", "pullRequest", "commitStatus", "argocdCommitStatus", "timedCommitStatus", "gitCommitStatus", "webRequestCommitStatus", "dependentsSuccessfulCommitStatus", "scheduledCommitStatus", "dryShaSuccessfulCommitStatus"},
 			},
 		},
 		Dependencies: []string{
-			apiv1alpha1.ArgoCDCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicyConfiguration{}.OpenAPIModelName(), apiv1alpha1.CommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.DependentsSuccessfulCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.GitCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.PromotionStrategyConfiguration{}.OpenAPIModelName(), apiv1alpha1.PullRequestConfiguration{}.OpenAPIModelName(), apiv1alpha1.ScheduledCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.TimedCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.WebRequestCommitStatusConfiguration{}.OpenAPIModelName()},
+			apiv1alpha1.ArgoCDCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicyConfiguration{}.OpenAPIModelName(), apiv1alpha1.CommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.DependentsSuccessfulCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.DryShaSuccessfulCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.GitCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.PromotionStrategyConfiguration{}.OpenAPIModelName(), apiv1alpha1.PullRequestConfiguration{}.OpenAPIModelName(), apiv1alpha1.ScheduledCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.TimedCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.WebRequestCommitStatusConfiguration{}.OpenAPIModelName()},
 	}
 }
 
@@ -2604,6 +2619,449 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DependentsSuccessfulCommi
 						SchemaProps: spec.SchemaProps{
 							Description: "Reason explains why the upstream is not satisfied. Omitted when satisfied is true.",
 							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"branch", "satisfied"},
+			},
+		},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaRecord(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DryShaRecord is one entry of an environment's dry SHA record, reconstructed from its active branch.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"sha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Sha is the dry commit that was running in the environment. For a git-derived entry this is the promotion-history note's Sha-dry-active trailer, which records what the environment was running immediately before that promotion merged. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"mergeSha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MergeSha is the active branch commit this entry was derived from. Entries are ordered by first-parent distance from the branch tip, so it doubles as the entry's position marker. For a live entry it is the environment's active hydrated SHA.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"source": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Source names which git source supplied this entry's data.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"mergedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MergedAt is the merge time of the promotion that produced this entry (the note's Pull-request-merge-time trailer). Informational; ordering uses the first-parent walk, not time.",
+							Ref:         ref(metav1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"successful": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Successful is true when every active commit status recorded alongside Sha was successful. This is the same success criterion DependentsSuccessfulCommitStatus applies to an upstream environment, read from the recorded snapshot rather than from live state.",
+							Default:     false,
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"sha", "mergeSha", "successful"},
+			},
+		},
+		Dependencies: []string{
+			metav1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DryShaSuccessfulCommitStatus is the Schema for the dryshasuccessfulcommitstatuses API",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "metadata is a standard object metadata",
+							Default:     map[string]interface{}{},
+							Ref:         ref(metav1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Description: "spec defines the desired state of DryShaSuccessfulCommitStatus",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.DryShaSuccessfulCommitStatusSpec{}.OpenAPIModelName()),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Description: "status defines the observed state of DryShaSuccessfulCommitStatus",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.DryShaSuccessfulCommitStatusStatus{}.OpenAPIModelName()),
+						},
+					},
+				},
+				Required: []string{"spec"},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.DryShaSuccessfulCommitStatusSpec{}.OpenAPIModelName(), apiv1alpha1.DryShaSuccessfulCommitStatusStatus{}.OpenAPIModelName(), metav1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusConfiguration(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DryShaSuccessfulCommitStatusConfiguration defines the configuration for the DryShaSuccessfulCommitStatus controller.\n\nThis configuration controls how the DryShaSuccessfulCommitStatus controller processes reconciliation requests, including requeue intervals, concurrency limits, and rate limiting behavior.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"workQueue": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WorkQueue contains the work queue configuration for the DryShaSuccessfulCommitStatus controller. This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.WorkQueue{}.OpenAPIModelName()),
+						},
+					},
+				},
+				Required: []string{"workQueue"},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.WorkQueue{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusEnvironmentStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DryShaSuccessfulCommitStatusEnvironmentStatus defines observed state for one environment branch.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"branch": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Branch is the environment branch name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase mirrors child CommitStatus.spec.phase.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"description": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Description mirrors child CommitStatus.spec.description.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Url mirrors child CommitStatus.spec.url.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"reportedSha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReportedSha is the hydrated SHA the child CommitStatus is attached to (CommitStatus.spec.sha). Semantics depend on the parent gate (proposed vs active hydrated SHA). Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"rebuiltFromSha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RebuiltFromSha is the active branch tip that dryShaHistory was walked from. While the environment's live active hydrated SHA still equals this, the cached record is current and no git work is done.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"rebuiltAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RebuiltAt is when the active branch walk that produced dryShaHistory last ran.",
+							Ref:         ref(metav1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"dryShaHistory": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "DryShaHistory is a cache of the dry commits this environment has run, newest first: index 0 is closest to the active branch tip. It is rebuilt from the promotion-history git notes on the active branch and is safe to delete — the next reconcile regenerates it from git.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.DryShaRecord{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+					"upstreams": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Upstreams lists all transitive ancestor branches and whether each is satisfied for this environment's promotion target.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.DryShaSuccessfulCommitStatusUpstreamStatus{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"branch"},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.DryShaRecord{}.OpenAPIModelName(), apiv1alpha1.DryShaSuccessfulCommitStatusUpstreamStatus{}.OpenAPIModelName(), metav1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DryShaSuccessfulCommitStatusList contains a list of DryShaSuccessfulCommitStatus",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(metav1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.DryShaSuccessfulCommitStatus{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"metadata", "items"},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.DryShaSuccessfulCommitStatus{}.OpenAPIModelName(), metav1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DryShaSuccessfulCommitStatusSpec defines the desired state of DryShaSuccessfulCommitStatus.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"promotionStrategyRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PromotionStrategyRef is a reference to the promotion strategy that this gate applies to. The controller watches this PromotionStrategy and, for each environment, reports whether the dry commit being promoted has already been successful in that environment's upstream (dependsOn) environments.",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.ObjectReference{}.OpenAPIModelName()),
+						},
+					},
+					"key": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Key is the commit status key this controller writes on each environment's proposed hydrated SHA. The PromotionStrategy controller injects this key onto every ChangeTransferPolicy's proposedCommitStatuses. Must be lowercase alphanumeric with hyphens, 1–63 characters (pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$).",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "URL generates the URL to use on the per-environment CommitStatus (SCM details link), for example a link into the Promoter UI that highlights this environment's dependsOn upstreams. Optional; when empty, no URL is set on the child CommitStatus. The template receives .Environment, .DryShaSuccessfulCommitStatus, .PromotionStrategy, .DependsOn, and .DependsOnQuery (see controller docs).",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.URLConfig{}.OpenAPIModelName()),
+						},
+					},
+					"allowNewerDrySha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AllowNewerDrySha lets an upstream environment satisfy the gate when it is successful on a dry commit that descends from the target dry commit, rather than requiring the target itself to have been successful. Because the record is rebuilt from a first-parent walk of the upstream's active branch, a later entry is strictly a later promotion on that branch, so the upstream demonstrably deployed the target's content and has since become healthy past it.\n\nSet to false for exact-SHA-only semantics: the target dry commit itself must have been successful.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"historyDepth": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HistoryDepth is how many first-parent commits of each environment's active branch are walked when rebuilding the dry SHA record from the promotion-history git notes. A dry commit older than this depth is not found in the record and the gate reports pending for it.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"promotionStrategyRef", "key"},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.ObjectReference{}.OpenAPIModelName(), apiv1alpha1.URLConfig{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DryShaSuccessfulCommitStatusStatus defines the observed state of DryShaSuccessfulCommitStatus.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration is the .metadata.generation that this status was reconciled from. Because status is written via Server-Side Apply with ForceOwnership (which has no optimistic-concurrency check), this field is the canonical way to detect stale status writes: compare status.observedGeneration with metadata.generation.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions represent the latest available observations of an object's state",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(metav1.Condition{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+					"instanceID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InstanceID mirrors metadata.labels[promoter.argoproj.io/instance-id] stamped on each reconcile attempt by this install's controller, including when Ready=False; omitted when the resource has no instance-id label (default install).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"environments": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"branch",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Environments reports observed gate state and the cached dry SHA record per dependency-graph branch.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.DryShaSuccessfulCommitStatusEnvironmentStatus{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.DryShaSuccessfulCommitStatusEnvironmentStatus{}.OpenAPIModelName(), metav1.Condition{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_DryShaSuccessfulCommitStatusUpstreamStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DryShaSuccessfulCommitStatusUpstreamStatus reports whether a transitive upstream branch is satisfied for this environment's promotion target.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"branch": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Branch is the upstream environment branch name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"satisfiedBySha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SatisfiedBySha is the dry commit whose recorded success satisfied this upstream. It equals the target dry SHA for an exact match, or a descendant dry SHA when spec.allowNewerDrySha applies. Omitted when the upstream is not satisfied.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason explains why the upstream is not satisfied. Omitted when satisfied is true.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"satisfied": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Satisfied is true when the upstream has been successful for this environment's target dry SHA.",
+							Default:     false,
+							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
@@ -4043,7 +4501,7 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_OrderCommitStatusRef(ref 
 					},
 					"kind": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Kind is the type of resource being referenced. Must name a CommitStatus gate CR registered as an ordering gate. DependentsSuccessfulCommitStatus is supported today; additional kinds may be added later.",
+							Description: "Kind is the type of resource being referenced. Must name a CommitStatus gate CR registered as an ordering gate. Two in-tree kinds are supported: DependentsSuccessfulCommitStatus (the default), which requires each upstream environment to be currently running the target dry commit and healthy, and DryShaSuccessfulCommitStatus, which instead asks whether the target dry commit has already been successful in each upstream, rebuilt from the promotion-history git notes on their active branches. Out-of-tree kinds are resolved through the generic gate contract (spec.key and spec.promotionStrategyRef.name).",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -6948,6 +7406,19 @@ func schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyDetails(ref commo
 							},
 						},
 					},
+					"dryShaSuccessfulCommitStatuses": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DryShaSuccessfulCommitStatuses are the DryShaSuccessfulCommitStatus managers that reference the PromotionStrategy.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.DryShaSuccessfulCommitStatus{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
 					"gitRepository": {
 						SchemaProps: spec.SchemaProps{
 							Description: "GitRepository is the GitRepository referenced by the PromotionStrategy, if resolvable.",
@@ -6971,7 +7442,7 @@ func schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyDetails(ref commo
 			},
 		},
 		Dependencies: []string{
-			apiv1alpha1.ArgoCDCommitStatus{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicy{}.OpenAPIModelName(), apiv1alpha1.ClusterScmProvider{}.OpenAPIModelName(), apiv1alpha1.CommitStatus{}.OpenAPIModelName(), apiv1alpha1.DependentsSuccessfulCommitStatus{}.OpenAPIModelName(), apiv1alpha1.GitCommitStatus{}.OpenAPIModelName(), apiv1alpha1.GitRepository{}.OpenAPIModelName(), apiv1alpha1.PromotionStrategy{}.OpenAPIModelName(), apiv1alpha1.PullRequest{}.OpenAPIModelName(), apiv1alpha1.ScheduledCommitStatus{}.OpenAPIModelName(), apiv1alpha1.ScmProvider{}.OpenAPIModelName(), apiv1alpha1.TimedCommitStatus{}.OpenAPIModelName(), apiv1alpha1.WebRequestCommitStatus{}.OpenAPIModelName(), metav1.ObjectMeta{}.OpenAPIModelName()},
+			apiv1alpha1.ArgoCDCommitStatus{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicy{}.OpenAPIModelName(), apiv1alpha1.ClusterScmProvider{}.OpenAPIModelName(), apiv1alpha1.CommitStatus{}.OpenAPIModelName(), apiv1alpha1.DependentsSuccessfulCommitStatus{}.OpenAPIModelName(), apiv1alpha1.DryShaSuccessfulCommitStatus{}.OpenAPIModelName(), apiv1alpha1.GitCommitStatus{}.OpenAPIModelName(), apiv1alpha1.GitRepository{}.OpenAPIModelName(), apiv1alpha1.PromotionStrategy{}.OpenAPIModelName(), apiv1alpha1.PullRequest{}.OpenAPIModelName(), apiv1alpha1.ScheduledCommitStatus{}.OpenAPIModelName(), apiv1alpha1.ScmProvider{}.OpenAPIModelName(), apiv1alpha1.TimedCommitStatus{}.OpenAPIModelName(), apiv1alpha1.WebRequestCommitStatus{}.OpenAPIModelName(), metav1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 

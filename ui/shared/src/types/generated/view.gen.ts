@@ -517,6 +517,134 @@ export type components = {
              */
             satisfied: boolean;
         };
+        /** @description DryShaRecord is one entry of an environment's dry SHA record, reconstructed from its active branch. */
+        DryShaRecord: {
+            /**
+             * @description MergeSha is the active branch commit this entry was derived from. Entries are ordered by first-parent distance from the branch tip, so it doubles as the entry's position marker. For a live entry it is the environment's active hydrated SHA.
+             * @default
+             */
+            mergeSha: string;
+            /** @description MergedAt is the merge time of the promotion that produced this entry (the note's Pull-request-merge-time trailer). Informational; ordering uses the first-parent walk, not time. */
+            mergedAt?: components["schemas"]["Time"];
+            /**
+             * @description Sha is the dry commit that was running in the environment. For a git-derived entry this is the promotion-history note's Sha-dry-active trailer, which records what the environment was running immediately before that promotion merged. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+             * @default
+             */
+            sha: string;
+            /** @description Source names which git source supplied this entry's data. */
+            source?: string;
+            /**
+             * @description Successful is true when every active commit status recorded alongside Sha was successful. This is the same success criterion DependentsSuccessfulCommitStatus applies to an upstream environment, read from the recorded snapshot rather than from live state.
+             * @default false
+             */
+            successful: boolean;
+        };
+        /** @description DryShaSuccessfulCommitStatus is the Schema for the dryshasuccessfulcommitstatuses API */
+        DryShaSuccessfulCommitStatus: {
+            /** @description APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources */
+            apiVersion?: string;
+            /** @description Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds */
+            kind?: string;
+            /**
+             * @description metadata is a standard object metadata
+             * @default {}
+             */
+            metadata?: components["schemas"]["ObjectMeta"];
+            /**
+             * @description spec defines the desired state of DryShaSuccessfulCommitStatus
+             * @default {}
+             */
+            spec: components["schemas"]["DryShaSuccessfulCommitStatusSpec"];
+            /**
+             * @description status defines the observed state of DryShaSuccessfulCommitStatus
+             * @default {}
+             */
+            status?: components["schemas"]["DryShaSuccessfulCommitStatusStatus"];
+        };
+        /** @description DryShaSuccessfulCommitStatusEnvironmentStatus defines observed state for one environment branch. */
+        DryShaSuccessfulCommitStatusEnvironmentStatus: {
+            /**
+             * @description Branch is the environment branch name.
+             * @default
+             */
+            branch: string;
+            /** @description Description mirrors child CommitStatus.spec.description. */
+            description?: string;
+            /** @description DryShaHistory is a cache of the dry commits this environment has run, newest first: index 0 is closest to the active branch tip. It is rebuilt from the promotion-history git notes on the active branch and is safe to delete — the next reconcile regenerates it from git. */
+            dryShaHistory?: components["schemas"]["DryShaRecord"][];
+            /** @description Phase mirrors child CommitStatus.spec.phase. */
+            phase?: string;
+            /** @description RebuiltAt is when the active branch walk that produced dryShaHistory last ran. */
+            rebuiltAt?: components["schemas"]["Time"];
+            /** @description RebuiltFromSha is the active branch tip that dryShaHistory was walked from. While the environment's live active hydrated SHA still equals this, the cached record is current and no git work is done. */
+            rebuiltFromSha?: string;
+            /** @description ReportedSha is the hydrated SHA the child CommitStatus is attached to (CommitStatus.spec.sha). Semantics depend on the parent gate (proposed vs active hydrated SHA). Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats. */
+            reportedSha?: string;
+            /** @description Upstreams lists all transitive ancestor branches and whether each is satisfied for this environment's promotion target. */
+            upstreams?: components["schemas"]["DryShaSuccessfulCommitStatusUpstreamStatus"][];
+            /** @description Url mirrors child CommitStatus.spec.url. */
+            url?: string;
+        };
+        /** @description DryShaSuccessfulCommitStatusSpec defines the desired state of DryShaSuccessfulCommitStatus. */
+        DryShaSuccessfulCommitStatusSpec: {
+            /**
+             * @description AllowNewerDrySha lets an upstream environment satisfy the gate when it is successful on a dry commit that descends from the target dry commit, rather than requiring the target itself to have been successful. Because the record is rebuilt from a first-parent walk of the upstream's active branch, a later entry is strictly a later promotion on that branch, so the upstream demonstrably deployed the target's content and has since become healthy past it.
+             *
+             *     Set to false for exact-SHA-only semantics: the target dry commit itself must have been successful.
+             */
+            allowNewerDrySha?: boolean;
+            /**
+             * Format: int32
+             * @description HistoryDepth is how many first-parent commits of each environment's active branch are walked when rebuilding the dry SHA record from the promotion-history git notes. A dry commit older than this depth is not found in the record and the gate reports pending for it.
+             */
+            historyDepth?: number;
+            /**
+             * @description Key is the commit status key this controller writes on each environment's proposed hydrated SHA. The PromotionStrategy controller injects this key onto every ChangeTransferPolicy's proposedCommitStatuses. Must be lowercase alphanumeric with hyphens, 1–63 characters (pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$).
+             * @default
+             */
+            key: string;
+            /**
+             * @description PromotionStrategyRef is a reference to the promotion strategy that this gate applies to. The controller watches this PromotionStrategy and, for each environment, reports whether the dry commit being promoted has already been successful in that environment's upstream (dependsOn) environments.
+             * @default {}
+             */
+            promotionStrategyRef: components["schemas"]["io_argoproj_promoter_v1alpha1_ObjectReference"];
+            /**
+             * @description URL generates the URL to use on the per-environment CommitStatus (SCM details link), for example a link into the Promoter UI that highlights this environment's dependsOn upstreams. Optional; when empty, no URL is set on the child CommitStatus. The template receives .Environment, .DryShaSuccessfulCommitStatus, .PromotionStrategy, .DependsOn, and .DependsOnQuery (see controller docs).
+             * @default {}
+             */
+            url?: components["schemas"]["URLConfig"];
+        };
+        /** @description DryShaSuccessfulCommitStatusStatus defines the observed state of DryShaSuccessfulCommitStatus. */
+        DryShaSuccessfulCommitStatusStatus: {
+            /** @description Conditions represent the latest available observations of an object's state */
+            conditions?: components["schemas"]["Condition"][];
+            /** @description Environments reports observed gate state and the cached dry SHA record per dependency-graph branch. */
+            environments?: components["schemas"]["DryShaSuccessfulCommitStatusEnvironmentStatus"][];
+            /** @description InstanceID mirrors metadata.labels[promoter.argoproj.io/instance-id] stamped on each reconcile attempt by this install's controller, including when Ready=False; omitted when the resource has no instance-id label (default install). */
+            instanceID?: string;
+            /**
+             * Format: int64
+             * @description ObservedGeneration is the .metadata.generation that this status was reconciled from. Because status is written via Server-Side Apply with ForceOwnership (which has no optimistic-concurrency check), this field is the canonical way to detect stale status writes: compare status.observedGeneration with metadata.generation.
+             */
+            observedGeneration?: number;
+        };
+        /** @description DryShaSuccessfulCommitStatusUpstreamStatus reports whether a transitive upstream branch is satisfied for this environment's promotion target. */
+        DryShaSuccessfulCommitStatusUpstreamStatus: {
+            /**
+             * @description Branch is the upstream environment branch name.
+             * @default
+             */
+            branch: string;
+            /** @description Reason explains why the upstream is not satisfied. Omitted when satisfied is true. */
+            reason?: string;
+            /**
+             * @description Satisfied is true when the upstream has been successful for this environment's target dry SHA.
+             * @default false
+             */
+            satisfied: boolean;
+            /** @description SatisfiedBySha is the dry commit whose recorded success satisfied this upstream. It equals the target dry SHA for an exact match, or a descendant dry SHA when spec.allowNewerDrySha applies. Omitted when the upstream is not satisfied. */
+            satisfiedBySha?: string;
+        };
         /** @description Duration is a wrapper around time.Duration which supports correct marshaling to YAML and JSON. In particular, it marshals into strings, which can be used as map keys in json. */
         Duration: string;
         /** @description Environment defines a single environment in the promotion sequence. */
@@ -1220,7 +1348,7 @@ export type components = {
              */
             group: string;
             /**
-             * @description Kind is the type of resource being referenced. Must name a CommitStatus gate CR registered as an ordering gate. DependentsSuccessfulCommitStatus is supported today; additional kinds may be added later.
+             * @description Kind is the type of resource being referenced. Must name a CommitStatus gate CR registered as an ordering gate. Two in-tree kinds are supported: DependentsSuccessfulCommitStatus (the default), which requires each upstream environment to be currently running the target dry commit and healthy, and DryShaSuccessfulCommitStatus, which instead asks whether the target dry commit has already been successful in each upstream, rebuilt from the promotion-history git notes on their active branches. Out-of-tree kinds are resolved through the generic gate contract (spec.key and spec.promotionStrategyRef.name).
              * @default
              */
             kind: string;
@@ -1301,6 +1429,8 @@ export type components = {
             commitStatuses?: components["schemas"]["CommitStatus"][];
             /** @description DependentsSuccessfulCommitStatuses are the DependentsSuccessfulCommitStatus managers that reference the PromotionStrategy. */
             dependentsSuccessfulCommitStatuses?: components["schemas"]["DependentsSuccessfulCommitStatus"][];
+            /** @description DryShaSuccessfulCommitStatuses are the DryShaSuccessfulCommitStatus managers that reference the PromotionStrategy. */
+            dryShaSuccessfulCommitStatuses?: components["schemas"]["DryShaSuccessfulCommitStatus"][];
             /** @description GitCommitStatuses are the GitCommitStatus managers that reference the PromotionStrategy. */
             gitCommitStatuses?: components["schemas"]["GitCommitStatus"][];
             /** @description GitRepository is the GitRepository referenced by the PromotionStrategy, if resolvable. */
