@@ -355,20 +355,15 @@ func calculateHistory(ctx context.Context, activeBranch, activePath string, gitO
 	if err := gitOperations.LoadCommitAndMetadataBlobs(ctx, activePath, shaListActive...); err != nil {
 		return nil, fmt.Errorf("failed to prefetch history commit objects: %w", err)
 	}
-
-	// Each active commit has a corresponding proposed commit. Get those shas so we can preload them.
-	var proposedHistoryShas []string
-	for _, sha := range shaListActive {
-		trailers, err := gitOperations.GetTrailers(ctx, sha)
-		if err != nil {
-			logger.V(4).Info("failed to get trailers while prefetching proposed history commits", "sha", sha, "err", err)
-			continue
-		}
-		if proposedSha := getFirstTrailerValue(trailers, constants.TrailerShaHydratedProposed); proposedSha != "" {
-			proposedHistoryShas = append(proposedHistoryShas, proposedSha)
-		}
+	if err := gitOperations.LoadHistoryNotes(ctx, shaListActive...); err != nil {
+		return nil, fmt.Errorf("failed to prefetch promotion history notes: %w", err)
 	}
+
+	proposedHistoryShas := proposedHydratedSHAsForHistory(ctx, shaListActive, gitOperations)
 	if len(proposedHistoryShas) > 0 {
+		if err := gitOperations.FetchCommitsFromOrigin(ctx, proposedHistoryShas...); err != nil {
+			logger.V(4).Info("failed to fetch proposed history commits from origin", "err", err)
+		}
 		if err := gitOperations.LoadCommits(ctx, proposedHistoryShas...); err != nil {
 			return nil, fmt.Errorf("failed to prefetch proposed history commit objects: %w", err)
 		}
@@ -396,17 +391,9 @@ func calculateHistory(ctx context.Context, activeBranch, activePath string, gitO
 // because finalization failed — it falls back to the commit message trailers, which the promoter still
 // writes on every managed pull request and which survive any merge style that preserves the message.
 func buildHistoryEntry(ctx context.Context, sha, activePath string, gitOperations *git.EnvironmentOperations) (promoterv1alpha1.History, bool, error) {
-	logger := log.FromContext(ctx)
-
-	activeTrailers, err := gitOperations.GetHistoryNote(ctx, sha)
+	activeTrailers, err := trailersForHistoryEntry(ctx, sha, gitOperations)
 	if err != nil {
-		logger.V(4).Info("failed to get history note, falling back to commit message trailers", "sha", sha, "err", err)
-	}
-	if len(activeTrailers) == 0 {
-		activeTrailers, err = gitOperations.GetTrailers(ctx, sha)
-		if err != nil {
-			return promoterv1alpha1.History{}, false, fmt.Errorf("failed to get trailers for SHA %q: %w", sha, err)
-		}
+		return promoterv1alpha1.History{}, false, err
 	}
 
 	historyEntry := promoterv1alpha1.History{
@@ -425,6 +412,42 @@ func buildHistoryEntry(ctx context.Context, sha, activePath string, gitOperation
 	historyEntry.PullRequest.MergedTargetSha = sha
 
 	return historyEntry, true, nil
+}
+
+func trailersForHistoryEntry(ctx context.Context, sha string, gitOperations *git.EnvironmentOperations) (map[string][]string, error) {
+	logger := log.FromContext(ctx)
+	trailers, err := gitOperations.GetHistoryNote(ctx, sha)
+	if err != nil {
+		logger.V(4).Info("failed to get history note, falling back to commit message trailers", "sha", sha, "err", err)
+	}
+	if len(trailers) == 0 {
+		trailers, err = gitOperations.GetTrailers(ctx, sha)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get trailers for SHA %q: %w", sha, err)
+		}
+	}
+	return trailers, nil
+}
+
+func proposedHydratedSHAsForHistory(ctx context.Context, shaListActive []string, gitOperations *git.EnvironmentOperations) []string {
+	seen := make(map[string]struct{}, len(shaListActive))
+	var out []string
+	for _, sha := range shaListActive {
+		trailers, err := trailersForHistoryEntry(ctx, sha, gitOperations)
+		if err != nil {
+			continue
+		}
+		proposedSha := strings.ToLower(strings.TrimSpace(getFirstTrailerValue(trailers, constants.TrailerShaHydratedProposed)))
+		if proposedSha == "" {
+			continue
+		}
+		if _, ok := seen[proposedSha]; ok {
+			continue
+		}
+		seen[proposedSha] = struct{}{}
+		out = append(out, proposedSha)
+	}
+	return out
 }
 
 func decodeTrailerDescription(ctx context.Context, encoded string) string {

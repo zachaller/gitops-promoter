@@ -96,11 +96,12 @@ import (
 // identities use distinct clones and are independent (see the package documentation for details,
 // including the remote-operation caveat).
 type EnvironmentOperations struct {
-	gap      scms.GitOperationsProvider
-	gitRepo  *v1alpha1.GitRepository
-	blobs    map[string]blobObject
-	commits  map[string]commitObject
-	identity string
+	gap          scms.GitOperationsProvider
+	gitRepo      *v1alpha1.GitRepository
+	blobs        map[string]blobObject
+	commits      map[string]commitObject
+	historyNotes map[string]historyNoteEntry
+	identity     string
 }
 
 // HydratorMetadata is an alias to v1alpha1.HydratorMetadata for convenience.
@@ -143,11 +144,12 @@ func gitCommandContext(ctx context.Context, args ...string) *exec.Cmd {
 // the active branch is not part of the key. Callers must serialize operations for a given identity.
 func NewEnvironmentOperations(gitRepo *v1alpha1.GitRepository, gap scms.GitOperationsProvider, identity string) *EnvironmentOperations {
 	return &EnvironmentOperations{
-		gap:      gap,
-		gitRepo:  gitRepo,
-		identity: identity,
-		blobs:    make(map[string]blobObject),
-		commits:  make(map[string]commitObject),
+		gap:          gap,
+		gitRepo:      gitRepo,
+		identity:     identity,
+		blobs:        make(map[string]blobObject),
+		commits:      make(map[string]commitObject),
+		historyNotes: make(map[string]historyNoteEntry),
 	}
 }
 
@@ -320,6 +322,68 @@ func (g *EnvironmentOperations) FetchBranch(ctx context.Context, branch string) 
 	}
 	logger.V(4).Info("Fetched branch", "branch", branch)
 
+	return nil
+}
+
+// fetchCommitsBatchSize limits how many SHAs are passed per git fetch invocation.
+const fetchCommitsBatchSize = 64
+
+// FetchCommitsFromOrigin batch-fetches commit objects from origin.
+// Callers use this to avoid per-SHA lazy promisor resolution during history rebuild.
+//
+// Do not probe missing SHAs with cat-file -e first: on blob-less clones that triggers one
+// promisor fetch per SHA. This reconcile's in-memory commit cache is the only skip signal.
+//
+// Read-only with respect to the clone's index/worktree/HEAD; updates refs/objects only.
+func (g *EnvironmentOperations) FetchCommitsFromOrigin(ctx context.Context, shas ...string) error {
+	gitPath := g.ClonePath()
+	if gitPath == "" {
+		return fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
+	}
+
+	need := make([]string, 0, len(shas))
+	seen := make(map[string]struct{}, len(shas))
+	for _, sha := range shas {
+		key := strings.ToLower(strings.TrimSpace(sha))
+		if key == "" || !fullObjectID.MatchString(key) {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		if _, ok := g.commits[key]; ok {
+			continue
+		}
+		need = append(need, key)
+	}
+	if len(need) == 0 {
+		return nil
+	}
+
+	logger := log.FromContext(ctx)
+	for start := 0; start < len(need); start += fetchCommitsBatchSize {
+		end := start + fetchCommitsBatchSize
+		if end > len(need) {
+			end = len(need)
+		}
+		batch := need[start:end]
+		fetchArgs := make([]string, 0, 2+len(batch))
+		fetchArgs = append(fetchArgs, "fetch", "origin")
+		for _, sha := range batch {
+			// Explicit refspecs fetch loose commits on shallow/partial clones; bare SHAs alone can be no-ops.
+			fetchArgs = append(fetchArgs, "+"+sha+":refs/promoter/history-prefetch/"+sha)
+		}
+
+		fetchStart := time.Now()
+		_, stderr, err := g.runCmd(ctx, gitPath, fetchArgs...)
+		metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationFetch, metrics.GitOperationResultFromError(err), time.Since(fetchStart))
+		if err != nil {
+			logger.V(4).Info("git fetch for commit objects failed", "count", len(batch), "stderr", stderr, "error", err)
+			return fmt.Errorf("git fetch commit objects failed: %w", err)
+		}
+		logger.V(4).Info("Fetched commit objects from origin", "count", len(batch))
+	}
 	return nil
 }
 
@@ -838,6 +902,113 @@ func (g *EnvironmentOperations) GetHydratorNote(ctx context.Context, sha string)
 	return &note, nil
 }
 
+// historyNoteEntry is a cached promotion-history note for one commit SHA.
+// A key is absent from historyNotes until LoadHistoryNotes or GetHistoryNote populates it.
+type historyNoteEntry struct {
+	trailers map[string][]string
+	missing  bool
+}
+
+// LoadHistoryNotes prefetches promotion-history notes for the given commit SHAs into this
+// instance's cache so GetHistoryNote serves them without one git subprocess per SHA.
+//
+// Read-only: never mutates the clone's index/worktree/HEAD. Requires FetchNotes to have run.
+func (g *EnvironmentOperations) LoadHistoryNotes(ctx context.Context, shas ...string) error {
+	if g.ClonePath() == "" {
+		return fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
+	}
+
+	want := make(map[string]struct{})
+	for _, sha := range shas {
+		key := strings.ToLower(sha)
+		if key == "" || !fullObjectID.MatchString(key) {
+			continue
+		}
+		if _, ok := g.historyNotes[key]; ok {
+			continue
+		}
+		want[key] = struct{}{}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+
+	noteBlobByCommit, err := g.listPromotionHistoryNoteBlobs(ctx)
+	if err != nil {
+		return err
+	}
+
+	blobSHAs := make([]string, 0, len(want))
+	blobToCommit := make(map[string]string, len(want))
+	for commitSHA := range want {
+		noteBlob, ok := noteBlobByCommit[commitSHA]
+		if !ok {
+			g.historyNotes[commitSHA] = historyNoteEntry{missing: true}
+			continue
+		}
+		blobSHAs = append(blobSHAs, noteBlob)
+		blobToCommit[noteBlob] = commitSHA
+	}
+
+	if len(blobSHAs) == 0 {
+		return nil
+	}
+	if err := g.fetchBlobs(ctx, blobSHAs...); err != nil {
+		return err
+	}
+	for blobSHA, commitSHA := range blobToCommit {
+		g.historyNotes[commitSHA] = g.historyNoteFromBlob(ctx, blobSHA, commitSHA)
+	}
+	return nil
+}
+
+func (g *EnvironmentOperations) historyNoteFromBlob(ctx context.Context, blobSHA, commitSHA string) historyNoteEntry {
+	blob, ok := g.blobs[blobSHA]
+	if !ok || blob.Missing || len(blob.Data) == 0 {
+		return historyNoteEntry{missing: true}
+	}
+	var trailers map[string][]string
+	if err := json.Unmarshal(blob.Data, &trailers); err != nil {
+		log.FromContext(ctx).V(4).Info("Failed to parse history note as JSON, ignoring", "sha", commitSHA, "error", err)
+		return historyNoteEntry{missing: true}
+	}
+	return historyNoteEntry{trailers: trailers}
+}
+
+func (g *EnvironmentOperations) listPromotionHistoryNoteBlobs(ctx context.Context) (map[string]string, error) {
+	gitPath := g.ClonePath()
+	stdout, stderr, err := g.runCmd(ctx, gitPath, "notes", "--ref="+PromoterHistoryNotesRef, "list")
+	if err != nil {
+		if notesRefMissing(stderr) {
+			log.FromContext(ctx).V(4).Info("Promotion history notes ref is not present locally", "stderr", stderr)
+			return map[string]string{}, nil
+		}
+		return nil, fmt.Errorf("git notes list failed: %w", err)
+	}
+
+	out := make(map[string]string)
+	for line := range strings.SplitSeq(strings.TrimSpace(stdout), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		noteBlob, commitSHA, ok := strings.Cut(line, " ")
+		if !ok {
+			continue
+		}
+		out[strings.ToLower(commitSHA)] = noteBlob
+	}
+	return out, nil
+}
+
+func notesRefMissing(stderr string) bool {
+	lower := strings.ToLower(stderr)
+	return strings.Contains(lower, "unknown ref") ||
+		strings.Contains(lower, "not a valid ref") ||
+		strings.Contains(lower, "no ref") ||
+		strings.Contains(lower, "couldn't find")
+}
+
 // GetHistoryNote reads the promotion-history git note for a given commit SHA from PromoterHistoryNotesRef.
 // The note payload is a JSON-encoded trailers map (the same shape ParseTrailersFromMessage returns).
 // Returns (nil, nil) when no note exists for the commit or the note is not valid JSON.
@@ -850,11 +1021,22 @@ func (g *EnvironmentOperations) GetHistoryNote(ctx context.Context, sha string) 
 		return nil, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
 	}
 
+	key := strings.ToLower(sha)
+	if entry, ok := g.historyNotes[key]; ok {
+		if entry.missing {
+			logger.V(4).Info("No history note found for commit (cached)", "sha", sha)
+			return nil, nil
+		}
+		logger.V(4).Info("Got history note (cached)", "sha", sha, "trailers", entry.trailers)
+		return entry.trailers, nil
+	}
+
 	stdout, stderr, err := g.runCmd(ctx, gitPath, "notes", "--ref="+PromoterHistoryNotesRef, "show", sha)
 	if err != nil {
 		// No note for this commit is not an error - git outputs "error: no note found for object <sha>"
 		if strings.Contains(strings.ToLower(stderr), "no note found") {
 			logger.V(4).Info("No history note found for commit", "sha", sha)
+			g.historyNotes[key] = historyNoteEntry{missing: true}
 			return nil, nil
 		}
 		logger.Error(err, "Failed to read history note", "sha", sha, "stderr", stderr)
@@ -864,10 +1046,12 @@ func (g *EnvironmentOperations) GetHistoryNote(ctx context.Context, sha string) 
 	var trailers map[string][]string
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &trailers); err != nil {
 		logger.V(4).Info("Failed to parse history note as JSON, ignoring", "sha", sha, "content", stdout, "error", err)
+		g.historyNotes[key] = historyNoteEntry{missing: true}
 		return nil, nil
 	}
 
 	logger.V(4).Info("Got history note", "sha", sha, "trailers", trailers)
+	g.historyNotes[key] = historyNoteEntry{trailers: trailers}
 	return trailers, nil
 }
 
@@ -917,6 +1101,7 @@ func (g *EnvironmentOperations) SetHistoryNote(ctx context.Context, sha string, 
 		_, stderr, err = g.runCmd(ctx, gitPath, "push", "origin", PromoterHistoryNotesRef+":"+PromoterHistoryNotesRef)
 		metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationPushNotes, metrics.GitOperationResultFromError(err), time.Since(start))
 		if err == nil {
+			delete(g.historyNotes, strings.ToLower(sha))
 			logger.V(4).Info("Pushed history note", "sha", sha, "attempt", attempt)
 			return nil
 		}
