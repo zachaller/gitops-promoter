@@ -108,8 +108,9 @@ main
 hack/view2ts/view2ts
 hack/view2ts/dist/
 
-# Claude Code
-.claude
+# Claude Code (local settings stay untracked; shared skills are committed)
+.claude/*
+!.claude/skills/
 CLAUDE.md
 
 # Playwright MCP output
