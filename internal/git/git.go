@@ -1027,6 +1027,67 @@ func (g *EnvironmentOperations) ensureHistoryNoteBlobsLocal(ctx context.Context,
 	logger.V(4).Info("Bulk fetched history note blobs", "absentBefore", len(missing))
 }
 
+// historyMetadataBlobFilterLimit bounds the blob-inclusive refetch of the history window. The
+// hydrator.metadata files are small, so the limit keeps large manifests out of the transfer. It
+// cannot exclude other small files in those commits: git can filter by size but not by path.
+const historyMetadataBlobFilterLimit = "100k"
+
+// historyMetadataBulkFetchMinMissing is the number of absent metadata blobs at which one refetch of
+// the history window beats resolving them one promisor fetch at a time, on the same reasoning as
+// historyNoteBulkFetchMinMissing.
+const historyMetadataBulkFetchMinMissing = 3
+
+// ensureMetadataBlobsLocal makes the hydrator.metadata blobs for a history window available in a
+// single fetch.
+//
+// This is the same problem as the promotion history notes: on a blob-less clone every blob read
+// through cat-file costs its own promisor fetch, so rebuilding a 20-commit window pays 20 network
+// round trips before a single entry is built. Refetching the window with a blob-inclusive filter
+// collects them in one.
+//
+// The fetch is scoped to the window's commits rather than the branch so the extra objects the size
+// filter lets through stay bounded by the history being rebuilt.
+//
+// Best effort: on failure the caller's cat-file still resolves the blobs, one fetch at a time.
+func (g *EnvironmentOperations) ensureMetadataBlobsLocal(ctx context.Context, shas, blobRequests []string) {
+	logger := log.FromContext(ctx)
+
+	missing, err := g.missingBlobRequests(ctx, blobRequests...)
+	if err != nil {
+		logger.V(4).Info("Could not probe for absent metadata blobs", "error", err)
+		return
+	}
+	// A full clone reports nothing missing, which also keeps the filtered fetch below from converting
+	// such a repo into a partial clone.
+	if len(missing) < historyMetadataBulkFetchMinMissing {
+		return
+	}
+
+	fetchArgs := make([]string, 0, 6+len(shas))
+	fetchArgs = append(fetchArgs, "fetch", "--refetch", "--no-tags", "--no-write-fetch-head",
+		"--filter=blob:limit="+historyMetadataBlobFilterLimit, "origin")
+	for _, sha := range shas {
+		key := strings.ToLower(sha)
+		if !fullObjectID.MatchString(key) {
+			continue
+		}
+		// Explicit refspecs fetch loose commits on partial clones; bare SHAs alone can be no-ops.
+		fetchArgs = append(fetchArgs, "+"+key+":refs/promoter/history-prefetch/"+key)
+	}
+	if len(fetchArgs) == 6 {
+		return
+	}
+
+	start := time.Now()
+	_, stderr, err := g.runCmd(ctx, g.ClonePath(), fetchArgs...)
+	metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationFetch, metrics.GitOperationResultFromError(err), time.Since(start))
+	if err != nil {
+		logger.V(4).Info("Bulk fetch of history metadata blobs failed", "stderr", stderr, "error", err)
+		return
+	}
+	logger.V(4).Info("Bulk fetched history metadata blobs", "absentBefore", len(missing))
+}
+
 func (g *EnvironmentOperations) historyNoteFromBlob(ctx context.Context, blobSHA, commitSHA string) historyNoteEntry {
 	blob, ok := g.blobs[blobSHA]
 	if !ok || blob.Missing || len(blob.Data) == 0 {

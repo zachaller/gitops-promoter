@@ -16,3 +16,8 @@ var (
 func (g *EnvironmentOperations) MissingObjects(ctx context.Context, oids ...string) ([]string, error) {
 	return g.missingObjects(ctx, oids...)
 }
+
+// MissingBlobRequests exposes the local presence probe for "<sha>:<path>" requests to package git_test.
+func (g *EnvironmentOperations) MissingBlobRequests(ctx context.Context, requests ...string) ([]string, error) {
+	return g.missingBlobRequests(ctx, requests...)
+}

@@ -69,6 +69,8 @@ func (g *EnvironmentOperations) LoadCommitAndMetadataBlobs(ctx context.Context, 
 		}
 	}
 
+	g.ensureMetadataBlobsLocal(ctx, shas, blobRequests)
+
 	// cat-file reports missing objects per request and still exits zero; errors here are real failures.
 	if err := g.fetchBlobs(ctx, blobRequests...); err != nil {
 		return err
@@ -239,16 +241,7 @@ func (g *EnvironmentOperations) fetchBlobs(ctx context.Context, requests ...stri
 }
 
 // missingObjects reports which of the given object IDs are absent from the local object store.
-//
-// GIT_NO_LAZY_FETCH keeps the probe local. Without it, asking a partial clone about an object the
-// clone omitted makes git fetch that object first, one round trip per ID, which is the cost the
-// callers of this probe are trying to avoid in the first place.
 func (g *EnvironmentOperations) missingObjects(ctx context.Context, oids ...string) ([]string, error) {
-	gitPath := g.ClonePath()
-	if gitPath == "" {
-		return nil, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
-	}
-
 	probe := make([]string, 0, len(oids))
 	seen := make(map[string]struct{}, len(oids))
 	for _, oid := range oids {
@@ -262,6 +255,39 @@ func (g *EnvironmentOperations) missingObjects(ctx context.Context, oids ...stri
 		seen[key] = struct{}{}
 		probe = append(probe, key)
 	}
+	return g.probeMissing(ctx, probe)
+}
+
+// missingBlobRequests reports which of the given cat-file requests ("<sha>:<path>") cannot be
+// resolved locally, whether because the path is absent from that commit or because the clone omitted
+// the blob. The two cases are indistinguishable in the output and callers treat them alike.
+func (g *EnvironmentOperations) missingBlobRequests(ctx context.Context, requests ...string) ([]string, error) {
+	probe := make([]string, 0, len(requests))
+	seen := make(map[string]struct{}, len(requests))
+	for _, req := range requests {
+		// Requests go one per line on stdin, so an embedded newline would inject extra revisions.
+		if req == "" || strings.ContainsAny(req, "\n\r") {
+			continue
+		}
+		if _, ok := seen[req]; ok {
+			continue
+		}
+		seen[req] = struct{}{}
+		probe = append(probe, req)
+	}
+	return g.probeMissing(ctx, probe)
+}
+
+// probeMissing asks git which of the given cat-file requests it cannot resolve from local objects.
+//
+// GIT_NO_LAZY_FETCH is what keeps the probe local. Without it, asking a partial clone about an object
+// the clone omitted makes git fetch that object first, one round trip per request, which is the cost
+// the callers of this probe are trying to avoid in the first place.
+func (g *EnvironmentOperations) probeMissing(ctx context.Context, probe []string) ([]string, error) {
+	gitPath := g.ClonePath()
+	if gitPath == "" {
+		return nil, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
+	}
 	if len(probe) == 0 {
 		return nil, nil
 	}
@@ -273,7 +299,8 @@ func (g *EnvironmentOperations) missingObjects(ctx context.Context, oids ...stri
 		return nil, fmt.Errorf("git cat-file --batch-check failed: %s: %w", stderr, err)
 	}
 
-	// One line per request, in request order: "<oid> <type> <size>" when present, "<oid> missing" when not.
+	// One line per request, in request order: "<oid> <type> <size>" when resolvable, otherwise the
+	// request echoed back followed by "missing".
 	missing := make([]string, 0, len(probe))
 	for line := range strings.SplitSeq(strings.TrimSpace(stdout), "\n") {
 		fields := strings.Fields(line)

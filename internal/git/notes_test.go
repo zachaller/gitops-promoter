@@ -249,7 +249,7 @@ var _ = Describe("Promotion history notes", func() {
 	})
 })
 
-var _ = Describe("Promotion history notes on a blob-less clone", func() {
+var _ = Describe("History prefetch on a blob-less clone", func() {
 	// CloneRepo always passes --filter=blob:none, but git ignores a filter when it can clone a local
 	// path directly, and a remote only honors one if it advertises filtering. Without the file:// URL
 	// and uploadpack.allowFilter below, these specs would silently run against a full clone, where
@@ -315,6 +315,10 @@ var _ = Describe("Promotion history notes on a blob-less clone", func() {
 		shas = make([]string, 0, noteCount)
 		for i := range noteCount {
 			Expect(os.WriteFile(filepath.Join(workDir, fmt.Sprintf("file-%d.txt", i)), []byte(fmt.Sprintf("content %d", i)), 0o644)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(workDir, "hydrator.metadata"), []byte(fmt.Sprintf(`{"drySha":"dry-%d"}`, i)), 0o644)).To(Succeed())
+			// Rewritten every commit like hydrator.metadata is, so the older revisions of it are not
+			// reachable from the tip tree and therefore not pulled in by the clone's checkout.
+			Expect(os.WriteFile(filepath.Join(workDir, "sibling.txt"), []byte(fmt.Sprintf("sibling %d", i)), 0o644)).To(Succeed())
 			_, err = runGitCmd(workDir, "add", "-A")
 			Expect(err).NotTo(HaveOccurred())
 			_, err = runGitCmd(workDir, "commit", "-m", fmt.Sprintf("commit %d", i))
@@ -374,6 +378,37 @@ var _ = Describe("Promotion history notes on a blob-less clone", func() {
 			got, err := g.GetHistoryNote(ctx, sha)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got).To(Equal(map[string][]string{"Pull-request-id": {fmt.Sprintf("pr-%d", i)}}))
+		}
+	})
+
+	It("LoadCommitAndMetadataBlobs pulls the window's blobs in one fetch rather than one per commit", func() {
+		ctx := GinkgoT().Context()
+		g := newEnvOps("default/partial-meta")
+		Expect(g.FetchBranch(ctx, defaultBranch)).To(Succeed())
+
+		metaRequests := make([]string, 0, len(shas))
+		siblingRequests := make([]string, 0, len(shas))
+		for _, sha := range shas {
+			metaRequests = append(metaRequests, sha+":hydrator.metadata")
+			siblingRequests = append(siblingRequests, sha+":sibling.txt")
+		}
+
+		// CloneRepo checks out the default branch, which pulls the tip commit's blobs, so only the
+		// older commits start without their metadata.
+		By("starting without the older commits' file contents, which is what makes the clone worth optimizing")
+		Expect(g.MissingBlobRequests(ctx, metaRequests...)).To(HaveLen(len(shas) - 1))
+		Expect(g.MissingBlobRequests(ctx, siblingRequests...)).To(HaveLen(len(shas) - 1))
+
+		Expect(g.LoadCommitAndMetadataBlobs(ctx, "", shas...)).To(Succeed())
+
+		By("leaving other blobs in those commits local too, since the window came down at once")
+		Expect(g.MissingBlobRequests(ctx, siblingRequests...)).To(BeEmpty())
+
+		By("returning the metadata it was asked for")
+		for i, sha := range shas {
+			state, err := g.GetShaMetadataFromFile(ctx, sha, "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(state.Sha).To(Equal(fmt.Sprintf("dry-%d", i)))
 		}
 	})
 
