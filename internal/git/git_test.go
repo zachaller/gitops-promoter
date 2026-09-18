@@ -1469,6 +1469,56 @@ var _ = Describe("FetchCommitsFromOrigin", func() {
 		Expect(tip).ToNot(BeEmpty())
 		Expect(g.FetchCommitsFromOrigin(ctx, tip[0])).To(Succeed())
 	})
+
+	It("does not contact origin when every commit is already local", func() {
+		repo := &v1alpha1.GitRepository{
+			Name: "r", Namespace: "default",
+			Spec: v1alpha1.GitRepositorySpec{
+				GitHub: &v1alpha1.GitHubRepo{Owner: "o", Name: "r"},
+			},
+		}
+		ctx := GinkgoT().Context()
+		g := git.NewEnvironmentOperations(repo, &fakeGitProvider{tempDirPath: bareDir}, "fetch-commits-no-remote")
+		Expect(g.CloneRepo(ctx)).To(Succeed())
+		Expect(g.FetchBranch(ctx, mainBranch)).To(Succeed())
+
+		shaList, err := g.GetRevListFirstParent(ctx, "origin/"+mainBranch, 5)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(shaList).To(HaveLen(5))
+
+		// Breaking the remote is what makes the assertion meaningful: a fetch would fail outright, so
+		// succeeding here proves the SHAs were served by the local presence probe instead.
+		_, err = runGitCmd(g.ClonePath(), "remote", "set-url", "origin", filepath.Join(bareDir, "does-not-exist"))
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(g.FetchCommitsFromOrigin(ctx, shaList...)).To(Succeed())
+	})
+
+	It("reports which objects are absent without fetching them", func() {
+		repo := &v1alpha1.GitRepository{
+			Name: "r", Namespace: "default",
+			Spec: v1alpha1.GitRepositorySpec{
+				GitHub: &v1alpha1.GitHubRepo{Owner: "o", Name: "r"},
+			},
+		}
+		ctx := GinkgoT().Context()
+		g := git.NewEnvironmentOperations(repo, &fakeGitProvider{tempDirPath: bareDir}, "missing-objects")
+		Expect(g.CloneRepo(ctx)).To(Succeed())
+		Expect(g.FetchBranch(ctx, mainBranch)).To(Succeed())
+
+		tip, err := g.GetRevListFirstParent(ctx, "origin/"+mainBranch, 1)
+		Expect(err).NotTo(HaveOccurred())
+		absent := strings.Repeat("a", 40)
+
+		missing, err := g.MissingObjects(ctx, tip[0], absent)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(missing).To(ConsistOf(absent))
+
+		By("ignoring inputs that are not full object IDs")
+		missing, err = g.MissingObjects(ctx, "HEAD", "not-a-sha")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(missing).To(BeEmpty())
+	})
 })
 
 type fakeGitProvider struct {

@@ -1,6 +1,7 @@
 package git_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -245,5 +246,150 @@ var _ = Describe("Promotion history notes", func() {
 
 		Expect(g.CommitExists(GinkgoT().Context(), mergeSha)).To(BeTrue())
 		Expect(g.CommitExists(GinkgoT().Context(), strings.Repeat("0", 40))).To(BeFalse())
+	})
+})
+
+var _ = Describe("Promotion history notes on a blob-less clone", func() {
+	// CloneRepo always passes --filter=blob:none, but git ignores a filter when it can clone a local
+	// path directly, and a remote only honors one if it advertises filtering. Without the file:// URL
+	// and uploadpack.allowFilter below, these specs would silently run against a full clone, where
+	// every note blob is present from the start and there is nothing left to measure.
+	var bareDir string
+	var workDir string
+	var defaultBranch string
+	var repo *v1alpha1.GitRepository
+	var shas []string
+
+	const noteCount = 5
+
+	newEnvOps := func(identity string) *git.EnvironmentOperations {
+		gap := &fakeGitProvider{tempDirPath: "file://" + bareDir}
+		g := git.NewEnvironmentOperations(repo, gap, identity)
+		Expect(g.CloneRepo(GinkgoT().Context())).To(Succeed())
+		return g
+	}
+
+	// noteBlobs maps each commit SHA that has a promotion-history note to the note's blob OID.
+	noteBlobs := func(clonePath string) map[string]string {
+		out := map[string]string{}
+		for _, line := range strings.Split(strings.TrimSpace(mustGit(clonePath, "notes", "--ref="+git.PromoterHistoryNotesRef, "list")), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 {
+				out[fields[1]] = fields[0]
+			}
+		}
+		return out
+	}
+
+	blobsFor := func(all map[string]string, commits []string) []string {
+		out := make([]string, 0, len(commits))
+		for _, sha := range commits {
+			Expect(all).To(HaveKey(sha))
+			out = append(out, all[sha])
+		}
+		return out
+	}
+
+	BeforeEach(func() {
+		var err error
+		bareDir, err = os.MkdirTemp("", "notes-partial-bare-*")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(bareDir, "init", "--bare")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(bareDir, "config", "uploadpack.allowFilter", "true")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(bareDir, "config", "uploadpack.allowAnySHA1InWant", "true")
+		Expect(err).NotTo(HaveOccurred())
+
+		workDir, err = os.MkdirTemp("", "notes-partial-work-*")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "clone", bareDir, ".")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "user.name", "Test User")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "user.email", "test@example.com")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "config", "commit.gpgsign", "false")
+		Expect(err).NotTo(HaveOccurred())
+
+		shas = make([]string, 0, noteCount)
+		for i := range noteCount {
+			Expect(os.WriteFile(filepath.Join(workDir, fmt.Sprintf("file-%d.txt", i)), []byte(fmt.Sprintf("content %d", i)), 0o644)).To(Succeed())
+			_, err = runGitCmd(workDir, "add", "-A")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = runGitCmd(workDir, "commit", "-m", fmt.Sprintf("commit %d", i))
+			Expect(err).NotTo(HaveOccurred())
+			shas = append(shas, strings.TrimSpace(mustGit(workDir, "rev-parse", "HEAD")))
+		}
+
+		defaultBranch = strings.TrimSpace(mustGit(workDir, "rev-parse", "--abbrev-ref", "HEAD"))
+		_, err = runGitCmd(workDir, "push", "-u", "origin", defaultBranch)
+		Expect(err).NotTo(HaveOccurred())
+
+		for i, sha := range shas {
+			_, err = runGitCmd(workDir, "notes", "--ref="+git.PromoterHistoryNotesRef,
+				"add", "-m", fmt.Sprintf(`{"Pull-request-id":["pr-%d"]}`, i), sha)
+			Expect(err).NotTo(HaveOccurred())
+		}
+		_, err = runGitCmd(workDir, "push", "origin", git.PromoterHistoryNotesRef)
+		Expect(err).NotTo(HaveOccurred())
+
+		repo = &v1alpha1.GitRepository{
+			Spec: v1alpha1.GitRepositorySpec{
+				GitHub: &v1alpha1.GitHubRepo{Owner: "test-owner", Name: "testrepo"},
+				ScmProviderRef: v1alpha1.ScmProviderObjectReference{
+					Kind: "ScmProvider",
+					Name: "testprovider",
+				},
+			},
+			Name: "testrepo", Namespace: "default",
+		}
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(bareDir)
+		_ = os.RemoveAll(workDir)
+	})
+
+	It("LoadHistoryNotes pulls the notes ref's blobs in one fetch rather than one per note", func() {
+		ctx := GinkgoT().Context()
+		g := newEnvOps("default/partial-bulk")
+		Expect(g.FetchBranch(ctx, defaultBranch)).To(Succeed())
+		Expect(g.FetchNotes(ctx)).To(Succeed())
+
+		all := noteBlobs(g.ClonePath())
+		Expect(all).To(HaveLen(noteCount))
+		requested, unrequested := shas[:3], shas[3:]
+
+		By("starting without any note contents, which is what makes the clone worth optimizing")
+		Expect(g.MissingObjects(ctx, blobsFor(all, shas)...)).To(HaveLen(noteCount))
+
+		Expect(g.LoadHistoryNotes(ctx, requested...)).To(Succeed())
+
+		By("leaving blobs local for notes it was never asked about, since the whole ref came down at once")
+		Expect(g.MissingObjects(ctx, blobsFor(all, unrequested)...)).To(BeEmpty())
+
+		By("returning the requested notes")
+		for i, sha := range requested {
+			got, err := g.GetHistoryNote(ctx, sha)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).To(Equal(map[string][]string{"Pull-request-id": {fmt.Sprintf("pr-%d", i)}}))
+		}
+	})
+
+	It("LoadHistoryNotes leaves the ref alone when only a note or two is absent", func() {
+		ctx := GinkgoT().Context()
+		g := newEnvOps("default/partial-single")
+		Expect(g.FetchBranch(ctx, defaultBranch)).To(Succeed())
+		Expect(g.FetchNotes(ctx)).To(Succeed())
+
+		all := noteBlobs(g.ClonePath())
+		Expect(g.LoadHistoryNotes(ctx, shas[0])).To(Succeed())
+
+		By("resolving the one requested note without pulling the rest of the ref")
+		Expect(g.MissingObjects(ctx, blobsFor(all, shas[1:])...)).To(HaveLen(noteCount - 1))
+		got, err := g.GetHistoryNote(ctx, shas[0])
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(Equal(map[string][]string{"Pull-request-id": {"pr-0"}}))
 	})
 })

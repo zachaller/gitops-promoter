@@ -238,6 +238,52 @@ func (g *EnvironmentOperations) fetchBlobs(ctx context.Context, requests ...stri
 	return nil
 }
 
+// missingObjects reports which of the given object IDs are absent from the local object store.
+//
+// GIT_NO_LAZY_FETCH keeps the probe local. Without it, asking a partial clone about an object the
+// clone omitted makes git fetch that object first, one round trip per ID, which is the cost the
+// callers of this probe are trying to avoid in the first place.
+func (g *EnvironmentOperations) missingObjects(ctx context.Context, oids ...string) ([]string, error) {
+	gitPath := g.ClonePath()
+	if gitPath == "" {
+		return nil, fmt.Errorf("no repo path found for repo %q", g.gitRepo.Name)
+	}
+
+	probe := make([]string, 0, len(oids))
+	seen := make(map[string]struct{}, len(oids))
+	for _, oid := range oids {
+		key := strings.ToLower(oid)
+		if !fullObjectID.MatchString(key) {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		probe = append(probe, key)
+	}
+	if len(probe) == 0 {
+		return nil, nil
+	}
+
+	stdin := strings.NewReader(strings.Join(probe, "\n") + "\n")
+	stdout, stderr, err := runCmdWithEnvAndStdin(ctx, g.gap, gitPath, []string{"GIT_NO_LAZY_FETCH=1"}, stdin,
+		"cat-file", "--batch-check")
+	if err != nil {
+		return nil, fmt.Errorf("git cat-file --batch-check failed: %s: %w", stderr, err)
+	}
+
+	// One line per request, in request order: "<oid> <type> <size>" when present, "<oid> missing" when not.
+	missing := make([]string, 0, len(probe))
+	for line := range strings.SplitSeq(strings.TrimSpace(stdout), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[1] == "missing" {
+			missing = append(missing, fields[0])
+		}
+	}
+	return missing, nil
+}
+
 func parseCommitLogOutput(stdout string) (map[string]commitObject, error) {
 	if stdout == "" {
 		return map[string]commitObject{}, nil

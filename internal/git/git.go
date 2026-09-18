@@ -331,8 +331,11 @@ const fetchCommitsBatchSize = 64
 // FetchCommitsFromOrigin batch-fetches commit objects from origin.
 // Callers use this to avoid per-SHA lazy promisor resolution during history rebuild.
 //
-// Do not probe missing SHAs with cat-file -e first: on blob-less clones that triggers one
-// promisor fetch per SHA. This reconcile's in-memory commit cache is the only skip signal.
+// Commits already in the local object store are skipped. The presence check is one batched cat-file
+// with lazy fetching disabled, so it stays local; probing with a bare cat-file -e would instead
+// resolve each absent SHA through its own promisor fetch, the very cost this function exists to
+// avoid. On the blob-less clone CloneRepo creates, only blobs are filtered out, so the commits are
+// usually all present already and no fetch happens at all.
 //
 // Read-only with respect to the clone's index/worktree/HEAD; updates refs/objects only.
 func (g *EnvironmentOperations) FetchCommitsFromOrigin(ctx context.Context, shas ...string) error {
@@ -362,12 +365,23 @@ func (g *EnvironmentOperations) FetchCommitsFromOrigin(ctx context.Context, shas
 	}
 
 	logger := log.FromContext(ctx)
-	for start := 0; start < len(need); start += fetchCommitsBatchSize {
+
+	missing, err := g.missingObjects(ctx, need...)
+	if err != nil {
+		logger.V(4).Info("Could not probe for absent commit objects, fetching all", "count", len(need), "error", err)
+		missing = need
+	}
+	if len(missing) == 0 {
+		logger.V(4).Info("History commit objects are already present locally", "count", len(need))
+		return nil
+	}
+
+	for start := 0; start < len(missing); start += fetchCommitsBatchSize {
 		end := start + fetchCommitsBatchSize
-		if end > len(need) {
-			end = len(need)
+		if end > len(missing) {
+			end = len(missing)
 		}
-		batch := need[start:end]
+		batch := missing[start:end]
 		fetchArgs := make([]string, 0, 2+len(batch))
 		fetchArgs = append(fetchArgs, "fetch", "origin")
 		for _, sha := range batch {
@@ -953,6 +967,7 @@ func (g *EnvironmentOperations) LoadHistoryNotes(ctx context.Context, shas ...st
 	if len(blobSHAs) == 0 {
 		return nil
 	}
+	g.ensureHistoryNoteBlobsLocal(ctx, blobSHAs)
 	if err := g.fetchBlobs(ctx, blobSHAs...); err != nil {
 		return err
 	}
@@ -960,6 +975,56 @@ func (g *EnvironmentOperations) LoadHistoryNotes(ctx context.Context, shas ...st
 		g.historyNotes[commitSHA] = g.historyNoteFromBlob(ctx, blobSHA, commitSHA)
 	}
 	return nil
+}
+
+// historyNoteBlobFilterLimit bounds the blob-inclusive refetch of the notes ref. Promotion-history
+// notes are small JSON documents, so the limit keeps the fetch from pulling anything unexpected if
+// the ref ever carries something larger.
+const historyNoteBlobFilterLimit = "1m"
+
+// historyNoteBulkFetchMinMissing is the number of absent note blobs at which one blob-inclusive
+// refetch of the notes ref beats letting cat-file resolve them one promisor fetch at a time. The
+// refetch is a single round trip no matter how many notes are missing, but it transfers the whole
+// ref; below this threshold the individual fetches move less data for the same number of round trips.
+const historyNoteBulkFetchMinMissing = 3
+
+// ensureHistoryNoteBlobsLocal makes the given promotion-history note blobs available locally in a
+// single fetch.
+//
+// CloneRepo creates a blob-less partial clone, so fetching the notes ref brings the note tree but not
+// the note contents. Reading those through cat-file makes git resolve each blob with its own promisor
+// fetch, one network round trip per note, which is what dominates a cold history rebuild. Refetching
+// the ref with a blob-inclusive filter collects them all in one round trip instead.
+//
+// --refetch is required. A plain fetch negotiates against the notes objects the clone already has,
+// concludes there is nothing to send, and leaves the blobs absent.
+//
+// Best effort: on failure the caller's cat-file still resolves the blobs, just one fetch at a time.
+func (g *EnvironmentOperations) ensureHistoryNoteBlobsLocal(ctx context.Context, blobSHAs []string) {
+	logger := log.FromContext(ctx)
+
+	missing, err := g.missingObjects(ctx, blobSHAs...)
+	if err != nil {
+		logger.V(4).Info("Could not probe for absent history note blobs", "error", err)
+		return
+	}
+	// A full clone never reports a note blob as missing, which also keeps the filtered fetch below
+	// from converting such a repo into a partial clone.
+	if len(missing) < historyNoteBulkFetchMinMissing {
+		return
+	}
+
+	start := time.Now()
+	_, stderr, err := g.runCmd(ctx, g.ClonePath(),
+		"fetch", "--refetch", "--no-tags", "--no-write-fetch-head",
+		"--filter=blob:limit="+historyNoteBlobFilterLimit,
+		"origin", "+"+PromoterHistoryNotesRef+":"+PromoterHistoryNotesRef)
+	metrics.RecordGitOperation(g.gitRepo, metrics.GitOperationFetchNotes, metrics.GitOperationResultFromError(err), time.Since(start))
+	if err != nil {
+		logger.V(4).Info("Bulk fetch of history note blobs failed", "stderr", stderr, "error", err)
+		return
+	}
+	logger.V(4).Info("Bulk fetched history note blobs", "absentBefore", len(missing))
 }
 
 func (g *EnvironmentOperations) historyNoteFromBlob(ctx context.Context, blobSHA, commitSHA string) historyNoteEntry {
