@@ -612,12 +612,11 @@ func (g *EnvironmentOperations) MergeWithOursStrategy(ctx context.Context, propo
 	treeSha = strings.TrimSpace(treeSha)
 
 	commitMessage := fmt.Sprintf("Merge %s into %s (ours)", activeBranch, proposedBranch)
-	commitSha, stderr, err := g.runCmd(ctx, gitPath, "commit-tree", treeSha, "-p", proposedRef, "-p", activeRef, "-m", commitMessage)
+	commitSha, err := g.commitTree(ctx, treeSha, []string{proposedRef, activeRef}, commitMessage)
 	if err != nil {
-		logger.Error(err, "Failed to create merge commit", "proposedBranch", proposedBranch, "activeBranch", activeBranch, "stderr", stderr)
-		return fmt.Errorf("failed to create 'ours' merge commit for branch %q: %w (stderr: %s)", proposedBranch, err, stderr)
+		logger.Error(err, "Failed to create merge commit", "proposedBranch", proposedBranch, "activeBranch", activeBranch)
+		return fmt.Errorf("failed to create 'ours' merge commit for branch %q: %w", proposedBranch, err)
 	}
-	commitSha = strings.TrimSpace(commitSha)
 
 	// Push the computed commit straight to the remote proposed ref; no local branch, no checkout.
 	_, stderr, err = g.runCmd(ctx, gitPath, "push", "origin", commitSha+":refs/heads/"+proposedBranch)
@@ -645,68 +644,23 @@ func (g *EnvironmentOperations) MergeWithOursStrategyForPath(ctx context.Context
 	proposedRef := "origin/" + proposedBranch
 	activeRef := "origin/" + activeBranch
 
-	// Build the resolved tree in a temporary index so the clone's real index/worktree/HEAD are never
-	// touched. The temp index lives outside the clone so it cannot appear as an untracked file.
-	tmpIndex, err := os.CreateTemp("", "promoter-merge-index-*")
+	// Active wins outside activePath, proposed wins inside it (including deletions).
+	treeSha, err := g.overlayPathTree(ctx, activeRef, proposedRef, activePath)
 	if err != nil {
-		return fmt.Errorf("failed to create temp index for path-scoped merge: %w", err)
-	}
-	tmpIndexPath := tmpIndex.Name()
-	_ = tmpIndex.Close()
-	defer func() {
-		if rmErr := os.Remove(tmpIndexPath); rmErr != nil && !os.IsNotExist(rmErr) {
-			logger.Error(rmErr, "failed to remove temp index", "path", tmpIndexPath)
-		}
-	}()
-	indexEnv := []string{"GIT_INDEX_FILE=" + tmpIndexPath}
-
-	// Start from active's tree (active wins outside activePath).
-	_, stderr, err := g.runCmdWithEnv(ctx, gitPath, indexEnv, "read-tree", activeRef)
-	if err != nil {
-		logger.Error(err, "Failed to read active tree into temp index", "activeBranch", activeBranch, "stderr", stderr)
-		return fmt.Errorf("failed to read tree for branch %q: %w (stderr: %s)", activeBranch, err, stderr)
+		logger.Error(err, "Failed to build path-scoped tree", "proposedBranch", proposedBranch, "activeBranch", activeBranch, "activePath", activePath)
+		return fmt.Errorf("failed to build path-scoped tree for branch %q: %w", proposedBranch, err)
 	}
 
-	// Drop the activePath subtree so proposed's version (including any deletions) fully replaces it.
-	_, stderr, err = g.runCmdWithEnv(ctx, gitPath, indexEnv, "rm", "-r", "-f", "--cached", "--ignore-unmatch", "--", ":(literal)"+activePath)
+	// Parents are [proposed, active], preserving the "ours"-style topology so the subsequent SCM
+	// merge stays clean.
+	commitSha, err := g.commitTree(ctx, treeSha, []string{proposedRef, activeRef}, "Resolve conflicts for "+activePath)
 	if err != nil {
-		logger.Error(err, "Failed to remove activePath from temp index", "activePath", activePath, "stderr", stderr)
-		return fmt.Errorf("failed to remove activePath %q from index: %w (stderr: %s)", activePath, err, stderr)
+		logger.Error(err, "Failed to create path-scoped merge commit", "proposedBranch", proposedBranch, "activeBranch", activeBranch, "activePath", activePath)
+		return fmt.Errorf("failed to create path-scoped merge commit for branch %q: %w", proposedBranch, err)
 	}
-
-	// Overlay proposed's activePath subtree (proposed wins inside activePath). Skip the overlay if
-	// proposed has no content at activePath — the subtree then stays removed, matching proposed.
-	lsTreeStdout, stderr, err := g.runCmd(ctx, gitPath, "ls-tree", proposedRef, "--", ":(literal)"+activePath)
-	if err != nil {
-		logger.Error(err, "Failed to inspect proposed activePath", "proposedBranch", proposedBranch, "activePath", activePath, "stderr", stderr)
-		return fmt.Errorf("failed to inspect activePath %q on branch %q: %w (stderr: %s)", activePath, proposedBranch, err, stderr)
-	}
-	if strings.TrimSpace(lsTreeStdout) != "" {
-		_, stderr, err = g.runCmdWithEnv(ctx, gitPath, indexEnv, "read-tree", "--prefix="+activePath+"/", proposedRef+":"+activePath)
-		if err != nil {
-			logger.Error(err, "Failed to overlay proposed activePath into temp index", "proposedBranch", proposedBranch, "activePath", activePath, "stderr", stderr)
-			return fmt.Errorf("failed to overlay activePath %q from branch %q: %w (stderr: %s)", activePath, proposedBranch, err, stderr)
-		}
-	}
-
-	// Write the resolved tree and create the merge commit. Parents are [proposed, active], preserving
-	// the "ours"-style topology so the subsequent SCM merge stays clean.
-	treeSha, stderr, err := g.runCmdWithEnv(ctx, gitPath, indexEnv, "write-tree")
-	if err != nil {
-		logger.Error(err, "Failed to write resolved tree", "stderr", stderr)
-		return fmt.Errorf("failed to write resolved tree for branch %q: %w (stderr: %s)", proposedBranch, err, stderr)
-	}
-	treeSha = strings.TrimSpace(treeSha)
-
-	commitSha, stderr, err := g.runCmd(ctx, gitPath, "commit-tree", treeSha, "-p", proposedRef, "-p", activeRef, "-m", "Resolve conflicts for "+activePath)
-	if err != nil {
-		logger.Error(err, "Failed to create path-scoped merge commit", "proposedBranch", proposedBranch, "activeBranch", activeBranch, "activePath", activePath, "stderr", stderr)
-		return fmt.Errorf("failed to create path-scoped merge commit for branch %q: %w (stderr: %s)", proposedBranch, err, stderr)
-	}
-	commitSha = strings.TrimSpace(commitSha)
 
 	// Push the computed commit straight to the remote proposed ref; no local branch, no checkout.
-	_, stderr, err = g.runCmd(ctx, gitPath, "push", "origin", commitSha+":refs/heads/"+proposedBranch)
+	_, stderr, err := g.runCmd(ctx, gitPath, "push", "origin", commitSha+":refs/heads/"+proposedBranch)
 	if err != nil {
 		logger.Error(err, "Failed to push merged branch", "proposedBranch", proposedBranch, "activeBranch", activeBranch, "stderr", stderr)
 		return fmt.Errorf("failed to push merged branch %q: %w (stderr: %s)", proposedBranch, err, stderr)
@@ -1304,12 +1258,20 @@ func (g *EnvironmentOperations) restoreTree(ctx context.Context, activeRef, targ
 	if activePath == "" {
 		return g.revParse(ctx, targetSha+"^{tree}")
 	}
+	return g.overlayPathTree(ctx, activeRef, targetSha, activePath)
+}
 
+// overlayPathTree returns baseRef's tree with path replaced by sourceRef's content at path, or with
+// path removed when sourceRef has nothing there. The tree is built in a temporary index
+// (GIT_INDEX_FILE) outside the clone, so the clone's real index/worktree/HEAD are never touched and
+// the index cannot appear as an untracked file.
+func (g *EnvironmentOperations) overlayPathTree(ctx context.Context, baseRef, sourceRef, path string) (string, error) {
 	logger := log.FromContext(ctx)
 	gitPath := g.ClonePath()
-	tmpIndex, err := os.CreateTemp("", "promoter-restore-index-*")
+
+	tmpIndex, err := os.CreateTemp("", "promoter-index-*")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp index for restore: %w", err)
+		return "", fmt.Errorf("failed to create temp index: %w", err)
 	}
 	tmpIndexPath := tmpIndex.Name()
 	_ = tmpIndex.Close()
@@ -1320,26 +1282,29 @@ func (g *EnvironmentOperations) restoreTree(ctx context.Context, activeRef, targ
 	}()
 	indexEnv := []string{"GIT_INDEX_FILE=" + tmpIndexPath}
 
-	if _, stderr, err := g.runCmdWithEnv(ctx, gitPath, indexEnv, "read-tree", activeRef); err != nil {
-		return "", fmt.Errorf("failed to read tree for %q: %w (stderr: %s)", activeRef, err, stderr)
-	}
-	if _, stderr, err := g.runCmdWithEnv(ctx, gitPath, indexEnv, "rm", "-r", "-f", "--cached", "--ignore-unmatch", "--", ":(literal)"+activePath); err != nil {
-		return "", fmt.Errorf("failed to remove activePath %q from index: %w (stderr: %s)", activePath, err, stderr)
+	if _, stderr, err := g.runCmdWithEnv(ctx, gitPath, indexEnv, "read-tree", baseRef); err != nil {
+		return "", fmt.Errorf("failed to read tree %q: %w (stderr: %s)", baseRef, err, stderr)
 	}
 
-	lsTreeStdout, stderr, err := g.runCmd(ctx, gitPath, "ls-tree", targetSha, "--", ":(literal)"+activePath)
+	// Drop the whole subtree first so sourceRef's version, including its deletions, replaces it.
+	if _, stderr, err := g.runCmdWithEnv(ctx, gitPath, indexEnv, "rm", "-r", "-f", "--cached", "--ignore-unmatch", "--", ":(literal)"+path); err != nil {
+		return "", fmt.Errorf("failed to remove %q from index: %w (stderr: %s)", path, err, stderr)
+	}
+
+	// Skip the overlay when sourceRef has no content at path; the subtree then stays removed.
+	lsTreeStdout, stderr, err := g.runCmd(ctx, gitPath, "ls-tree", sourceRef, "--", ":(literal)"+path)
 	if err != nil {
-		return "", fmt.Errorf("failed to inspect activePath %q on %q: %w (stderr: %s)", activePath, targetSha, err, stderr)
+		return "", fmt.Errorf("failed to inspect %q on %q: %w (stderr: %s)", path, sourceRef, err, stderr)
 	}
 	if strings.TrimSpace(lsTreeStdout) != "" {
-		if _, stderr, err = g.runCmdWithEnv(ctx, gitPath, indexEnv, "read-tree", "--prefix="+activePath+"/", targetSha+":"+activePath); err != nil {
-			return "", fmt.Errorf("failed to overlay activePath %q from %q: %w (stderr: %s)", activePath, targetSha, err, stderr)
+		if _, stderr, err := g.runCmdWithEnv(ctx, gitPath, indexEnv, "read-tree", "--prefix="+path+"/", sourceRef+":"+path); err != nil {
+			return "", fmt.Errorf("failed to overlay %q from %q: %w (stderr: %s)", path, sourceRef, err, stderr)
 		}
 	}
 
 	treeSha, stderr, err := g.runCmdWithEnv(ctx, gitPath, indexEnv, "write-tree")
 	if err != nil {
-		return "", fmt.Errorf("failed to write restored tree: %w (stderr: %s)", err, stderr)
+		return "", fmt.Errorf("failed to write tree: %w (stderr: %s)", err, stderr)
 	}
 	return strings.TrimSpace(treeSha), nil
 }
