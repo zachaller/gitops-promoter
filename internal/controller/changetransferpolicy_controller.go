@@ -1636,19 +1636,6 @@ func activeTipIsRestore(ctp *promoterv1alpha1.ChangeTransferPolicy) bool {
 	return false
 }
 
-// revertCommitForPolicy returns the name of a live RevertCommit for this policy, or "" when
-// there is none. Any such object holds auto-merge, whether or not its dry SHA matches proposed.
-func (r *ChangeTransferPolicyReconciler) revertCommitForPolicy(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy) (string, error) {
-	list, err := r.revertCommitsForPolicy(ctx, ctp)
-	if err != nil {
-		return "", err
-	}
-	if len(list) == 0 {
-		return "", nil
-	}
-	return list[0].Name, nil
-}
-
 // revertCommitsForPolicy lists live RevertCommits that reference this policy.
 func (r *ChangeTransferPolicyReconciler) revertCommitsForPolicy(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy) ([]promoterv1alpha1.RevertCommit, error) {
 	list := &promoterv1alpha1.RevertCommitList{}
@@ -1710,13 +1697,14 @@ func (r *ChangeTransferPolicyReconciler) mergePullRequests(ctx context.Context, 
 		return nil, nil
 	}
 
-	holding, err := r.revertCommitForPolicy(ctx, ctp)
+	// Any live RevertCommit holds auto-merge, whether or not its dry SHA matches proposed.
+	reverts, err := r.revertCommitsForPolicy(ctx, ctp)
 	if err != nil {
 		return nil, err
 	}
-	if holding != "" {
+	if len(reverts) > 0 {
 		logger.Info("RevertCommit is present; not auto-merging",
-			"revertCommit", holding,
+			"revertCommit", reverts[0].Name,
 			"branch", ctp.Spec.ActiveBranch,
 			"drySha", ctp.Status.Proposed.Dry.Sha)
 		return nil, nil

@@ -1227,6 +1227,10 @@ func (g *EnvironmentOperations) RestoreActiveBranch(ctx context.Context, activeB
 		if err != nil {
 			return RestoreResult{}, fmt.Errorf("failed to create restore commit for %q: %w", activeBranch, err)
 		}
+		// Note first, then branch. If the branch push then loses to a concurrent update, the note
+		// is left on a commit that never lands, which nothing reads; the retry writes a new
+		// restore commit and note. The other order could leave a restore on the active branch
+		// with no note, and history would lose the pull request and checks copied from targetSha.
 		if err := g.writeRestoreNote(ctx, restoreSha, targetSha); err != nil {
 			return RestoreResult{}, err
 		}
