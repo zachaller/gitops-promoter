@@ -1590,18 +1590,20 @@ func (r *ChangeTransferPolicyReconciler) evaluatePullRequestLabels(ctp *promoter
 //
 // A restore commit is parented on the old active tip and the proposed branch is left where it was,
 // so the proposed SHA can already be contained in active. Creating a pull request then is rejected
-// by the SCM ("No commits between <branch> and <branch>-next"). This check does not depend on a
-// RevertCommit existing, so after one is deleted the reverted dry SHA stays unproposed until the
-// hydrator writes a new commit to the proposed branch. gitOperations may be nil (unit tests), in
-// which case only the dry-SHA block is checked.
+// by the SCM ("No commits between <branch> and <branch>-next"). That can only happen after a
+// restore, so the ancestor check runs only while a RevertCommit references this policy or the
+// active tip is a restore commit. The second case keeps the check after the RevertCommit is
+// deleted: the reverted dry SHA stays unproposed until the hydrator writes a new commit to the
+// proposed branch. gitOperations may be nil (unit tests), in which case only the dry-SHA block is
+// checked.
 func (r *ChangeTransferPolicyReconciler) skipPullRequestAfterRevert(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy, gitOperations *git.EnvironmentOperations) (bool, error) {
 	logger := log.FromContext(ctx)
 
-	blocked, err := r.promotionBlockedByRevert(ctx, ctp)
+	reverts, err := r.revertCommitsForPolicy(ctx, ctp)
 	if err != nil {
 		return false, err
 	}
-	if blocked != "" {
+	if blocked := promotionBlockedByRevert(ctp, reverts); blocked != "" {
 		logger.Info("RevertCommit blocks promotion of this dry SHA; not opening a pull request",
 			"revertCommit", blocked,
 			"branch", ctp.Spec.ActiveBranch,
@@ -1609,7 +1611,7 @@ func (r *ChangeTransferPolicyReconciler) skipPullRequestAfterRevert(ctx context.
 		return true, nil
 	}
 
-	if gitOperations == nil {
+	if gitOperations == nil || (len(reverts) == 0 && !activeTipIsRestore(ctp)) {
 		return false, nil
 	}
 	contained, err := gitOperations.CommitIsAncestor(ctx, ctp.Status.Proposed.Hydrated.Sha, ctp.Status.Active.Hydrated.Sha)
@@ -1623,6 +1625,17 @@ func (r *ChangeTransferPolicyReconciler) skipPullRequestAfterRevert(ctx context.
 			"active", ctp.Status.Active.Hydrated.Sha)
 	}
 	return contained, nil
+}
+
+// activeTipIsRestore reports whether the active branch tip is a commit written by a RevertCommit
+// restore, identified by the Promoter-restored-from trailer in its message body.
+func activeTipIsRestore(ctp *promoterv1alpha1.ChangeTransferPolicy) bool {
+	for line := range strings.SplitSeq(ctp.Status.Active.Hydrated.Body, "\n") {
+		if strings.HasPrefix(line, constants.TrailerRestoredFrom+":") {
+			return true
+		}
+	}
+	return false
 }
 
 // revertCommitForPolicy returns the name of a live RevertCommit for this policy, or "" when
@@ -1658,8 +1671,8 @@ func (r *ChangeTransferPolicyReconciler) revertCommitsForPolicy(ctx context.Cont
 	return matched, nil
 }
 
-// promotionBlockedByRevert returns the name of the RevertCommit that blocks opening a promotion
-// pull request for the current proposed dry SHA, or "" when that dry SHA is not blocked.
+// promotionBlockedByRevert returns the name of the RevertCommit in reverts that blocks opening a
+// promotion pull request for the current proposed dry SHA, or "" when that dry SHA is not blocked.
 //
 // A RevertCommit whose restore has not been recorded yet blocks every proposed SHA, so a pull
 // request for the dry SHA being moved off active cannot land before status.blockedDrySha is
@@ -1668,21 +1681,17 @@ func (r *ChangeTransferPolicyReconciler) revertCommitsForPolicy(ctx context.Cont
 // separate hold: nothing is auto-merged while any RevertCommit for this policy exists. Deleting
 // the RevertCommit lifts both. The reverted dry SHA can still be skipped afterwards by the
 // ancestor check in skipPullRequestAfterRevert.
-func (r *ChangeTransferPolicyReconciler) promotionBlockedByRevert(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy) (string, error) {
-	list, err := r.revertCommitsForPolicy(ctx, ctp)
-	if err != nil {
-		return "", err
-	}
-	for i := range list {
-		rc := &list[i]
+func promotionBlockedByRevert(ctp *promoterv1alpha1.ChangeTransferPolicy, reverts []promoterv1alpha1.RevertCommit) string {
+	for i := range reverts {
+		rc := &reverts[i]
 		if rc.Status.RestoredFrom != rc.Spec.Sha || rc.Status.ActiveSha == "" {
-			return rc.Name, nil
+			return rc.Name
 		}
 		if rc.Status.BlockedDrySha != "" && rc.Status.BlockedDrySha == ctp.Status.Proposed.Dry.Sha {
-			return rc.Name, nil
+			return rc.Name
 		}
 	}
-	return "", nil
+	return ""
 }
 
 // mergePullRequests tries to merge the pull request if all the checks have passed and the
