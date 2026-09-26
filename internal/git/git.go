@@ -1157,7 +1157,7 @@ type RestoreResult struct {
 // The git commands run, in order (A = activeBranch, T = targetSha):
 //
 //	git fetch origin A                      && git rev-parse origin/A          # activeTip
-//	git cat-file -t T || git fetch origin T                                    # make sure T is local
+//	git cat-file -e T^{commit} || git fetch origin T                           # make sure T is local
 //	git fetch origin +refs/notes/hydrator.metadata:refs/notes/hydrator.metadata
 //	git fetch origin +refs/notes/promoter.history:refs/notes/promoter.history
 //
@@ -1344,21 +1344,18 @@ func (g *EnvironmentOperations) restoreTree(ctx context.Context, activeRef, targ
 	return strings.TrimSpace(treeSha), nil
 }
 
+// ensureCommit makes sure sha is a commit in the clone, fetching it from origin when it is not
+// present yet.
 func (g *EnvironmentOperations) ensureCommit(ctx context.Context, sha string) error {
 	gitPath := g.ClonePath()
-	stdout, _, err := g.runCmd(ctx, gitPath, "cat-file", "-t", sha)
-	if err == nil && strings.TrimSpace(stdout) == "commit" {
+	if _, _, err := g.runCmd(ctx, gitPath, "cat-file", "-e", sha+"^{commit}"); err == nil {
 		return nil
 	}
-	if _, _, ferr := g.runCmd(ctx, gitPath, "fetch", "origin", sha); ferr != nil && err != nil {
-		return fmt.Errorf("commit %q is not available: %w", sha, ferr)
+	if _, stderr, err := g.runCmd(ctx, gitPath, "fetch", "origin", sha); err != nil {
+		return fmt.Errorf("commit %q is not available: fetch failed: %w (stderr: %s)", sha, err, stderr)
 	}
-	stdout, stderr, err := g.runCmd(ctx, gitPath, "cat-file", "-t", sha)
-	if err != nil {
-		return fmt.Errorf("commit %q is not available: %w (stderr: %s)", sha, err, stderr)
-	}
-	if strings.TrimSpace(stdout) != "commit" {
-		return fmt.Errorf("commit %q is a %s, not a commit", sha, strings.TrimSpace(stdout))
+	if _, stderr, err := g.runCmd(ctx, gitPath, "cat-file", "-e", sha+"^{commit}"); err != nil {
+		return fmt.Errorf("%q is not a commit: %w (stderr: %s)", sha, err, stderr)
 	}
 	return nil
 }
@@ -1385,6 +1382,10 @@ func (g *EnvironmentOperations) commitTree(ctx context.Context, tree string, par
 	return strings.TrimSpace(stdout), nil
 }
 
+// pushCommitWithLease pushes commitSha to branch only if the remote branch is still expectedTip.
+// commitSha is parented on expectedTip, so a plain push would already reject a branch that moved
+// forward; the lease also rejects one that was rewound to an ancestor, where a plain push would
+// fast-forward and put back the commits that were removed.
 func (g *EnvironmentOperations) pushCommitWithLease(ctx context.Context, commitSha, branch, expectedTip string) error {
 	lease := "refs/heads/" + branch + ":" + expectedTip
 	refspec := commitSha + ":refs/heads/" + branch
