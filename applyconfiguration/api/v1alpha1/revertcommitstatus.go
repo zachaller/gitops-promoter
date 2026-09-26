@@ -37,7 +37,8 @@ type RevertCommitStatusApplyConfiguration struct {
 	// moved off of. The ChangeTransferPolicy does not open a promotion pull request while its
 	// proposed dry SHA still equals this value, so the reverted change is not put back. A different
 	// proposed dry SHA may open a pull request, but nothing is auto-merged while this RevertCommit
-	// exists. Empty when that active tip had no hydrator.metadata. Deleting the RevertCommit lifts
+	// exists. Empty when that active tip had no hydrator.metadata, or when the active branch already
+	// had spec.sha's content so nothing was moved off it. Deleting the RevertCommit lifts
 	// this block, but a promotion pull request only opens when the proposed branch has a commit the
 	// active branch does not already contain. The restore commit is parented on the tip it moved
 	// off of, so when that tip already contains the proposed commit (a merge-commit promotion),

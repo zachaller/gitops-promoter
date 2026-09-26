@@ -30,9 +30,11 @@ type RevertCommitSpecApplyConfiguration struct {
 	// ChangeTransferPolicyRef selects the ChangeTransferPolicy whose active branch is restored.
 	// The policy supplies the repository, the active and proposed branches, and activePath.
 	ChangeTransferPolicyRef *ObjectReferenceApplyConfiguration `json:"changeTransferPolicyRef,omitempty"`
-	// Sha is the hydrated commit to restore onto the active branch. The controller writes a new
-	// commit (the commit's tree, or only activePath when the policy sets one) parented on the
-	// current active tip and records a promotion-history note with Promoter-restored-from.
+	// Sha is the hydrated commit to restore onto the active branch. It must already be in the active
+	// branch's history (the tip or one of its ancestors); any other commit is refused. The
+	// controller writes a new commit (the commit's tree, or only activePath when the policy sets
+	// one) parented on the current active tip and records a promotion-history note with
+	// Promoter-restored-from. When the active branch already has that content, nothing is written.
 	// The proposed branch is left as the hydrator wrote it. The ChangeTransferPolicy does not open
 	// a promotion pull request that would put the active branch's dry SHA back. A pull request
 	// for a different proposed dry SHA may open, but nothing is auto-merged while this

@@ -218,6 +218,21 @@ func (g *EnvironmentOperations) CloneRepo(ctx context.Context) error {
 	return nil
 }
 
+// RemoveClone deletes this environment's on-disk clone and forgets it, so a later CloneRepo for the
+// same identity clones afresh. It is a no-op when there is no clone. Use it for short-lived
+// identities whose clone would otherwise stay on disk for the life of the process.
+func (g *EnvironmentOperations) RemoveClone() error {
+	path := g.ClonePath()
+	if path == "" {
+		return nil
+	}
+	gitpaths.Delete(g.cloneKey())
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("failed to remove clone %q: %w", path, err)
+	}
+	return nil
+}
+
 func buildHydratorMetadataPath(activePath string) string {
 	if activePath == "" {
 		return "hydrator.metadata"
@@ -1085,12 +1100,16 @@ func (g *EnvironmentOperations) GetTrailers(ctx context.Context, sha string) (ma
 // RestoreResult is what RestoreActiveBranch observed and wrote.
 type RestoreResult struct {
 	// ActiveSha is the commit now on the active branch. It is a new commit whose tree matches the
-	// restored version, unless the active tip was already that restore.
+	// restored version, unless the active tip was already that restore or already had that
+	// content (Unchanged).
 	ActiveSha string
 	// BlockedDrySha is the dry SHA from hydrator.metadata on the active tip this restore moved off
-	// of. Empty when that file is absent. A repeat call reads it from the restore commit's parent,
-	// which is that same tip.
+	// of. Empty when that file is absent, or when Unchanged. A repeat call reads it from the restore
+	// commit's parent, which is that same tip.
 	BlockedDrySha string
+	// Unchanged is true when the active branch already had the content being restored (and no
+	// restore marker for it), so nothing was written. ActiveSha is then the untouched active tip.
+	Unchanged bool
 }
 
 // RestoreActiveBranch makes the active branch match targetSha (its whole tree, or only activePath
@@ -1103,15 +1122,23 @@ type RestoreResult struct {
 // Pull-request-merge-time overwritten. The note is pushed before the branch.
 //
 // A repeat call is a no-op when the active tip already has the restore marker for targetSha and
-// the matching tree. Pushes use --force-with-lease against the tip this call observed.
+// the matching tree. When the active tip already has the matching tree without that marker, the
+// branch is running that version already: nothing is written, nothing moved off the branch, and
+// the result is Unchanged with an empty BlockedDrySha. Blocking the live dry SHA there would hold
+// back the version the caller asked for. Pushes use --force-with-lease against the tip this call
+// observed.
 //
-// Operates on the object DB only. Requires CloneRepo to have run. Fetches the active branch, the
-// target commit when it is not already present, and the promotion-history notes ref.
+// targetSha must be the active tip or one of its ancestors; anything else is refused, so only a
+// version that was on the active branch before can be restored.
+//
+// Operates on the object DB only. Requires CloneRepo to have run. Fetches the active branch and
+// the promotion-history notes ref.
 //
 // The git commands run, in order (A = activeBranch, T = targetSha):
 //
 //	git fetch origin A                      && git rev-parse origin/A          # activeTip
-//	git cat-file -e T^{commit} || git fetch origin T                           # make sure T is local
+//	git cat-file -e T^{commit}                                                 # T must be a commit
+//	git merge-base --is-ancestor T <activeTip>                                 # ...already on A
 //	git fetch origin +refs/notes/hydrator.metadata:refs/notes/hydrator.metadata
 //	git fetch origin +refs/notes/promoter.history:refs/notes/promoter.history
 //
@@ -1124,8 +1151,9 @@ type RestoreResult struct {
 //	git read-tree --prefix=<activePath>/ T:<activePath>
 //	git write-tree
 //
-//	# already restored? compare activeTip^{tree} with that tree, then look for
-//	# Promoter-restored-from: T in the history note, falling back to the commit trailers
+//	# nothing to change? compare activeTip^{tree} with that tree; when equal, look for
+//	# Promoter-restored-from: T in the history note, falling back to the commit trailers.
+//	# Equal tree with the marker: repeat call. Equal tree without it: Unchanged, return here.
 //	git rev-parse --verify <activeTip>^{tree}
 //	git notes --ref=refs/notes/promoter.history show <activeTip>
 //	git log --no-walk=unsorted --stdin -z --pretty=format:... <<< <activeTip>  # fallback: message
@@ -1154,7 +1182,7 @@ func (g *EnvironmentOperations) RestoreActiveBranch(ctx context.Context, activeB
 	if err != nil {
 		return RestoreResult{}, err
 	}
-	if err := g.ensureCommit(ctx, targetSha); err != nil {
+	if err := g.ensureInHistory(ctx, targetSha, activeBranch, activeTip); err != nil {
 		return RestoreResult{}, err
 	}
 	if err := g.FetchNotes(ctx); err != nil {
@@ -1166,11 +1194,25 @@ func (g *EnvironmentOperations) RestoreActiveBranch(ctx context.Context, activeB
 		return RestoreResult{}, err
 	}
 
-	restoreSha := activeTip
-	already, err := g.commitRestores(ctx, activeTip, targetSha, wantTree)
+	tipTree, err := g.revParse(ctx, activeTip+"^{tree}")
 	if err != nil {
 		return RestoreResult{}, err
 	}
+	already := false
+	if tipTree == wantTree {
+		already, err = g.hasRestoreMarker(ctx, activeTip, targetSha)
+		if err != nil {
+			return RestoreResult{}, err
+		}
+		if !already {
+			// The branch already runs this version and no restore put it there, so nothing moves
+			// off the branch and there is no dry SHA to block.
+			logger.Info("Active branch already matches the restore target; nothing to write", "branch", activeBranch, "target", targetSha, "activeTip", activeTip)
+			return RestoreResult{ActiveSha: activeTip, Unchanged: true}, nil
+		}
+	}
+
+	restoreSha := activeTip
 	if !already {
 		short := targetSha
 		if len(short) > 7 {
@@ -1214,15 +1256,9 @@ func (g *EnvironmentOperations) RestoreActiveBranch(ctx context.Context, activeB
 	return RestoreResult{ActiveSha: restoreSha, BlockedDrySha: activeMeta.Sha}, nil
 }
 
-func (g *EnvironmentOperations) commitRestores(ctx context.Context, sha, targetSha, wantTree string) (bool, error) {
-	gotTree, err := g.revParse(ctx, sha+"^{tree}")
-	if err != nil {
-		return false, err
-	}
-	if gotTree != wantTree {
-		return false, nil
-	}
-
+// hasRestoreMarker reports whether sha carries Promoter-restored-from: targetSha, read from its
+// promotion-history note or, when it has none, from its commit trailers.
+func (g *EnvironmentOperations) hasRestoreMarker(ctx context.Context, sha, targetSha string) (bool, error) {
 	trailers, err := g.GetHistoryNote(ctx, sha)
 	if err != nil {
 		return false, fmt.Errorf("read promotion-history note for %q: %w", sha, err)
@@ -1309,18 +1345,26 @@ func (g *EnvironmentOperations) overlayPathTree(ctx context.Context, baseRef, so
 	return strings.TrimSpace(treeSha), nil
 }
 
-// ensureCommit makes sure sha is a commit in the clone, fetching it from origin when it is not
-// present yet.
-func (g *EnvironmentOperations) ensureCommit(ctx context.Context, sha string) error {
-	gitPath := g.ClonePath()
-	if _, _, err := g.runCmd(ctx, gitPath, "cat-file", "-e", sha+"^{commit}"); err == nil {
+// ensureInHistory makes sure sha is a commit that the active branch already contains: its tip
+// or one of the tip's ancestors. A restore only puts back something that was on the branch before,
+// so a RevertCommit cannot push a commit that never went through promotion (another environment's
+// branch, an unmerged pull request head) straight to the active branch.
+//
+// The active branch was just fetched, so every commit in its history is already in the clone and
+// nothing is fetched here.
+func (g *EnvironmentOperations) ensureInHistory(ctx context.Context, sha, activeBranch, activeTip string) error {
+	if _, stderr, err := g.runCmd(ctx, g.ClonePath(), "cat-file", "-e", sha+"^{commit}"); err != nil {
+		return fmt.Errorf("%q is not a commit in the history of active branch %q: %w (stderr: %s)", sha, activeBranch, err, stderr)
+	}
+	if sha == activeTip {
 		return nil
 	}
-	if _, stderr, err := g.runCmd(ctx, gitPath, "fetch", "origin", sha); err != nil {
-		return fmt.Errorf("commit %q is not available: fetch failed: %w (stderr: %s)", sha, err, stderr)
+	contained, err := g.CommitIsAncestor(ctx, sha, activeTip)
+	if err != nil {
+		return err
 	}
-	if _, stderr, err := g.runCmd(ctx, gitPath, "cat-file", "-e", sha+"^{commit}"); err != nil {
-		return fmt.Errorf("%q is not a commit: %w (stderr: %s)", sha, err, stderr)
+	if !contained {
+		return fmt.Errorf("commit %q is not in the history of active branch %q; only a version that was on the active branch can be restored", sha, activeBranch)
 	}
 	return nil
 }

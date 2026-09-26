@@ -135,24 +135,74 @@ var _ = Describe("RestoreActiveBranch", func() {
 		Expect(strings.TrimSpace(mustGit(tempRepoDir, "show", restored.ActiveSha+":other.txt"))).To(Equal("keep"))
 	})
 
-	It("fetches a target commit that is not in the clone yet", func() {
+	It("refuses a target that was never on the active branch", func() {
+		v1 := commitFile("version.txt", "v1\n", "version v1")
+		mustGit(workDir, "branch", "-M", "environment/development")
+		mustGit(workDir, "push", "-u", "origin", "environment/development")
+		mustGit(workDir, "push", "origin", "HEAD:refs/heads/environment/development-next")
+
+		// A commit that exists on the remote, but only on another branch.
+		mustGit(workDir, "checkout", "-b", "elsewhere")
+		target := commitFile("version.txt", "elsewhere\n", "elsewhere")
+		mustGit(workDir, "push", "origin", "HEAD:refs/heads/elsewhere")
+		mustGit(workDir, "checkout", "environment/development")
+
+		g := newOps()
+		_, err := g.RestoreActiveBranch(GinkgoT().Context(), "environment/development", "", target)
+		Expect(err).To(MatchError(ContainSubstring("is not in the history of active branch")))
+		Expect(strings.TrimSpace(mustGit(tempRepoDir, "rev-parse", "refs/heads/environment/development"))).To(Equal(v1))
+	})
+
+	It("writes nothing when the target is the active tip", func() {
 		v1 := commitFile("version.txt", "v1\n", "version v1")
 		mustGit(workDir, "branch", "-M", "environment/development")
 		mustGit(workDir, "push", "-u", "origin", "environment/development")
 		mustGit(workDir, "push", "origin", "HEAD:refs/heads/environment/development-next")
 
 		g := newOps()
-
-		// Pushed after the clone, to a ref the restore does not fetch.
-		mustGit(workDir, "checkout", "-b", "elsewhere")
-		target := commitFile("version.txt", "elsewhere\n", "elsewhere")
-		mustGit(workDir, "push", "origin", "HEAD:refs/heads/elsewhere")
-		mustGit(workDir, "checkout", "environment/development")
-
-		restored, err := g.RestoreActiveBranch(GinkgoT().Context(), "environment/development", "", target)
+		restored, err := g.RestoreActiveBranch(GinkgoT().Context(), "environment/development", "", v1)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(strings.TrimSpace(mustGit(tempRepoDir, "rev-parse", restored.ActiveSha+"^"))).To(Equal(v1))
-		Expect(strings.TrimSpace(mustGit(tempRepoDir, "show", restored.ActiveSha+":version.txt"))).To(Equal("elsewhere"))
+		Expect(restored).To(Equal(git.RestoreResult{ActiveSha: v1, Unchanged: true}))
+		Expect(strings.TrimSpace(mustGit(tempRepoDir, "rev-parse", "refs/heads/environment/development"))).To(Equal(v1))
+	})
+
+	It("writes nothing and blocks nothing when the active tree already matches an older target", func() {
+		Expect(os.WriteFile(filepath.Join(workDir, "hydrator.metadata"), []byte(`{"drySha":"5555555555555555555555555555555555555555"}`), 0o644)).To(Succeed())
+		mustGit(workDir, "add", "hydrator.metadata")
+		v1 := commitFile("version.txt", "v1\n", "version v1")
+		mustGit(workDir, "branch", "-M", "environment/development")
+		// Same content, new commit: the branch runs v1's version already.
+		mustGit(workDir, "commit", "--allow-empty", "-m", "no-op promotion")
+		tip := strings.TrimSpace(mustGit(workDir, "rev-parse", "HEAD"))
+		mustGit(workDir, "push", "-u", "origin", "environment/development")
+
+		g := newOps()
+		restored, err := g.RestoreActiveBranch(GinkgoT().Context(), "environment/development", "", v1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(restored).To(Equal(git.RestoreResult{ActiveSha: tip, Unchanged: true}))
+		Expect(strings.TrimSpace(mustGit(tempRepoDir, "rev-parse", "refs/heads/environment/development"))).To(Equal(tip))
+
+		again, err := g.RestoreActiveBranch(GinkgoT().Context(), "environment/development", "", v1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(again).To(Equal(restored))
+	})
+
+	It("removes the clone and forgets it", func() {
+		commitFile("version.txt", "v1\n", "version v1")
+		mustGit(workDir, "branch", "-M", "environment/development")
+		mustGit(workDir, "push", "-u", "origin", "environment/development")
+
+		g := newOps()
+		path := g.ClonePath()
+		Expect(path).NotTo(BeEmpty())
+
+		Expect(g.RemoveClone()).To(Succeed())
+		Expect(g.ClonePath()).To(BeEmpty())
+		_, err := os.Stat(path)
+		Expect(os.IsNotExist(err)).To(BeTrue())
+
+		// A second call has nothing to remove.
+		Expect(g.RemoveClone()).To(Succeed())
 	})
 
 	It("returns an error when the target is not a commit", func() {
