@@ -8,6 +8,7 @@ import {
   canShowRevertCommand,
   revertCommitResourceName,
 } from '@lib/components/HistoryView/revertCommand';
+import { cellKindLabel } from '@lib/components/HistoryView/presentation';
 import type { CommitStatusManager, EnrichedBranchCommitStatus } from '@shared/types/promotion';
 import { commitStatusPlugins } from '@shared/components/plugins';
 import type { CommitStatusContext } from '@shared/components/plugins';
@@ -370,6 +371,24 @@ describe('DetailDrawer restore command', () => {
     expect(container.querySelector('.hp-drawer__pr')?.textContent).toContain('3020');
   });
 
+  it('labels a superseded restore cell REPLACED in the badge and the environment list', () => {
+    render(
+      makeCell([], {
+        kind: 'restored',
+        health: 'success',
+        hydrated: { sha: HYDRATED_SHA },
+        restoredFrom: HYDRATED_SHA,
+      }),
+    );
+
+    const badge = container.querySelector('.hp-drawer__kind');
+    expect(badge?.textContent).toBe('REPLACED');
+    expect(badge?.classList.contains('hp-drawer__kind--was-here')).toBe(true);
+    const pill = container.querySelector('.hp-drawer__presence .cell__pill');
+    expect(pill?.textContent).toBe('REPLACED');
+    expect(pill?.classList.contains('cell__pill--was-here')).toBe(true);
+  });
+
   it('hides the restore section for in-flight / proposed cells', () => {
     render(
       makeCell([], {
@@ -382,5 +401,21 @@ describe('DetailDrawer restore command', () => {
 
     expect(container.querySelector('.hp-drawer__command')).toBeNull();
     expect(container.textContent).not.toContain('Restore this version');
+  });
+});
+
+describe('cellKindLabel', () => {
+  it('gives every kind a label, with compact forms for the empty kinds', () => {
+    expect(cellKindLabel({ kind: 'live' })).toBe('LIVE');
+    expect(cellKindLabel({ kind: 'in-flight', isProposed: true })).toBe('PROPOSED');
+    expect(cellKindLabel({ kind: 'in-flight' })).toBe('PR OPEN');
+    expect(cellKindLabel({ kind: 'was-here' })).toBe('REPLACED');
+    expect(cellKindLabel({ kind: 'restored' })).toBe('REPLACED');
+    expect(cellKindLabel({ kind: 'failed' })).toBe('FAILED');
+    expect(cellKindLabel({ kind: 'no-op' })).toBe('NO-OP');
+    expect(cellKindLabel({ kind: 'no-changes' })).toBe('NO CHANGES');
+    expect(cellKindLabel({ kind: 'no-changes' }, true)).toBe('—');
+    expect(cellKindLabel({ kind: 'unknown-history' })).toBe('HISTORY UNAVAILABLE');
+    expect(cellKindLabel({ kind: 'unknown-history' }, true)).toBe('?');
   });
 });
