@@ -20,6 +20,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -92,11 +93,12 @@ var _ = Describe("RevertCommit Controller", func() {
 			updateSpec := func(mutate func(*promoterv1alpha1.RevertCommitSpec)) error {
 				return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 					var live promoterv1alpha1.RevertCommit
-					if err := k8sClient.Get(ctx, key, &live); err != nil {
-						return err
-					}
+					Expect(k8sClient.Get(ctx, key, &live)).To(Succeed())
 					mutate(&live.Spec)
-					return k8sClient.Update(ctx, &live)
+					if err := k8sClient.Update(ctx, &live); err != nil {
+						return fmt.Errorf("update RevertCommit spec: %w", err)
+					}
+					return nil
 				})
 			}
 
