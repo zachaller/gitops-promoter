@@ -1597,7 +1597,7 @@ export type components = {
              * @description ObservedGeneration is the .metadata.generation that this status was reconciled from. Because status is written via Server-Side Apply with ForceOwnership (which has no optimistic-concurrency check), this field is the canonical way to detect stale status writes: compare status.observedGeneration with metadata.generation.
              */
             observedGeneration?: number;
-            /** @description RestoredFrom is the spec.sha this status applied. While it matches spec.sha the controller does not restore again, so a later promotion is not overwritten on resync. */
+            /** @description RestoredFrom is the spec.sha this status applied. It is written in the same status update as activeSha and blockedDrySha, so it alone marks the restore as done. While it matches spec.sha the controller does not restore again, so a later promotion is not overwritten on resync. */
             restoredFrom?: string;
         };
         /** @description RevisionReference contains a reference to a some information that is related in some way to another commit. For now, it supports only references to a commit. In the future, it may support other types of references. */

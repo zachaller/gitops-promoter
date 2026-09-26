@@ -112,7 +112,7 @@ func (r *RevertCommitReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	if rc.Status.RestoredFrom == rc.Spec.Sha && rc.Status.ActiveSha != "" {
+	if rc.Status.RestoredFrom == rc.Spec.Sha {
 		logger.V(4).Info("restore already applied", "sha", rc.Spec.Sha, "activeSha", rc.Status.ActiveSha)
 		return ctrl.Result{}, nil
 	}

@@ -418,8 +418,7 @@ func (r *ChangeTransferPolicyReconciler) SetupWithManager(ctx context.Context, m
 					return false
 				}
 				return oldRC.Status.RestoredFrom != newRC.Status.RestoredFrom ||
-					oldRC.Status.BlockedDrySha != newRC.Status.BlockedDrySha ||
-					oldRC.Status.ActiveSha != newRC.Status.ActiveSha
+					oldRC.Status.BlockedDrySha != newRC.Status.BlockedDrySha
 			},
 			DeleteFunc:  func(event.DeleteEvent) bool { return true },
 			GenericFunc: func(event.GenericEvent) bool { return false },
@@ -1684,7 +1683,7 @@ func (r *ChangeTransferPolicyReconciler) revertCommitsForPolicy(ctx context.Cont
 func promotionBlockedByRevert(ctp *promoterv1alpha1.ChangeTransferPolicy, reverts []promoterv1alpha1.RevertCommit) string {
 	for i := range reverts {
 		rc := &reverts[i]
-		if rc.Status.RestoredFrom != rc.Spec.Sha || rc.Status.ActiveSha == "" {
+		if rc.Status.RestoredFrom != rc.Spec.Sha {
 			return rc.Name
 		}
 		if rc.Status.BlockedDrySha != "" && rc.Status.BlockedDrySha == ctp.Status.Proposed.Dry.Sha {

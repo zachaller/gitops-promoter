@@ -92,8 +92,6 @@ export interface CommitRow {
   restoreSubject?: string;
   /** Short sha of the revert commit on the active branch. */
   restoreShaShort?: string;
-  /** Who pushed the revert, which is rarely the restored commit's author. */
-  restoreAuthor?: string;
   repoUrl: string;
   freshestAt: number;
   earliestAt: number;

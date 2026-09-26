@@ -166,7 +166,6 @@ function applyRestoreIdentity(row: CommitRow, entry: HistoryEntry) {
   const hydrated = entry.active?.hydrated;
   row.restoreSubject = (hydrated?.subject ?? '').trim() || undefined;
   row.restoreShaShort = hydrated?.sha ? shortSha(hydrated.sha) : undefined;
-  row.restoreAuthor = hydrated?.author ? extractNameOnly(hydrated.author) : undefined;
 }
 
 function processHistory(rowsById: Map<string, CommitRow>, env: StatusEnvironment) {

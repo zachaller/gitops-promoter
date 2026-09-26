@@ -82,8 +82,9 @@ type RevertCommitStatus struct {
 	// +kubebuilder:validation:Pattern=`^([a-f0-9]{40}|[a-f0-9]{64})$`
 	BlockedDrySha string `json:"blockedDrySha,omitempty"`
 
-	// RestoredFrom is the spec.sha this status applied. While it matches spec.sha the controller
-	// does not restore again, so a later promotion is not overwritten on resync.
+	// RestoredFrom is the spec.sha this status applied. It is written in the same status update as
+	// activeSha and blockedDrySha, so it alone marks the restore as done. While it matches spec.sha
+	// the controller does not restore again, so a later promotion is not overwritten on resync.
 	// +optional
 	// +kubebuilder:validation:MinLength=40
 	// +kubebuilder:validation:MaxLength=64

@@ -1888,7 +1888,9 @@ spec:
                         tree, so active.dry repeats an earlier entry's dry SHA; this field is what distinguishes the two. The
                         pull request and commit status fields are copied from the restored version and describe the original
                         promotion, not the restore.
-                      maxLength: 40
+                      maxLength: 64
+                      minLength: 40
+                      pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
                       type: string
                   type: object
                 maxItems: 20
@@ -7466,8 +7468,9 @@ spec:
                 type: integer
               restoredFrom:
                 description: |-
-                  RestoredFrom is the spec.sha this status applied. While it matches spec.sha the controller
-                  does not restore again, so a later promotion is not overwritten on resync.
+                  RestoredFrom is the spec.sha this status applied. It is written in the same status update as
+                  activeSha and blockedDrySha, so it alone marks the restore as done. While it matches spec.sha
+                  the controller does not restore again, so a later promotion is not overwritten on resync.
                 maxLength: 64
                 minLength: 40
                 pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$

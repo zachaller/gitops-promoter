@@ -5330,7 +5330,7 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_RevertCommitStatus(ref co
 					},
 					"restoredFrom": {
 						SchemaProps: spec.SchemaProps{
-							Description: "RestoredFrom is the spec.sha this status applied. While it matches spec.sha the controller does not restore again, so a later promotion is not overwritten on resync.",
+							Description: "RestoredFrom is the spec.sha this status applied. It is written in the same status update as activeSha and blockedDrySha, so it alone marks the restore as done. While it matches spec.sha the controller does not restore again, so a later promotion is not overwritten on resync.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
