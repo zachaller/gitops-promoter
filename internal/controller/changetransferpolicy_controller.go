@@ -1590,8 +1590,10 @@ func (r *ChangeTransferPolicyReconciler) evaluatePullRequestLabels(ctp *promoter
 //
 // A restore commit is parented on the old active tip and the proposed branch is left where it was,
 // so the proposed SHA can already be contained in active. Creating a pull request then is rejected
-// by the SCM ("No commits between <branch> and <branch>-next"). gitOperations may be nil (unit
-// tests), in which case only the dry-SHA block is checked.
+// by the SCM ("No commits between <branch> and <branch>-next"). This check does not depend on a
+// RevertCommit existing, so after one is deleted the reverted dry SHA stays unproposed until the
+// hydrator writes a new commit to the proposed branch. gitOperations may be nil (unit tests), in
+// which case only the dry-SHA block is checked.
 func (r *ChangeTransferPolicyReconciler) skipPullRequestAfterRevert(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy, gitOperations *git.EnvironmentOperations) (bool, error) {
 	logger := log.FromContext(ctx)
 
@@ -1664,7 +1666,8 @@ func (r *ChangeTransferPolicyReconciler) revertCommitsForPolicy(ctx context.Cont
 // known. Once that field is set, only that dry SHA — the one that was on the active branch — is
 // blocked from opening a pull request. A different proposed dry SHA may open one. Auto-merge is a
 // separate hold: nothing is auto-merged while any RevertCommit for this policy exists. Deleting
-// the RevertCommit lifts both, including for the reverted dry SHA.
+// the RevertCommit lifts both. The reverted dry SHA can still be skipped afterwards by the
+// ancestor check in skipPullRequestAfterRevert.
 func (r *ChangeTransferPolicyReconciler) promotionBlockedByRevert(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy) (string, error) {
 	list, err := r.revertCommitsForPolicy(ctx, ctp)
 	if err != nil {
@@ -1684,8 +1687,8 @@ func (r *ChangeTransferPolicyReconciler) promotionBlockedByRevert(ctx context.Co
 
 // mergePullRequests tries to merge the pull request if all the checks have passed and the
 // environment is set to auto merge. A live RevertCommit for this policy holds auto-merge for every
-// proposed dry SHA. Deleting it is what lets a pull request merge, including one opened for a dry
-// SHA that arrived after the restore.
+// proposed dry SHA. Deleting it is what lets an open pull request merge, such as one opened for a
+// dry SHA that arrived after the restore.
 func (r *ChangeTransferPolicyReconciler) mergePullRequests(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy) (*promoterv1alpha1.PullRequest, error) {
 	logger := log.FromContext(ctx)
 

@@ -33,7 +33,8 @@ type RevertCommitSpecApplyConfiguration struct {
 	// The proposed branch is left as the hydrator wrote it. The ChangeTransferPolicy does not open
 	// a promotion pull request that would put the active branch's dry SHA back. A pull request
 	// for a different proposed dry SHA may open, but nothing is auto-merged while this
-	// RevertCommit exists. Delete it to allow auto-merge, including of the reverted dry SHA.
+	// RevertCommit exists. Deleting it lifts that hold but does not by itself propose the
+	// reverted change again; see status.blockedDrySha.
 	// The restore runs once per spec.sha. Later promotions are left alone.
 	Sha *string `json:"sha,omitempty"`
 }

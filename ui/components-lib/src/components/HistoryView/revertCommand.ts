@@ -50,8 +50,9 @@ export interface RevertCommitApplyInput {
  * `kubectl apply` of a RevertCommit for this environment and hydrated commit.
  *
  * Wrapped in `sh -c` so the heredoc is accepted when pasted into bash, zsh, or fish.
- * Creating the resource restores the active branch; deleting it lets the promotion
- * pull request merge again.
+ * Creating the resource restores the active branch; deleting it lets promotion pull
+ * requests auto-merge again. The reverted change itself may not be proposed again until
+ * a new commit lands on the proposed branch.
  */
 export function buildRevertCommitApplyCommand(input: RevertCommitApplyInput): string {
   const name = revertCommitResourceName(input.branch, input.sha);

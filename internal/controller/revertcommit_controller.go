@@ -70,7 +70,8 @@ type RevertCommitReconciler struct {
 // reconciled again. status.blockedDrySha is the dry SHA that was on the active branch; the
 // ChangeTransferPolicy does not open a pull request that would put it back. A pull request for a
 // different proposed dry SHA may open, but nothing is auto-merged while this RevertCommit exists.
-// Deleting it allows auto-merge, including of the reverted dry SHA.
+// Deleting it lifts both holds, but does not by itself propose the reverted dry SHA again: see
+// ChangeTransferPolicyReconciler.skipPullRequestAfterRevert.
 func (r *RevertCommitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 	logger.Info("Reconciling RevertCommit")
