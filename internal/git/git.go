@@ -1100,12 +1100,16 @@ func (g *EnvironmentOperations) GetTrailers(ctx context.Context, sha string) (ma
 // RestoreResult is what RestoreActiveBranch observed and wrote.
 type RestoreResult struct {
 	// ActiveSha is the commit now on the active branch. It is a new commit whose tree matches the
-	// restored version, unless the active tip was already that restore.
+	// restored version, unless the active tip was already that restore or already had that
+	// content (Unchanged).
 	ActiveSha string
 	// BlockedDrySha is the dry SHA from hydrator.metadata on the active tip this restore moved off
-	// of. Empty when that file is absent. A repeat call reads it from the restore commit's parent,
-	// which is that same tip.
+	// of. Empty when that file is absent, or when Unchanged. A repeat call reads it from the restore
+	// commit's parent, which is that same tip.
 	BlockedDrySha string
+	// Unchanged is true when the active branch already had the content being restored (and no
+	// restore marker for it), so nothing was written. ActiveSha is then the untouched active tip.
+	Unchanged bool
 }
 
 // RestoreActiveBranch makes the active branch match targetSha (its whole tree, or only activePath
@@ -1118,7 +1122,11 @@ type RestoreResult struct {
 // Pull-request-merge-time overwritten. The note is pushed before the branch.
 //
 // A repeat call is a no-op when the active tip already has the restore marker for targetSha and
-// the matching tree. Pushes use --force-with-lease against the tip this call observed.
+// the matching tree. When the active tip already has the matching tree without that marker, the
+// branch is running that version already: nothing is written, nothing moved off the branch, and
+// the result is Unchanged with an empty BlockedDrySha. Blocking the live dry SHA there would hold
+// back the version the caller asked for. Pushes use --force-with-lease against the tip this call
+// observed.
 //
 // targetSha must be the active tip or one of its ancestors; anything else is refused, so only a
 // version that was on the active branch before can be restored.
@@ -1143,8 +1151,9 @@ type RestoreResult struct {
 //	git read-tree --prefix=<activePath>/ T:<activePath>
 //	git write-tree
 //
-//	# already restored? compare activeTip^{tree} with that tree, then look for
-//	# Promoter-restored-from: T in the history note, falling back to the commit trailers
+//	# nothing to change? compare activeTip^{tree} with that tree; when equal, look for
+//	# Promoter-restored-from: T in the history note, falling back to the commit trailers.
+//	# Equal tree with the marker: repeat call. Equal tree without it: Unchanged, return here.
 //	git rev-parse --verify <activeTip>^{tree}
 //	git notes --ref=refs/notes/promoter.history show <activeTip>
 //	git log --no-walk=unsorted --stdin -z --pretty=format:... <<< <activeTip>  # fallback: message
@@ -1185,11 +1194,25 @@ func (g *EnvironmentOperations) RestoreActiveBranch(ctx context.Context, activeB
 		return RestoreResult{}, err
 	}
 
-	restoreSha := activeTip
-	already, err := g.commitRestores(ctx, activeTip, targetSha, wantTree)
+	tipTree, err := g.revParse(ctx, activeTip+"^{tree}")
 	if err != nil {
 		return RestoreResult{}, err
 	}
+	already := false
+	if tipTree == wantTree {
+		already, err = g.hasRestoreMarker(ctx, activeTip, targetSha)
+		if err != nil {
+			return RestoreResult{}, err
+		}
+		if !already {
+			// The branch already runs this version and no restore put it there, so nothing moves
+			// off the branch and there is no dry SHA to block.
+			logger.Info("Active branch already matches the restore target; nothing to write", "branch", activeBranch, "target", targetSha, "activeTip", activeTip)
+			return RestoreResult{ActiveSha: activeTip, Unchanged: true}, nil
+		}
+	}
+
+	restoreSha := activeTip
 	if !already {
 		short := targetSha
 		if len(short) > 7 {
@@ -1233,15 +1256,9 @@ func (g *EnvironmentOperations) RestoreActiveBranch(ctx context.Context, activeB
 	return RestoreResult{ActiveSha: restoreSha, BlockedDrySha: activeMeta.Sha}, nil
 }
 
-func (g *EnvironmentOperations) commitRestores(ctx context.Context, sha, targetSha, wantTree string) (bool, error) {
-	gotTree, err := g.revParse(ctx, sha+"^{tree}")
-	if err != nil {
-		return false, err
-	}
-	if gotTree != wantTree {
-		return false, nil
-	}
-
+// hasRestoreMarker reports whether sha carries Promoter-restored-from: targetSha, read from its
+// promotion-history note or, when it has none, from its commit trailers.
+func (g *EnvironmentOperations) hasRestoreMarker(ctx context.Context, sha, targetSha string) (bool, error) {
 	trailers, err := g.GetHistoryNote(ctx, sha)
 	if err != nil {
 		return false, fmt.Errorf("read promotion-history note for %q: %w", sha, err)

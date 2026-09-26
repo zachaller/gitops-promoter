@@ -15,7 +15,14 @@ live and you need the previous version back now, before a fix can go through the
    newer dry SHA can still open and run its checks, but it waits.
 
 The restore runs once. The spec is immutable; to restore a different version, delete the RevertCommit and create a new
-one.
+one. If the active branch already has the chosen version's content, nothing is written, `status.blockedDrySha` stays
+empty, and the RevertCommit emits an `AlreadyRestored` event; the auto-merge hold still applies while it exists.
+
+> [!IMPORTANT]
+> The restore commit is pushed directly to the active branch with the controller's git credentials; it does not go
+> through a pull request. If the active branch is protected against direct pushes, the push is rejected and the
+> RevertCommit stays `Ready=False`. Allow the controller's identity (for example the GitHub App or deploy key) to
+> bypass that protection, or roll back by other means.
 
 ## Rolling back
 
@@ -50,9 +57,11 @@ the Ready condition is `False` with the reason.
 
 ## Resuming promotion
 
-1. Fix forward: get a new dry commit hydrated onto the environment's proposed branch.
-2. Delete the RevertCommit. Auto-merge is allowed again.
+> [!WARNING]
+> Deleting the RevertCommit does **not** by itself put the reverted change back, and usually does not open a pull
+> request for it at all. The restore commit sits on top of the reverted one, so when promotions use merge commits the
+> active branch already contains the proposed commit, and no pull request opens for the reverted dry SHA until a new
+> commit lands on the proposed branch. Plan to fix forward.
 
-Deleting the RevertCommit on its own does not necessarily bring the reverted change back. The restore commit sits on
-top of the reverted one, so when promotions use merge commits the active branch already contains the proposed commit,
-and no pull request opens for the reverted dry SHA until a new commit lands on the proposed branch.
+1. Fix forward: get a new dry commit hydrated onto the environment's proposed branch.
+2. Delete the RevertCommit. Auto-merge is allowed again, and the new commit promotes as usual.

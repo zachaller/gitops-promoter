@@ -153,7 +153,7 @@ var _ = Describe("RestoreActiveBranch", func() {
 		Expect(strings.TrimSpace(mustGit(tempRepoDir, "rev-parse", "refs/heads/environment/development"))).To(Equal(v1))
 	})
 
-	It("restores the active tip itself", func() {
+	It("writes nothing when the target is the active tip", func() {
 		v1 := commitFile("version.txt", "v1\n", "version v1")
 		mustGit(workDir, "branch", "-M", "environment/development")
 		mustGit(workDir, "push", "-u", "origin", "environment/development")
@@ -162,7 +162,29 @@ var _ = Describe("RestoreActiveBranch", func() {
 		g := newOps()
 		restored, err := g.RestoreActiveBranch(GinkgoT().Context(), "environment/development", "", v1)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(strings.TrimSpace(mustGit(tempRepoDir, "rev-parse", restored.ActiveSha+"^"))).To(Equal(v1))
+		Expect(restored).To(Equal(git.RestoreResult{ActiveSha: v1, Unchanged: true}))
+		Expect(strings.TrimSpace(mustGit(tempRepoDir, "rev-parse", "refs/heads/environment/development"))).To(Equal(v1))
+	})
+
+	It("writes nothing and blocks nothing when the active tree already matches an older target", func() {
+		Expect(os.WriteFile(filepath.Join(workDir, "hydrator.metadata"), []byte(`{"drySha":"5555555555555555555555555555555555555555"}`), 0o644)).To(Succeed())
+		mustGit(workDir, "add", "hydrator.metadata")
+		v1 := commitFile("version.txt", "v1\n", "version v1")
+		mustGit(workDir, "branch", "-M", "environment/development")
+		// Same content, new commit: the branch runs v1's version already.
+		mustGit(workDir, "commit", "--allow-empty", "-m", "no-op promotion")
+		tip := strings.TrimSpace(mustGit(workDir, "rev-parse", "HEAD"))
+		mustGit(workDir, "push", "-u", "origin", "environment/development")
+
+		g := newOps()
+		restored, err := g.RestoreActiveBranch(GinkgoT().Context(), "environment/development", "", v1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(restored).To(Equal(git.RestoreResult{ActiveSha: tip, Unchanged: true}))
+		Expect(strings.TrimSpace(mustGit(tempRepoDir, "rev-parse", "refs/heads/environment/development"))).To(Equal(tip))
+
+		again, err := g.RestoreActiveBranch(GinkgoT().Context(), "environment/development", "", v1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(again).To(Equal(restored))
 	})
 
 	It("removes the clone and forgets it", func() {

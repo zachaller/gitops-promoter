@@ -155,7 +155,11 @@ func (r *RevertCommitReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		r.EnqueueCTPH(ctp.Namespace, utils.GetChangeTransferPolicyHistoryName(ctp.Name))
 	}
 
-	r.Recorder.Eventf(&rc, nil, "Normal", "Restored", "Restoring", "Restored %s to %s as %s", ctp.Spec.ActiveBranch, rc.Spec.Sha, restored.ActiveSha)
+	if restored.Unchanged {
+		r.Recorder.Eventf(&rc, nil, "Normal", "AlreadyRestored", "Restoring", "%s already matches %s at %s; nothing was written", ctp.Spec.ActiveBranch, rc.Spec.Sha, restored.ActiveSha)
+	} else {
+		r.Recorder.Eventf(&rc, nil, "Normal", "Restored", "Restoring", "Restored %s to %s as %s", ctp.Spec.ActiveBranch, rc.Spec.Sha, restored.ActiveSha)
+	}
 	return ctrl.Result{}, nil
 }
 

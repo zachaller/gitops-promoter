@@ -60,6 +60,7 @@ failure; the up-to-date failure message stays visible on the resource's Ready co
 | Event Type | Event Reason | Description |
 |------------|--------------|-------------|
 | Normal     | Restored     | The active branch was restored to `spec.sha`. The message names the branch and the new restore commit. |
+| Normal     | AlreadyRestored | The active branch already had `spec.sha`'s content, so no commit was written and no dry SHA is blocked. |
 
 ## TimedCommitStatus
 
