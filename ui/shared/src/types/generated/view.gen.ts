@@ -1569,7 +1569,7 @@ export type components = {
             /** @default {} */
             status?: components["schemas"]["RevertCommitStatus"];
         };
-        /** @description RevertCommitSpec defines the desired state of RevertCommit. */
+        /** @description RevertCommitSpec defines the desired state of RevertCommit. It is immutable: the restore runs once, and status.blockedDrySha is read from the active tip it moved off of, so pointing an existing RevertCommit at a different sha or policy would lose track of what it reverted. To restore something else, create a new RevertCommit. */
         RevertCommitSpec: {
             /**
              * @description ChangeTransferPolicyRef selects the ChangeTransferPolicy whose active branch is restored. The policy supplies the repository, the active and proposed branches, and activePath.
@@ -1577,7 +1577,7 @@ export type components = {
              */
             changeTransferPolicyRef: components["schemas"]["io_argoproj_promoter_v1alpha1_ObjectReference"];
             /**
-             * @description Sha is the hydrated commit to restore onto the active branch. The controller writes a new commit (the commit's tree, or only activePath when the policy sets one) parented on the current active tip and records a promotion-history note with Promoter-restored-from. The proposed branch is left as the hydrator wrote it. The ChangeTransferPolicy does not open a promotion pull request that would put the active branch's dry SHA back. A pull request for a different proposed dry SHA may open, but nothing is auto-merged while this RevertCommit exists. Deleting it lifts that hold but does not by itself propose the reverted change again; see status.blockedDrySha. The restore runs once per spec.sha. Later promotions are left alone.
+             * @description Sha is the hydrated commit to restore onto the active branch. The controller writes a new commit (the commit's tree, or only activePath when the policy sets one) parented on the current active tip and records a promotion-history note with Promoter-restored-from. The proposed branch is left as the hydrator wrote it. The ChangeTransferPolicy does not open a promotion pull request that would put the active branch's dry SHA back. A pull request for a different proposed dry SHA may open, but nothing is auto-merged while this RevertCommit exists. Deleting it lifts that hold but does not by itself propose the reverted change again; see status.blockedDrySha. The restore runs once. Later promotions are left alone.
              * @default
              */
             sha: string;

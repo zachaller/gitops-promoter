@@ -5273,7 +5273,7 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_RevertCommitSpec(ref comm
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "RevertCommitSpec defines the desired state of RevertCommit.",
+				Description: "RevertCommitSpec defines the desired state of RevertCommit. It is immutable: the restore runs once, and status.blockedDrySha is read from the active tip it moved off of, so pointing an existing RevertCommit at a different sha or policy would lose track of what it reverted. To restore something else, create a new RevertCommit.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"changeTransferPolicyRef": {
@@ -5285,7 +5285,7 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_RevertCommitSpec(ref comm
 					},
 					"sha": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Sha is the hydrated commit to restore onto the active branch. The controller writes a new commit (the commit's tree, or only activePath when the policy sets one) parented on the current active tip and records a promotion-history note with Promoter-restored-from. The proposed branch is left as the hydrator wrote it. The ChangeTransferPolicy does not open a promotion pull request that would put the active branch's dry SHA back. A pull request for a different proposed dry SHA may open, but nothing is auto-merged while this RevertCommit exists. Deleting it lifts that hold but does not by itself propose the reverted change again; see status.blockedDrySha. The restore runs once per spec.sha. Later promotions are left alone.",
+							Description: "Sha is the hydrated commit to restore onto the active branch. The controller writes a new commit (the commit's tree, or only activePath when the policy sets one) parented on the current active tip and records a promotion-history note with Promoter-restored-from. The proposed branch is left as the hydrator wrote it. The ChangeTransferPolicy does not open a promotion pull request that would put the active branch's dry SHA back. A pull request for a different proposed dry SHA may open, but nothing is auto-merged while this RevertCommit exists. Deleting it lifts that hold but does not by itself propose the reverted change again; see status.blockedDrySha. The restore runs once. Later promotions are left alone.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",

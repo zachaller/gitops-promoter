@@ -7318,7 +7318,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: RevertCommitSpec defines the desired state of RevertCommit.
+            description: |-
+              RevertCommitSpec defines the desired state of RevertCommit. It is immutable: the restore runs
+              once, and status.blockedDrySha is read from the active tip it moved off of, so pointing an
+              existing RevertCommit at a different sha or policy would lose track of what it reverted. To
+              restore something else, create a new RevertCommit.
             properties:
               changeTransferPolicyRef:
                 description: |-
@@ -7344,7 +7348,7 @@ spec:
                   for a different proposed dry SHA may open, but nothing is auto-merged while this
                   RevertCommit exists. Deleting it lifts that hold but does not by itself propose the
                   reverted change again; see status.blockedDrySha.
-                  The restore runs once per spec.sha. Later promotions are left alone.
+                  The restore runs once. Later promotions are left alone.
                 maxLength: 64
                 minLength: 40
                 pattern: ^([a-f0-9]{40}|[a-f0-9]{64})$
@@ -7353,6 +7357,10 @@ spec:
             - changeTransferPolicyRef
             - sha
             type: object
+            x-kubernetes-validations:
+            - message: spec is immutable; create a new RevertCommit to restore a different
+                commit or policy
+              rule: self == oldSelf
           status:
             description: RevertCommitStatus defines the observed state of RevertCommit.
             properties:

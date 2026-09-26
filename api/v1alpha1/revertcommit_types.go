@@ -24,7 +24,11 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// RevertCommitSpec defines the desired state of RevertCommit.
+// RevertCommitSpec defines the desired state of RevertCommit. It is immutable: the restore runs
+// once, and status.blockedDrySha is read from the active tip it moved off of, so pointing an
+// existing RevertCommit at a different sha or policy would lose track of what it reverted. To
+// restore something else, create a new RevertCommit.
+// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable; create a new RevertCommit to restore a different commit or policy"
 type RevertCommitSpec struct {
 	// ChangeTransferPolicyRef selects the ChangeTransferPolicy whose active branch is restored.
 	// The policy supplies the repository, the active and proposed branches, and activePath.
@@ -39,7 +43,7 @@ type RevertCommitSpec struct {
 	// for a different proposed dry SHA may open, but nothing is auto-merged while this
 	// RevertCommit exists. Deleting it lifts that hold but does not by itself propose the
 	// reverted change again; see status.blockedDrySha.
-	// The restore runs once per spec.sha. Later promotions are left alone.
+	// The restore runs once. Later promotions are left alone.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=40
 	// +kubebuilder:validation:MaxLength=64
