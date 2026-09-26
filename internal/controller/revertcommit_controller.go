@@ -127,8 +127,14 @@ func (r *RevertCommitReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("failed to create git auth provider for ScmProvider %q: %w", scmProvider.GetName(), err)
 	}
 	// Own git identity. The ChangeTransferPolicy controller reconciles the same repo concurrently
-	// under its own identity; per-identity clones are independent.
+	// under its own identity; per-identity clones are independent. The restore runs once, so the
+	// clone is removed when this reconcile ends rather than kept for the life of the process.
 	gitOperations := git.NewEnvironmentOperations(gitRepo, gitAuthProvider, rc.Namespace+"/"+rc.Name)
+	defer func() {
+		if rmErr := gitOperations.RemoveClone(); rmErr != nil {
+			logger.Error(rmErr, "failed to remove RevertCommit clone")
+		}
+	}()
 	if err := gitOperations.CloneRepo(ctx); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to clone repo %q: %w", ctp.Spec.RepositoryReference.Name, err)
 	}

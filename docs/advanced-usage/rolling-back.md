@@ -39,7 +39,9 @@ spec:
 ```
 
 When `status.activeSha` is set and the Ready condition is `True`, the environment is running the restored version. The
-restore also shows up in the environment's promotion history, marked as a restore.
+restore also shows up in the environment's promotion history, marked as a restore. A `sha` that is not in the active
+branch's history (for example a commit from another environment's branch or an unmerged pull request) is refused, and
+the Ready condition is `False` with the reason.
 
 > [!NOTE]
 > Creating a RevertCommit is the authorization boundary: anyone who can create one in the ChangeTransferPolicy's

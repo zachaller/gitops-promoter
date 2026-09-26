@@ -218,6 +218,21 @@ func (g *EnvironmentOperations) CloneRepo(ctx context.Context) error {
 	return nil
 }
 
+// RemoveClone deletes this environment's on-disk clone and forgets it, so a later CloneRepo for the
+// same identity clones afresh. It is a no-op when there is no clone. Use it for short-lived
+// identities whose clone would otherwise stay on disk for the life of the process.
+func (g *EnvironmentOperations) RemoveClone() error {
+	path := g.ClonePath()
+	if path == "" {
+		return nil
+	}
+	gitpaths.Delete(g.cloneKey())
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("failed to remove clone %q: %w", path, err)
+	}
+	return nil
+}
+
 func buildHydratorMetadataPath(activePath string) string {
 	if activePath == "" {
 		return "hydrator.metadata"
@@ -1105,13 +1120,17 @@ type RestoreResult struct {
 // A repeat call is a no-op when the active tip already has the restore marker for targetSha and
 // the matching tree. Pushes use --force-with-lease against the tip this call observed.
 //
-// Operates on the object DB only. Requires CloneRepo to have run. Fetches the active branch, the
-// target commit when it is not already present, and the promotion-history notes ref.
+// targetSha must be the active tip or one of its ancestors; anything else is refused, so only a
+// version that was on the active branch before can be restored.
+//
+// Operates on the object DB only. Requires CloneRepo to have run. Fetches the active branch and
+// the promotion-history notes ref.
 //
 // The git commands run, in order (A = activeBranch, T = targetSha):
 //
 //	git fetch origin A                      && git rev-parse origin/A          # activeTip
-//	git cat-file -e T^{commit} || git fetch origin T                           # make sure T is local
+//	git cat-file -e T^{commit}                                                 # T must be a commit
+//	git merge-base --is-ancestor T <activeTip>                                 # ...already on A
 //	git fetch origin +refs/notes/hydrator.metadata:refs/notes/hydrator.metadata
 //	git fetch origin +refs/notes/promoter.history:refs/notes/promoter.history
 //
@@ -1154,7 +1173,7 @@ func (g *EnvironmentOperations) RestoreActiveBranch(ctx context.Context, activeB
 	if err != nil {
 		return RestoreResult{}, err
 	}
-	if err := g.ensureCommit(ctx, targetSha); err != nil {
+	if err := g.ensureInHistory(ctx, targetSha, activeBranch, activeTip); err != nil {
 		return RestoreResult{}, err
 	}
 	if err := g.FetchNotes(ctx); err != nil {
@@ -1309,18 +1328,26 @@ func (g *EnvironmentOperations) overlayPathTree(ctx context.Context, baseRef, so
 	return strings.TrimSpace(treeSha), nil
 }
 
-// ensureCommit makes sure sha is a commit in the clone, fetching it from origin when it is not
-// present yet.
-func (g *EnvironmentOperations) ensureCommit(ctx context.Context, sha string) error {
-	gitPath := g.ClonePath()
-	if _, _, err := g.runCmd(ctx, gitPath, "cat-file", "-e", sha+"^{commit}"); err == nil {
+// ensureInHistory makes sure sha is a commit that the active branch already contains: its tip
+// or one of the tip's ancestors. A restore only puts back something that was on the branch before,
+// so a RevertCommit cannot push a commit that never went through promotion (another environment's
+// branch, an unmerged pull request head) straight to the active branch.
+//
+// The active branch was just fetched, so every commit in its history is already in the clone and
+// nothing is fetched here.
+func (g *EnvironmentOperations) ensureInHistory(ctx context.Context, sha, activeBranch, activeTip string) error {
+	if _, stderr, err := g.runCmd(ctx, g.ClonePath(), "cat-file", "-e", sha+"^{commit}"); err != nil {
+		return fmt.Errorf("%q is not a commit in the history of active branch %q: %w (stderr: %s)", sha, activeBranch, err, stderr)
+	}
+	if sha == activeTip {
 		return nil
 	}
-	if _, stderr, err := g.runCmd(ctx, gitPath, "fetch", "origin", sha); err != nil {
-		return fmt.Errorf("commit %q is not available: fetch failed: %w (stderr: %s)", sha, err, stderr)
+	contained, err := g.CommitIsAncestor(ctx, sha, activeTip)
+	if err != nil {
+		return err
 	}
-	if _, stderr, err := g.runCmd(ctx, gitPath, "cat-file", "-e", sha+"^{commit}"); err != nil {
-		return fmt.Errorf("%q is not a commit: %w (stderr: %s)", sha, err, stderr)
+	if !contained {
+		return fmt.Errorf("commit %q is not in the history of active branch %q; only a version that was on the active branch can be restored", sha, activeBranch)
 	}
 	return nil
 }
