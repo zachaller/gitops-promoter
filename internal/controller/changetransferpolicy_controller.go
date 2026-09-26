@@ -1593,8 +1593,7 @@ func (r *ChangeTransferPolicyReconciler) evaluatePullRequestLabels(ctp *promoter
 // restore, so the ancestor check runs only while a RevertCommit references this policy or the
 // active tip is a restore commit. The second case keeps the check after the RevertCommit is
 // deleted: the reverted dry SHA stays unproposed until the hydrator writes a new commit to the
-// proposed branch. gitOperations may be nil (unit tests), in which case only the dry-SHA block is
-// checked.
+// proposed branch.
 func (r *ChangeTransferPolicyReconciler) skipPullRequestAfterRevert(ctx context.Context, ctp *promoterv1alpha1.ChangeTransferPolicy, gitOperations *git.EnvironmentOperations) (bool, error) {
 	logger := log.FromContext(ctx)
 
@@ -1610,7 +1609,7 @@ func (r *ChangeTransferPolicyReconciler) skipPullRequestAfterRevert(ctx context.
 		return true, nil
 	}
 
-	if gitOperations == nil || (len(reverts) == 0 && !activeTipIsRestore(ctp)) {
+	if len(reverts) == 0 && !activeTipIsRestore(ctp) {
 		return false, nil
 	}
 	contained, err := gitOperations.CommitIsAncestor(ctx, ctp.Status.Proposed.Hydrated.Sha, ctp.Status.Active.Hydrated.Sha)

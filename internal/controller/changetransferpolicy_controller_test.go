@@ -3463,6 +3463,7 @@ var _ = Describe("createOrUpdatePullRequest with a merged or terminating PullReq
 	var pr *promoterv1alpha1.PullRequest
 	var prKey types.NamespacedName
 	var reconciler *ChangeTransferPolicyReconciler
+	var gitOps *git.EnvironmentOperations
 	var gitPath string
 	var originalMergeSha string
 
@@ -3533,6 +3534,9 @@ var _ = Describe("createOrUpdatePullRequest with a merged or terminating PullReq
 			Scheme:      k8sClient.Scheme(),
 			SettingsMgr: settings.NewManager(k8sClient, k8sClient, settings.ManagerConfig{ControllerNamespace: "default"}),
 		}
+		// Never cloned. These specs have no RevertCommit and no restore commit, so the restore
+		// ancestor check is not reached; if it were, the missing clone would fail the call.
+		gitOps = git.NewEnvironmentOperations(gitRepo, &localGitProvider{repoPath: "/nonexistent/" + name}, "default/"+name)
 	})
 
 	AfterEach(func() {
@@ -3577,7 +3581,7 @@ var _ = Describe("createOrUpdatePullRequest with a merged or terminating PullReq
 			g.Expect(livePR.Status.State).To(Equal(promoterv1alpha1.PullRequestMerged))
 		}, constants.EventuallyTimeout).Should(Succeed())
 
-		returnedPR, err := reconciler.createOrUpdatePullRequest(ctx, ctp, nil)
+		returnedPR, err := reconciler.createOrUpdatePullRequest(ctx, ctp, gitOps)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(returnedPR).NotTo(BeNil())
 		Expect(returnedPR.Name).To(Equal(prKey.Name))
@@ -3593,7 +3597,7 @@ var _ = Describe("createOrUpdatePullRequest with a merged or terminating PullReq
 			g.Expect(livePR.DeletionTimestamp.IsZero()).To(BeFalse())
 		}, constants.EventuallyTimeout).Should(Succeed())
 
-		returnedPR, err := reconciler.createOrUpdatePullRequest(ctx, ctp, nil)
+		returnedPR, err := reconciler.createOrUpdatePullRequest(ctx, ctp, gitOps)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(returnedPR).NotTo(BeNil())
 		Expect(returnedPR.Name).To(Equal(prKey.Name))
@@ -3608,7 +3612,7 @@ var _ = Describe("createOrUpdatePullRequest with a merged or terminating PullReq
 			g.Expect(k8sClient.Status().Update(ctx, &livePR)).To(Succeed())
 		}, constants.EventuallyTimeout).Should(Succeed())
 
-		returnedPR, err := reconciler.createOrUpdatePullRequest(ctx, ctp, nil)
+		returnedPR, err := reconciler.createOrUpdatePullRequest(ctx, ctp, gitOps)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(returnedPR).NotTo(BeNil())
 		Expect(returnedPR.Name).To(Equal(prKey.Name))
