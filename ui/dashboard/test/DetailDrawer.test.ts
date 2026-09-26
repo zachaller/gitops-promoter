@@ -101,6 +101,27 @@ describe('revertCommand helpers', () => {
     expect(cmd).not.toContain('git ');
   });
 
+  it("labels the RevertCommit with the policy's instance id so a non-default install sees it", () => {
+    const cmd = buildRevertCommitApplyCommand({
+      namespace: 'promoter-system',
+      changeTransferPolicyName: CTP_NAME,
+      instanceId: '123',
+      branch: 'environment/staging',
+      sha: HYDRATED_SHA,
+    });
+
+    // Quoted so a numeric-looking id stays a string label value.
+    expect(cmd).toContain(
+      [
+        '  namespace: promoter-system',
+        '  labels:',
+        '    promoter.argoproj.io/instance-id: "123"',
+        'spec:',
+      ].join('\n'),
+    );
+    expect(cmd.split('\n').slice(1, -1).join('\n')).not.toContain("'");
+  });
+
   it('wraps the apply in one POSIX sh command accepted by bash, zsh, and fish', () => {
     const cmd = buildRevertCommitApplyCommand({
       namespace: 'promoter-system',

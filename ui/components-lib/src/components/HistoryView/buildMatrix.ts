@@ -50,6 +50,7 @@ function buildEnvColumn(
   return {
     branch: env.branch,
     changeTransferPolicyName: env.changeTransferPolicyName,
+    instanceId: env.instanceId,
     autoMerge: specByBranch.get(env.branch)?.autoMerge ?? false,
     color: LANE_COLORS[i % LANE_COLORS.length]!,
     liveCommit: env.active?.dry,

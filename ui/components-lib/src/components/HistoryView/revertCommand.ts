@@ -1,4 +1,5 @@
 import type { CellState } from './types';
+import { INSTANCE_ID_LABEL } from '@shared/utils/environments';
 
 /**
  * Whether the detail drawer should offer a command that restores this version.
@@ -42,6 +43,11 @@ export function revertCommitResourceName(branch: string, sha: string): string {
 export interface RevertCommitApplyInput {
   namespace: string;
   changeTransferPolicyName: string;
+  /**
+   * The ChangeTransferPolicy's instance-id label. A non-default install only watches resources
+   * carrying its instance id, so the RevertCommit must carry the same one.
+   */
+  instanceId?: string;
   branch: string;
   sha: string;
 }
@@ -62,6 +68,7 @@ export function buildRevertCommitApplyCommand(input: RevertCommitApplyInput): st
     'metadata:',
     `  name: ${name}`,
     `  namespace: ${input.namespace}`,
+    ...(input.instanceId ? ['  labels:', `    ${INSTANCE_ID_LABEL}: "${input.instanceId}"`] : []),
     'spec:',
     '  changeTransferPolicyRef:',
     `    name: ${input.changeTransferPolicyName}`,

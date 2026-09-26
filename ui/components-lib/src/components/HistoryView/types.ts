@@ -49,6 +49,8 @@ export interface EnvColumn {
   branch: string;
   /** ChangeTransferPolicy that owns this environment, when the bundle includes one. */
   changeTransferPolicyName?: string;
+  /** Instance-id label of that ChangeTransferPolicy; unset for the default install. */
+  instanceId?: string;
   autoMerge: boolean;
   color: string;
   liveCommit?: Commit;
