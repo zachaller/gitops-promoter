@@ -123,12 +123,19 @@ describe('revertCommand helpers', () => {
   });
 
   it('shows the command for was-here, failed, and superseded restore cells with a hydrated sha', () => {
-    expect(canShowRevertCommand('was-here', HYDRATED_SHA)).toBe(true);
-    expect(canShowRevertCommand('failed', HYDRATED_SHA)).toBe(true);
-    expect(canShowRevertCommand('restored', HYDRATED_SHA)).toBe(true);
-    expect(canShowRevertCommand('live', HYDRATED_SHA)).toBe(false);
-    expect(canShowRevertCommand('in-flight', HYDRATED_SHA)).toBe(false);
-    expect(canShowRevertCommand('was-here', undefined)).toBe(false);
+    const hydrated = { sha: HYDRATED_SHA };
+    expect(canShowRevertCommand({ kind: 'was-here', hydrated })).toBe(true);
+    expect(canShowRevertCommand({ kind: 'failed', hydrated })).toBe(true);
+    expect(canShowRevertCommand({ kind: 'restored', hydrated })).toBe(true);
+    expect(canShowRevertCommand({ kind: 'live', hydrated })).toBe(false);
+    expect(canShowRevertCommand({ kind: 'in-flight', hydrated })).toBe(false);
+    expect(canShowRevertCommand({ kind: 'was-here' })).toBe(false);
+  });
+
+  it('hides the command on failed live and proposed cells', () => {
+    const hydrated = { sha: HYDRATED_SHA };
+    expect(canShowRevertCommand({ kind: 'failed', hydrated, isLive: true })).toBe(false);
+    expect(canShowRevertCommand({ kind: 'failed', hydrated, isProposed: true })).toBe(false);
   });
 });
 

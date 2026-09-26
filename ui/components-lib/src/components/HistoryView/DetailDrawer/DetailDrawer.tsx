@@ -196,7 +196,7 @@ const DetailDrawer: React.FC<{
   const changeTransferPolicyName = envs.find(
     (env) => env.branch === branch,
   )?.changeTransferPolicyName;
-  const showRevert = canShowRevertCommand(cell.kind, hydrated?.sha);
+  const showRevert = canShowRevertCommand(cell);
   const revertCommand =
     showRevert && hydrated?.sha && namespace && changeTransferPolicyName
       ? buildRevertCommitApplyCommand({

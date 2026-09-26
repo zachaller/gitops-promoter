@@ -1,13 +1,17 @@
-import type { CellKind } from './types';
+import type { CellState } from './types';
 
 /**
  * Whether the detail drawer should offer a command that restores this version.
  * Only past active versions (was-here / historical failed, plus a superseded
- * restore) with a hydrated SHA.
+ * restore) with a hydrated SHA. The live and proposed cells can also be `failed`,
+ * but restoring either is not a rollback: the live one is already on the branch,
+ * and the proposed one was never promoted, so restoring it would skip its gates.
  */
-export function canShowRevertCommand(kind: CellKind, hydratedSha?: string): boolean {
-  if (!hydratedSha) return false;
-  return kind === 'was-here' || kind === 'failed' || kind === 'restored';
+export function canShowRevertCommand(
+  cell: Pick<CellState, 'kind' | 'hydrated' | 'isLive' | 'isProposed'>,
+): boolean {
+  if (!cell.hydrated?.sha || cell.isLive || cell.isProposed) return false;
+  return cell.kind === 'was-here' || cell.kind === 'failed' || cell.kind === 'restored';
 }
 
 /** DNS-1123 label: lowercase, hyphens for everything else, no leading or trailing hyphen. */

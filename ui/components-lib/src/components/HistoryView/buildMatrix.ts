@@ -366,6 +366,7 @@ export function buildMatrix(strategy: PromotionStrategy): {
           commitStatuses: statuses,
           health,
           pullRequest: env.pullRequest,
+          isLive: true,
           // A live restore outranks the history entry that describes it, so the restore's
           // marker and timestamp have to be carried here or they are lost and the row
           // sorts by the restored version's original (older) commit time.
