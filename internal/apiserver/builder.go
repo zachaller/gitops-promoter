@@ -152,6 +152,12 @@ func buildBundle(ctx context.Context, reader client.Reader, namespace, name, res
 	}
 	bundle.DependentsSuccessfulCommitStatuses = nilIfEmpty(dagCSList.Items)
 
+	progressiveOrderCSList := &promoterv1alpha1.ProgressiveOrderCommitStatusList{}
+	if err := reader.List(ctx, progressiveOrderCSList, client.InNamespace(namespace), client.MatchingFields{controller.PromotionStrategyRefField: name}); err != nil {
+		return nil, fmt.Errorf("failed to list ProgressiveOrderCommitStatuses: %w", err)
+	}
+	bundle.ProgressiveOrderCommitStatuses = nilIfEmpty(progressiveOrderCSList.Items)
+
 	scheduledCSList := &promoterv1alpha1.ScheduledCommitStatusList{}
 	if err := reader.List(ctx, scheduledCSList, client.InNamespace(namespace), client.MatchingFields{controller.PromotionStrategyRefField: name}); err != nil {
 		return nil, fmt.Errorf("failed to list ScheduledCommitStatuses: %w", err)

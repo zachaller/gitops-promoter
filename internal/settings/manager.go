@@ -41,6 +41,7 @@ func (m *Manager) GetInstanceID(ctx context.Context) (*string, error) {
 //   - GitCommitStatusConfiguration
 //   - WebRequestCommitStatusConfiguration
 //   - DependentsSuccessfulCommitStatusConfiguration
+//   - ProgressiveOrderCommitStatusConfiguration
 //   - ScheduledCommitStatusConfiguration
 //   - RestoreActiveCommitConfiguration
 type ControllerConfigurationTypes interface {
@@ -54,6 +55,7 @@ type ControllerConfigurationTypes interface {
 		promoterv1alpha1.GitCommitStatusConfiguration |
 		promoterv1alpha1.WebRequestCommitStatusConfiguration |
 		promoterv1alpha1.DependentsSuccessfulCommitStatusConfiguration |
+		promoterv1alpha1.ProgressiveOrderCommitStatusConfiguration |
 		promoterv1alpha1.ScheduledCommitStatusConfiguration |
 		promoterv1alpha1.RestoreActiveCommitConfiguration
 }
@@ -305,6 +307,13 @@ func getWorkQueueForController[T ControllerConfigurationTypes](ctx context.Conte
 	case promoterv1alpha1.WebRequestCommitStatusConfiguration:
 		return config.Spec.WebRequestCommitStatus.WorkQueue, nil
 	case promoterv1alpha1.DependentsSuccessfulCommitStatusConfiguration:
+		return config.Spec.DependentsSuccessfulCommitStatus.WorkQueue, nil
+	case promoterv1alpha1.ProgressiveOrderCommitStatusConfiguration:
+		// Optional for backwards compatibility with existing ControllerConfigurations; fall back to the
+		// DependentsSuccessfulCommitStatus work queue, which serves the same kind of ordering gate.
+		if config.Spec.ProgressiveOrderCommitStatus != nil {
+			return config.Spec.ProgressiveOrderCommitStatus.WorkQueue, nil
+		}
 		return config.Spec.DependentsSuccessfulCommitStatus.WorkQueue, nil
 	case promoterv1alpha1.ScheduledCommitStatusConfiguration:
 		return config.Spec.ScheduledCommitStatus.WorkQueue, nil

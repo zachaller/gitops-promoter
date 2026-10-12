@@ -138,6 +138,16 @@ spec:
           baseDelay: "500ms"
           maxDelay: "1m"
 
+  # ProgressiveOrderCommitStatus controller (optional; falls back to dependentsSuccessfulCommitStatus when omitted)
+  progressiveOrderCommitStatus:
+    workQueue:
+      requeueDuration: "5m"
+      maxConcurrentReconciles: 5
+      rateLimiter:
+        exponentialFailure:
+          baseDelay: "500ms"
+          maxDelay: "1m"
+
   # TimedCommitStatus controller enforces soak-time gates via CommitStatus resources
   timedCommitStatus:
     workQueue:

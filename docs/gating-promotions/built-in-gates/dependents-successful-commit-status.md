@@ -17,6 +17,11 @@ relationships, and updates one CommitStatus per environment.
 > `ChangeTransferPolicy`; you do not declare the ordering key in `proposedCommitStatuses`. See
 > [Wiring the gate into the PromotionStrategy](#wiring-the-gate-into-the-promotionstrategy) below.
 
+> [!TIP]
+> If commits land faster than upstream environments can become successful on them, downstream environments can wait
+> indefinitely. [ProgressiveOrderCommitStatus](progressive-order-commit-status.md) relaxes the ordering so downstreams
+> promote once upstreams have made healthy progress.
+
 ## Linear default (no explicit graph)
 
 For a standard linear pipeline (dev → staging → prod), omit `dependsOn` on every environment. The controller infers a

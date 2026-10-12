@@ -1271,7 +1271,7 @@ export type components = {
              */
             group: string;
             /**
-             * @description Kind is the type of resource being referenced. Must name a CommitStatus gate CR registered as an ordering gate. DependentsSuccessfulCommitStatus is supported today; additional kinds may be added later.
+             * @description Kind is the type of resource being referenced. Must name a CommitStatus gate CR registered as an ordering gate. DependentsSuccessfulCommitStatus and ProgressiveOrderCommitStatus are built in; additional kinds may be added later.
              * @default
              */
             kind: string;
@@ -1321,6 +1321,113 @@ export type components = {
             /** @description Interval controls how often to retry the HTTP request while in pending state. When reportOn is "proposed": stops polling after success for a given SHA. When reportOn is "active": always polls at this interval. */
             interval?: components["schemas"]["Duration"];
         };
+        /**
+         * @description ProgressiveOrderCommitStatus is the Schema for the progressiveordercommitstatuses API.
+         *
+         *     It is an ordering gate (referenced from PromotionStrategy.spec.orderCommitStatusRef) that, unlike DependentsSuccessfulCommitStatus, does not require upstreams to be healthy on the exact dry commit an environment is promoting. Instead it remembers the newest dry commit each environment was healthy on and lets an environment promote as soon as every upstream has proven healthy progress past what that environment runs. This keeps higher environments moving in high-churn repositories where upstreams rarely settle on the latest commit.
+         */
+        ProgressiveOrderCommitStatus: {
+            /** @description APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources */
+            apiVersion?: string;
+            /** @description Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds */
+            kind?: string;
+            /**
+             * @description metadata is a standard object metadata
+             * @default {}
+             */
+            metadata?: components["schemas"]["ObjectMeta"];
+            /**
+             * @description spec defines the desired state of ProgressiveOrderCommitStatus
+             * @default {}
+             */
+            spec: components["schemas"]["ProgressiveOrderCommitStatusSpec"];
+            /**
+             * @description status defines the observed state of ProgressiveOrderCommitStatus
+             * @default {}
+             */
+            status?: components["schemas"]["ProgressiveOrderCommitStatusStatus"];
+        };
+        /** @description ProgressiveOrderCommitStatusEnvironmentStatus defines observed state for one environment branch. */
+        ProgressiveOrderCommitStatusEnvironmentStatus: {
+            /** @description ActiveCommitStatuses is a verbatim copy of the PromotionStrategy environment's active commit statuses. */
+            activeCommitStatuses?: components["schemas"]["ChangeRequestPolicyCommitStatusPhase"][];
+            /**
+             * @description Branch is the environment branch name.
+             * @default
+             */
+            branch: string;
+            /** @description Description mirrors child CommitStatus.spec.description. */
+            description?: string;
+            /** @description LastHealthyDry is the progress watermark for this environment: the newest dry commit it has been observed running with all active commit statuses passing. It is persisted across reconciles so that downstream environments can keep promoting while this environment is busy rolling out newer commits. It is reset if the environment's active dry commit moves backwards (for example after a rollback). */
+            lastHealthyDry?: components["schemas"]["ProgressiveOrderCommitStatusWatermark"];
+            /** @description Phase mirrors child CommitStatus.spec.phase. */
+            phase?: string;
+            /** @description ReportedSha is the hydrated SHA the child CommitStatus is attached to (CommitStatus.spec.sha). Semantics depend on the parent gate (proposed vs active hydrated SHA). Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats. */
+            reportedSha?: string;
+            /** @description Upstreams lists the direct dependsOn upstream branches and whether each is satisfied. */
+            upstreams?: components["schemas"]["ProgressiveOrderCommitStatusUpstreamStatus"][];
+            /** @description Url mirrors child CommitStatus.spec.url. */
+            url?: string;
+        };
+        /** @description ProgressiveOrderCommitStatusSpec defines the desired state of ProgressiveOrderCommitStatus. */
+        ProgressiveOrderCommitStatusSpec: {
+            /**
+             * @description Key is the commit status key this controller writes on each environment's proposed hydrated SHA. The PromotionStrategy controller injects this key onto every ChangeTransferPolicy's proposedCommitStatuses. Must be lowercase alphanumeric with hyphens, 1–63 characters (pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$).
+             * @default
+             */
+            key: string;
+            /**
+             * @description PromotionStrategyRef is a reference to the promotion strategy that this progressive order commit status applies to. The controller watches this PromotionStrategy and, for each environment, reports whether every dependsOn upstream (as declared on the PromotionStrategy) has made healthy progress beyond what the environment is currently running.
+             * @default {}
+             */
+            promotionStrategyRef: components["schemas"]["io_argoproj_promoter_v1alpha1_ObjectReference"];
+            /**
+             * @description URL generates the URL to use on the per-environment CommitStatus (SCM details link), for example a link into the Promoter UI that highlights this environment's dependsOn upstreams. Optional; when empty, no URL is set on the child CommitStatus. The template receives .Environment, .ProgressiveOrderCommitStatus, .PromotionStrategy, .DependsOn, and .DependsOnQuery (see controller docs).
+             * @default {}
+             */
+            url?: components["schemas"]["URLConfig"];
+        };
+        /** @description ProgressiveOrderCommitStatusStatus defines the observed state of ProgressiveOrderCommitStatus. */
+        ProgressiveOrderCommitStatusStatus: {
+            /** @description Conditions represent the latest available observations of an object's state */
+            conditions?: components["schemas"]["Condition"][];
+            /** @description Environments reports observed gate state, progress watermark, and upstream state per dependency-graph branch. */
+            environments?: components["schemas"]["ProgressiveOrderCommitStatusEnvironmentStatus"][];
+            /** @description InstanceID mirrors metadata.labels[promoter.argoproj.io/instance-id] stamped on each reconcile attempt by this install's controller, including when Ready=False; omitted when the resource has no instance-id label (default install). */
+            instanceID?: string;
+            /**
+             * Format: int64
+             * @description ObservedGeneration is the .metadata.generation that this status was reconciled from. Because status is written via Server-Side Apply with ForceOwnership (which has no optimistic-concurrency check), this field is the canonical way to detect stale status writes: compare status.observedGeneration with metadata.generation.
+             */
+            observedGeneration?: number;
+        };
+        /** @description ProgressiveOrderCommitStatusUpstreamStatus reports whether a direct dependsOn upstream has made healthy progress beyond what this environment is running. */
+        ProgressiveOrderCommitStatusUpstreamStatus: {
+            /**
+             * @description Branch is the upstream environment branch name.
+             * @default
+             */
+            branch: string;
+            /** @description Reason explains why the upstream is not satisfied. Omitted when satisfied is true. */
+            reason?: string;
+            /**
+             * @description Satisfied is true when the upstream's last healthy dry commit is newer than this environment's active dry commit and the upstream is not currently failing.
+             * @default false
+             */
+            satisfied: boolean;
+        };
+        /** @description ProgressiveOrderCommitStatusWatermark records the newest dry commit an environment was observed running with every active commit status passing. */
+        ProgressiveOrderCommitStatusWatermark: {
+            /** @description CommitTime is the commit time of the dry commit. Watermarks are compared by commit time. */
+            commitTime: components["schemas"]["Time"];
+            /** @description ObservedAt is when the controller first observed the environment healthy on this dry commit. */
+            observedAt?: components["schemas"]["Time"];
+            /**
+             * @description Sha is the dry commit SHA. Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.
+             * @default
+             */
+            sha: string;
+        };
         /** @description PromotionStrategy is the Schema for the promotionstrategies API */
         PromotionStrategy: {
             /** @description APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources */
@@ -1362,6 +1469,8 @@ export type components = {
             kind: string;
             /** @default {} */
             metadata: components["schemas"]["ObjectMeta"];
+            /** @description ProgressiveOrderCommitStatuses are the ProgressiveOrderCommitStatus managers that reference the PromotionStrategy. */
+            progressiveOrderCommitStatuses?: components["schemas"]["ProgressiveOrderCommitStatus"][];
             /**
              * @description PromotionStrategy is the source PromotionStrategy this bundle describes.
              * @default {}

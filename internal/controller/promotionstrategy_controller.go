@@ -123,6 +123,7 @@ type PromotionStrategyReconciler struct {
 }
 
 //+kubebuilder:rbac:groups=promoter.argoproj.io,resources=dependentssuccessfulcommitstatuses,verbs=get
+//+kubebuilder:rbac:groups=promoter.argoproj.io,resources=progressiveordercommitstatuses,verbs=get
 //+kubebuilder:rbac:groups=promoter.argoproj.io,resources=promotionstrategies,verbs=get;list;watch
 //+kubebuilder:rbac:groups=promoter.argoproj.io,resources=promotionstrategies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=promoter.argoproj.io,resources=promotionstrategies/finalizers,verbs=update
