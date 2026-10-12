@@ -23,7 +23,10 @@ func (m *Manager) GetInstanceID(ctx context.Context) (*string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return cc.Spec.InstanceID, nil
+	if cc.Spec.InstanceID == nil {
+		return nil, nil
+	}
+	return new(*cc.Spec.InstanceID), nil
 }
 
 // ControllerConfigurationTypes is a constraint that defines the set of controller configuration types
@@ -108,10 +111,14 @@ type Manager struct {
 // Parameters:
 //   - ctx: Context for the request, used for cancellation and deadlines
 //
+// The read skips the cache's deep copy because it runs several times per reconcile and the full
+// object is large: the returned object shares its pointers, slices, and maps with the cache, so
+// callers must not mutate it and must deep-copy any field they hand out.
+//
 // Returns the ControllerConfiguration resource, or an error if it cannot be retrieved from the cluster.
 func (m *Manager) getControllerConfiguration(ctx context.Context) (*promoterv1alpha1.ControllerConfiguration, error) {
 	controllerConfiguration := &promoterv1alpha1.ControllerConfiguration{}
-	if err := m.client.Get(ctx, client.ObjectKey{Name: ControllerConfigurationName, Namespace: m.config.ControllerNamespace}, controllerConfiguration); err != nil {
+	if err := m.client.Get(ctx, client.ObjectKey{Name: ControllerConfigurationName, Namespace: m.config.ControllerNamespace}, controllerConfiguration, client.UnsafeDisableDeepCopy); err != nil {
 		return nil, fmt.Errorf("failed to get global promotion configuration: %w", err)
 	}
 
@@ -179,7 +186,7 @@ func (m *Manager) GetPullRequestControllersTemplate(ctx context.Context) (promot
 	if err != nil {
 		return promoterv1alpha1.PullRequestTemplate{}, fmt.Errorf("failed to get controller configuration: %w", err)
 	}
-	return config.Spec.PullRequest.Template, nil
+	return *config.Spec.PullRequest.Template.DeepCopy(), nil
 }
 
 // GetRequeueDuration retrieves the requeue duration for a specific controller type.
@@ -287,29 +294,29 @@ func getWorkQueueForController[T ControllerConfigurationTypes](ctx context.Conte
 	var controllerConfig T
 	switch cfg := any(controllerConfig).(type) {
 	case promoterv1alpha1.PromotionStrategyConfiguration:
-		return config.Spec.PromotionStrategy.WorkQueue, nil
+		return *config.Spec.PromotionStrategy.WorkQueue.DeepCopy(), nil
 	case promoterv1alpha1.ChangeTransferPolicyHistoryConfiguration:
-		return config.Spec.ChangeTransferPolicyHistory.WorkQueue, nil
+		return *config.Spec.ChangeTransferPolicyHistory.WorkQueue.DeepCopy(), nil
 	case promoterv1alpha1.ChangeTransferPolicyConfiguration:
-		return config.Spec.ChangeTransferPolicy.WorkQueue, nil
+		return *config.Spec.ChangeTransferPolicy.WorkQueue.DeepCopy(), nil
 	case promoterv1alpha1.PullRequestConfiguration:
-		return config.Spec.PullRequest.WorkQueue, nil
+		return *config.Spec.PullRequest.WorkQueue.DeepCopy(), nil
 	case promoterv1alpha1.CommitStatusConfiguration:
-		return config.Spec.CommitStatus.WorkQueue, nil
+		return *config.Spec.CommitStatus.WorkQueue.DeepCopy(), nil
 	case promoterv1alpha1.ArgoCDCommitStatusConfiguration:
-		return config.Spec.ArgoCDCommitStatus.WorkQueue, nil
+		return *config.Spec.ArgoCDCommitStatus.WorkQueue.DeepCopy(), nil
 	case promoterv1alpha1.TimedCommitStatusConfiguration:
-		return config.Spec.TimedCommitStatus.WorkQueue, nil
+		return *config.Spec.TimedCommitStatus.WorkQueue.DeepCopy(), nil
 	case promoterv1alpha1.GitCommitStatusConfiguration:
-		return config.Spec.GitCommitStatus.WorkQueue, nil
+		return *config.Spec.GitCommitStatus.WorkQueue.DeepCopy(), nil
 	case promoterv1alpha1.WebRequestCommitStatusConfiguration:
-		return config.Spec.WebRequestCommitStatus.WorkQueue, nil
+		return *config.Spec.WebRequestCommitStatus.WorkQueue.DeepCopy(), nil
 	case promoterv1alpha1.DependentsSuccessfulCommitStatusConfiguration:
-		return config.Spec.DependentsSuccessfulCommitStatus.WorkQueue, nil
+		return *config.Spec.DependentsSuccessfulCommitStatus.WorkQueue.DeepCopy(), nil
 	case promoterv1alpha1.ScheduledCommitStatusConfiguration:
-		return config.Spec.ScheduledCommitStatus.WorkQueue, nil
+		return *config.Spec.ScheduledCommitStatus.WorkQueue.DeepCopy(), nil
 	case promoterv1alpha1.RestoreActiveCommitConfiguration:
-		return config.Spec.RestoreActiveCommit.WorkQueue, nil
+		return *config.Spec.RestoreActiveCommit.WorkQueue.DeepCopy(), nil
 	default:
 		return promoterv1alpha1.WorkQueue{}, fmt.Errorf("unsupported configuration type: %T", cfg)
 	}
