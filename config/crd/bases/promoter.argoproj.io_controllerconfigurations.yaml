@@ -1327,8 +1327,7 @@ spec:
               progressiveOrderCommitStatus:
                 description: |-
                   ProgressiveOrderCommitStatus contains the configuration for the ProgressiveOrderCommitStatus controller,
-                  including WorkQueue settings that control reconciliation behavior. When omitted, the
-                  dependentsSuccessfulCommitStatus configuration is used.
+                  including WorkQueue settings that control reconciliation behavior.
                 properties:
                   workQueue:
                     description: |-
@@ -2815,6 +2814,7 @@ spec:
             - commitStatus
             - dependentsSuccessfulCommitStatus
             - gitCommitStatus
+            - progressiveOrderCommitStatus
             - promotionStrategy
             - pullRequest
             - restoreActiveCommit

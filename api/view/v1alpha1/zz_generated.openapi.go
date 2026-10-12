@@ -2342,7 +2342,8 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ControllerConfigurationSp
 					},
 					"progressiveOrderCommitStatus": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ProgressiveOrderCommitStatus contains the configuration for the ProgressiveOrderCommitStatus controller, including WorkQueue settings that control reconciliation behavior. When omitted, the dependentsSuccessfulCommitStatus configuration is used.",
+							Description: "ProgressiveOrderCommitStatus contains the configuration for the ProgressiveOrderCommitStatus controller, including WorkQueue settings that control reconciliation behavior.",
+							Default:     map[string]interface{}{},
 							Ref:         ref(apiv1alpha1.ProgressiveOrderCommitStatusConfiguration{}.OpenAPIModelName()),
 						},
 					},
@@ -2361,7 +2362,7 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ControllerConfigurationSp
 						},
 					},
 				},
-				Required: []string{"promotionStrategy", "changeTransferPolicyHistory", "changeTransferPolicy", "pullRequest", "commitStatus", "argocdCommitStatus", "timedCommitStatus", "gitCommitStatus", "webRequestCommitStatus", "dependentsSuccessfulCommitStatus", "scheduledCommitStatus", "restoreActiveCommit"},
+				Required: []string{"promotionStrategy", "changeTransferPolicyHistory", "changeTransferPolicy", "pullRequest", "commitStatus", "argocdCommitStatus", "timedCommitStatus", "gitCommitStatus", "webRequestCommitStatus", "dependentsSuccessfulCommitStatus", "progressiveOrderCommitStatus", "scheduledCommitStatus", "restoreActiveCommit"},
 			},
 		},
 		Dependencies: []string{

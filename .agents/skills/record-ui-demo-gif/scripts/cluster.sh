@@ -43,6 +43,9 @@ spec:
   dependentsSuccessfulCommitStatus:
     workQueue:
       requeueDuration: 3s
+  progressiveOrderCommitStatus:
+    workQueue:
+      requeueDuration: 3s
 EOF
 )"
 }

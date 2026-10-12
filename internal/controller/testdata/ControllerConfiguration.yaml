@@ -138,7 +138,7 @@ spec:
           baseDelay: "500ms"
           maxDelay: "1m"
 
-  # ProgressiveOrderCommitStatus controller (optional; falls back to dependentsSuccessfulCommitStatus when omitted)
+  # ProgressiveOrderCommitStatus controller evaluates progress-watermark ordering gates
   progressiveOrderCommitStatus:
     workQueue:
       requeueDuration: "5m"

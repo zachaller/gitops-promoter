@@ -67,8 +67,7 @@ type ControllerConfigurationSpecApplyConfiguration struct {
 	// including WorkQueue settings that control reconciliation behavior.
 	DependentsSuccessfulCommitStatus *DependentsSuccessfulCommitStatusConfigurationApplyConfiguration `json:"dependentsSuccessfulCommitStatus,omitempty"`
 	// ProgressiveOrderCommitStatus contains the configuration for the ProgressiveOrderCommitStatus controller,
-	// including WorkQueue settings that control reconciliation behavior. When omitted, the
-	// dependentsSuccessfulCommitStatus configuration is used.
+	// including WorkQueue settings that control reconciliation behavior.
 	ProgressiveOrderCommitStatus *ProgressiveOrderCommitStatusConfigurationApplyConfiguration `json:"progressiveOrderCommitStatus,omitempty"`
 	// ScheduledCommitStatus contains the configuration for the ScheduledCommitStatus controller,
 	// including WorkQueue settings that control reconciliation behavior.

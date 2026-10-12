@@ -951,11 +951,7 @@ func (in *ControllerConfigurationSpec) DeepCopyInto(out *ControllerConfiguration
 	in.GitCommitStatus.DeepCopyInto(&out.GitCommitStatus)
 	in.WebRequestCommitStatus.DeepCopyInto(&out.WebRequestCommitStatus)
 	in.DependentsSuccessfulCommitStatus.DeepCopyInto(&out.DependentsSuccessfulCommitStatus)
-	if in.ProgressiveOrderCommitStatus != nil {
-		in, out := &in.ProgressiveOrderCommitStatus, &out.ProgressiveOrderCommitStatus
-		*out = new(ProgressiveOrderCommitStatusConfiguration)
-		(*in).DeepCopyInto(*out)
-	}
+	in.ProgressiveOrderCommitStatus.DeepCopyInto(&out.ProgressiveOrderCommitStatus)
 	in.ScheduledCommitStatus.DeepCopyInto(&out.ScheduledCommitStatus)
 	in.RestoreActiveCommit.DeepCopyInto(&out.RestoreActiveCommit)
 }

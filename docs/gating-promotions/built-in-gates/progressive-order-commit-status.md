@@ -131,8 +131,9 @@ If you use SCM branch protection on the gate's commit status context, update the
 
 ## Controller configuration
 
-`ControllerConfiguration.spec.progressiveOrderCommitStatus.workQueue` is optional. When omitted, the controller uses
-`spec.dependentsSuccessfulCommitStatus.workQueue`.
+`ControllerConfiguration.spec.progressiveOrderCommitStatus.workQueue` is required, like the other controllers' work
+queue settings. If you manage your own `ControllerConfiguration`, add a `progressiveOrderCommitStatus` block when
+upgrading (see [Upgrading](../../upgrading.md)).
 
 ## Status
 
