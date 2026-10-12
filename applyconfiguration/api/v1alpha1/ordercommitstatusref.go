@@ -26,7 +26,8 @@ type OrderCommitStatusRefApplyConfiguration struct {
 	// out-of-tree ordering gates may use any valid API group and are resolved via the generic gate contract.
 	Group *string `json:"group,omitempty"`
 	// Kind is the type of resource being referenced. Must name a CommitStatus gate CR registered as an
-	// ordering gate. DependentsSuccessfulCommitStatus is supported today; additional kinds may be added later.
+	// ordering gate. DependentsSuccessfulCommitStatus and ProgressiveOrderCommitStatus are built in; additional
+	// kinds may be added later.
 	Kind *string `json:"kind,omitempty"`
 	// Name is the name of the resource being referenced.
 	Name *string `json:"name,omitempty"`

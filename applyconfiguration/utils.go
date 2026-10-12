@@ -181,6 +181,20 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.OutputSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PollingModeSpec"):
 		return &apiv1alpha1.PollingModeSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ProgressiveOrderCommitStatus"):
+		return &apiv1alpha1.ProgressiveOrderCommitStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ProgressiveOrderCommitStatusConfiguration"):
+		return &apiv1alpha1.ProgressiveOrderCommitStatusConfigurationApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ProgressiveOrderCommitStatusEnvironmentStatus"):
+		return &apiv1alpha1.ProgressiveOrderCommitStatusEnvironmentStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ProgressiveOrderCommitStatusSpec"):
+		return &apiv1alpha1.ProgressiveOrderCommitStatusSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ProgressiveOrderCommitStatusStatus"):
+		return &apiv1alpha1.ProgressiveOrderCommitStatusStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ProgressiveOrderCommitStatusUpstreamStatus"):
+		return &apiv1alpha1.ProgressiveOrderCommitStatusUpstreamStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ProgressiveOrderCommitStatusWatermark"):
+		return &apiv1alpha1.ProgressiveOrderCommitStatusWatermarkApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PromotionStrategy"):
 		return &apiv1alpha1.PromotionStrategyApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PromotionStrategyConfiguration"):

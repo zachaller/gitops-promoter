@@ -75,6 +75,25 @@ var _ = Describe("Resolve", func() {
 		Expect(key).To(Equal(promoterv1alpha1.DependentsSuccessfulCommitStatusKey))
 	})
 
+	It("resolves ProgressiveOrderCommitStatus via a typed Get", func() {
+		ps := testPromotionStrategy(promoterv1alpha1.OrderCommitStatusRef{
+			Group: promoterv1alpha1.DefaultOrderCommitStatusGroup,
+			Kind:  promoterv1alpha1.ProgressiveOrderCommitStatusKind,
+			Name:  "demo",
+		})
+		gate := &promoterv1alpha1.ProgressiveOrderCommitStatus{
+			Name: "demo", Namespace: "default",
+			Spec: promoterv1alpha1.ProgressiveOrderCommitStatusSpec{
+				PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: "demo"},
+				Key:                  promoterv1alpha1.ProgressiveOrderCommitStatusKey,
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(promoterScheme()).WithObjects(gate).Build()
+		key, err := Resolve(context.Background(), c, nil, ps)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(key).To(Equal(promoterv1alpha1.ProgressiveOrderCommitStatusKey))
+	})
+
 	It("rejects a typed DependentsSuccessfulCommitStatus with an empty spec.key", func() {
 		ps := testPromotionStrategy(promoterv1alpha1.OrderCommitStatusRef{Name: "demo"})
 		gate := &promoterv1alpha1.DependentsSuccessfulCommitStatus{

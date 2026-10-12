@@ -73,6 +73,22 @@ func buildDependsOnQuery(dependsOn []string) string {
 	return strings.Join(parts, "&")
 }
 
+// renderOrderingGateURL renders an ordering gate's spec.url template and requires an http(s) result.
+func renderOrderingGateURL(cfg promoterv1alpha1.URLConfig, data any) (string, error) {
+	renderedURL, err := utils.RenderStringTemplate(cfg.Template, data, cfg.Options...)
+	if err != nil {
+		return "", fmt.Errorf("failed to render URL template: %w", err)
+	}
+	parsedURL, err := url.Parse(renderedURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse URL: %w", err)
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return "", fmt.Errorf("URL scheme is not http or https: %s", parsedURL.Scheme)
+	}
+	return renderedURL, nil
+}
+
 // DependentsSuccessfulCommitStatusReconciler reconciles a DependentsSuccessfulCommitStatus object
 type DependentsSuccessfulCommitStatusReconciler struct {
 	client.Client
@@ -522,16 +538,9 @@ func (r *DependentsSuccessfulCommitStatusReconciler) createOrUpdateDependentsSuc
 			DependsOnQuery:                   buildDependsOnQuery(dependsOn),
 		}
 		var err error
-		renderedURL, err = utils.RenderStringTemplate(dcs.Spec.URL.Template, data, dcs.Spec.URL.Options...)
+		renderedURL, err = renderOrderingGateURL(dcs.Spec.URL, data)
 		if err != nil {
-			return nil, promoterv1alpha1.GateEnvironmentCommitStatus{}, fmt.Errorf("failed to render URL template: %w", err)
-		}
-		parsedURL, err := url.Parse(renderedURL)
-		if err != nil {
-			return nil, promoterv1alpha1.GateEnvironmentCommitStatus{}, fmt.Errorf("failed to parse URL: %w", err)
-		}
-		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-			return nil, promoterv1alpha1.GateEnvironmentCommitStatus{}, fmt.Errorf("URL scheme is not http or https: %s", parsedURL.Scheme)
+			return nil, promoterv1alpha1.GateEnvironmentCommitStatus{}, err
 		}
 		logf.FromContext(ctx).V(4).Info("Rendered URL template",
 			"url", renderedURL,
@@ -595,6 +604,8 @@ func (r *DependentsSuccessfulCommitStatusReconciler) createOrUpdateDependentsSuc
 }
 
 // SetupWithManager sets up the controller with the Manager.
+//
+//nolint:dupl // Gate controllers share the same SetupWithManager skeleton by design.
 func (r *DependentsSuccessfulCommitStatusReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Use Direct methods to read configuration from the API server without cache during setup.
 	// The cache is not started during SetupWithManager, so we must use the non-cached API reader.

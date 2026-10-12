@@ -395,6 +395,15 @@ func runController(
 		setupLog.Error(err, "unable to create controller", "controller", "DependentsSuccessfulCommitStatus")
 		panic(fmt.Errorf("unable to create DependentsSuccessfulCommitStatus controller: %w", err))
 	}
+	if err := (&controller.ProgressiveOrderCommitStatusReconciler{
+		Client:      localManager.GetClient(),
+		Scheme:      localManager.GetScheme(),
+		Recorder:    localManager.GetEventRecorder("ProgressiveOrderCommitStatus"),
+		SettingsMgr: settingsMgr,
+	}).SetupWithManager(runCtx, localManager); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ProgressiveOrderCommitStatus")
+		panic(fmt.Errorf("unable to create ProgressiveOrderCommitStatus controller: %w", err))
+	}
 	if err := (&controller.ScheduledCommitStatusReconciler{
 		Client:      localManager.GetClient(),
 		Scheme:      localManager.GetScheme(),

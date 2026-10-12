@@ -30,6 +30,13 @@ const TimedCommitStatusDefaultKey = "timer"
 // dependent environments are promoted and successful.
 const DependentsSuccessfulCommitStatusKey = "dependents-successful"
 
+// ProgressiveOrderCommitStatusKey is the commit status key name used to indicate that an environment's
+// dependent environments have made healthy progress beyond what the environment is running.
+const ProgressiveOrderCommitStatusKey = "progressive-order"
+
+// ProgressiveOrderCommitStatusKind is the kind name of the ProgressiveOrderCommitStatus ordering gate.
+const ProgressiveOrderCommitStatusKind = "ProgressiveOrderCommitStatus"
+
 // DefaultOrderCommitStatusGroup is the default API group for PromotionStrategy.spec.orderCommitStatusRef.
 const DefaultOrderCommitStatusGroup = "promoter.argoproj.io"
 

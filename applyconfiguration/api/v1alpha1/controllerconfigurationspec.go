@@ -66,6 +66,9 @@ type ControllerConfigurationSpecApplyConfiguration struct {
 	// DependentsSuccessfulCommitStatus contains the configuration for the DependentsSuccessfulCommitStatus controller,
 	// including WorkQueue settings that control reconciliation behavior.
 	DependentsSuccessfulCommitStatus *DependentsSuccessfulCommitStatusConfigurationApplyConfiguration `json:"dependentsSuccessfulCommitStatus,omitempty"`
+	// ProgressiveOrderCommitStatus contains the configuration for the ProgressiveOrderCommitStatus controller,
+	// including WorkQueue settings that control reconciliation behavior.
+	ProgressiveOrderCommitStatus *ProgressiveOrderCommitStatusConfigurationApplyConfiguration `json:"progressiveOrderCommitStatus,omitempty"`
 	// ScheduledCommitStatus contains the configuration for the ScheduledCommitStatus controller,
 	// including WorkQueue settings that control reconciliation behavior.
 	ScheduledCommitStatus *ScheduledCommitStatusConfigurationApplyConfiguration `json:"scheduledCommitStatus,omitempty"`
@@ -165,6 +168,14 @@ func (b *ControllerConfigurationSpecApplyConfiguration) WithWebRequestCommitStat
 // If called multiple times, the DependentsSuccessfulCommitStatus field is set to the value of the last call.
 func (b *ControllerConfigurationSpecApplyConfiguration) WithDependentsSuccessfulCommitStatus(value *DependentsSuccessfulCommitStatusConfigurationApplyConfiguration) *ControllerConfigurationSpecApplyConfiguration {
 	b.DependentsSuccessfulCommitStatus = value
+	return b
+}
+
+// WithProgressiveOrderCommitStatus sets the ProgressiveOrderCommitStatus field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ProgressiveOrderCommitStatus field is set to the value of the last call.
+func (b *ControllerConfigurationSpecApplyConfiguration) WithProgressiveOrderCommitStatus(value *ProgressiveOrderCommitStatusConfigurationApplyConfiguration) *ControllerConfigurationSpecApplyConfiguration {
+	b.ProgressiveOrderCommitStatus = value
 	return b
 }
 
