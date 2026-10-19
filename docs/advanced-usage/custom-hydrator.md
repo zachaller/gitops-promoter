@@ -82,7 +82,8 @@ The following fields are optional but recommended for a better user experience i
         "repoURL": "https://github.com/org/other-repo",
         "author": "John Developer <john@example.com>",
         "date": "2024-01-14T09:00:00Z",
-        "subject": "chore: update dependency"
+        "subject": "chore: update dependency",
+        "version": "v1.4.0"
       }
     }
   ]
@@ -97,6 +98,13 @@ The following fields are optional but recommended for a better user experience i
 | `subject` | string | Subject line of the DRY commit message |
 | `body` | string | Body of the DRY commit message (excluding subject) |
 | `references` | array | Additional commits that contributed to this hydration (e.g., from other repositories) |
+
+Each entry in `references` has a `commit` object with the same `sha`, `repoURL`, `author`, `date`, `subject`, and
+`body` fields as above, plus an optional `version`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `commit.version` | string | Version of the referenced code at this commit, such as a release tag (`v1.4.0`), semantic version, or build identifier (max 255 characters). Shown next to the code commit in the UI and in the "Code reference" section of the default pull request template. |
 
 ### 4. Duplicate Detection (Recommended)
 

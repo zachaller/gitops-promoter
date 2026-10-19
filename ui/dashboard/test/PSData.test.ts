@@ -44,6 +44,7 @@ const environmentWithReferenceCommit: Environment = {
             sha: 'd22207e1fe7baad7e91400d80c42a599d25c1022',
             subject: 'Merge pull request #2 from dev-integration/alice-patch-1',
             repoURL: 'https://github.example.com/example-repo',
+            version: 'v2.3.1',
           },
         },
       ],
@@ -205,6 +206,13 @@ describe('enrichFromEnvironments', () => {
     ]) {
       expect(timeAgo(date!)).not.toMatch(/NaN/);
     }
+  });
+
+  it('carries the code reference version through to the enriched reference commit', () => {
+    const [env] = enrichFromEnvironments([environmentWithReferenceCommit], 0);
+
+    expect(env.proposedReferenceCommit?.version).toBe('v2.3.1');
+    expect(env.activeReferenceCommit).toBeNull();
   });
 
   it('surfaces active PR creation time, merge time, and state (RFC 3339 passthrough)', () => {

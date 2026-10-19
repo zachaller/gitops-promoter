@@ -512,6 +512,20 @@
   color: $text-secondary;
 }
 
+.hp-drawer__ref-version {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: $bg-softer;
+  color: $text-primary;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hp-drawer__ref-sha {
   display: inline-flex;
   align-items: center;

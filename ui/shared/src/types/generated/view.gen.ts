@@ -352,6 +352,8 @@ export type components = {
             sha?: string;
             /** @description Subject is the subject line of the commit message, i.e. `git show --format=%s`. */
             subject?: string;
+            /** @description Version is the version of the code in the referenced repository at this commit, such as a release tag, semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit. */
+            version?: string;
         };
         /** @description CommitShaState defines the state of a commit in a branch. */
         CommitShaState: {

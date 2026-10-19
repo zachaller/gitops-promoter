@@ -1803,6 +1803,13 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_CommitMetadata(ref common
 							Format:      "",
 						},
 					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Version is the version of the code in the referenced repository at this commit, such as a release tag, semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},

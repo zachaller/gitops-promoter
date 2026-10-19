@@ -388,6 +388,16 @@ const DetailDrawer: React.FC<{
                       <span className="hp-drawer__ref-author">
                         {ref.author ? extractNameOnly(ref.author) : '—'}
                       </span>
+                      {ref.version && (
+                        <>
+                          <span className="hp-drawer__sep" aria-hidden="true">
+                            ·
+                          </span>
+                          <span className="hp-drawer__ref-version" title={`Version ${ref.version}`}>
+                            {ref.version}
+                          </span>
+                        </>
+                      )}
                       {ref.sha && (
                         <>
                           <span className="hp-drawer__sep" aria-hidden="true">

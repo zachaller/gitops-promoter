@@ -13,7 +13,11 @@ export interface CommitInfoProps {
   codeCommitUrl: string | null;
 }
 
-type CommitView = Partial<Pick<DeploymentCommit, 'sha' | 'subject' | 'body' | 'author' | 'date'>>;
+type CommitView = Partial<
+  Pick<DeploymentCommit, 'sha' | 'subject' | 'body' | 'author' | 'date'>
+> & {
+  version?: string;
+};
 
 const CommitInfo: React.FC<CommitInfoProps> = ({
   deploymentCommit,
@@ -104,6 +108,11 @@ const CommitInfo: React.FC<CommitInfoProps> = ({
             <div className="commit-header">
               <span className="commit-icon-wrapper">{getIcon(iconType)}</span>
               {renderSha(commit, commitUrl)}
+              {commit.version && (
+                <Tooltip content={`Version ${commit.version}`}>
+                  <span className="commit-version">{commit.version}</span>
+                </Tooltip>
+              )}
               <span
                 className="commit-subject"
                 onMouseEnter={() => handleMouseEnter(type)}

@@ -604,6 +604,12 @@ spec:
                                   description: Subject is the subject line of the
                                     commit message, i.e. `git show --format=%s`.
                                   type: string
+                                version:
+                                  description: |-
+                                    Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                    semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                  maxLength: 255
+                                  type: string
                               type: object
                           type: object
                         maxItems: 100
@@ -684,6 +690,12 @@ spec:
                                 subject:
                                   description: Subject is the subject line of the
                                     commit message, i.e. `git show --format=%s`.
+                                  type: string
+                                version:
+                                  description: |-
+                                    Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                    semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                  maxLength: 255
                                   type: string
                               type: object
                           type: object
@@ -774,6 +786,12 @@ spec:
                                 subject:
                                   description: Subject is the subject line of the
                                     commit message, i.e. `git show --format=%s`.
+                                  type: string
+                                version:
+                                  description: |-
+                                    Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                    semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                  maxLength: 255
                                   type: string
                               type: object
                           type: object
@@ -969,6 +987,12 @@ spec:
                                   description: Subject is the subject line of the
                                     commit message, i.e. `git show --format=%s`.
                                   type: string
+                                version:
+                                  description: |-
+                                    Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                    semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                  maxLength: 255
+                                  type: string
                               type: object
                           type: object
                         maxItems: 100
@@ -1049,6 +1073,12 @@ spec:
                                 subject:
                                   description: Subject is the subject line of the
                                     commit message, i.e. `git show --format=%s`.
+                                  type: string
+                                version:
+                                  description: |-
+                                    Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                    semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                  maxLength: 255
                                   type: string
                               type: object
                           type: object
@@ -1139,6 +1169,12 @@ spec:
                                 subject:
                                   description: Subject is the subject line of the
                                     commit message, i.e. `git show --format=%s`.
+                                  type: string
+                                version:
+                                  description: |-
+                                    Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                    semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                  maxLength: 255
                                   type: string
                               type: object
                           type: object
@@ -1491,6 +1527,12 @@ spec:
                                         description: Subject is the subject line of
                                           the commit message, i.e. `git show --format=%s`.
                                         type: string
+                                      version:
+                                        description: |-
+                                          Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                          semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                        maxLength: 255
+                                        type: string
                                     type: object
                                 type: object
                               maxItems: 100
@@ -1574,6 +1616,12 @@ spec:
                                       subject:
                                         description: Subject is the subject line of
                                           the commit message, i.e. `git show --format=%s`.
+                                        type: string
+                                      version:
+                                        description: |-
+                                          Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                          semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                        maxLength: 255
                                         type: string
                                     type: object
                                 type: object
@@ -1667,6 +1715,12 @@ spec:
                                       subject:
                                         description: Subject is the subject line of
                                           the commit message, i.e. `git show --format=%s`.
+                                        type: string
+                                      version:
+                                        description: |-
+                                          Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                          semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                        maxLength: 255
                                         type: string
                                     type: object
                                 type: object
@@ -1797,6 +1851,12 @@ spec:
                                       subject:
                                         description: Subject is the subject line of
                                           the commit message, i.e. `git show --format=%s`.
+                                        type: string
+                                      version:
+                                        description: |-
+                                          Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                          semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                        maxLength: 255
                                         type: string
                                     type: object
                                 type: object
@@ -6526,6 +6586,12 @@ spec:
                                         description: Subject is the subject line of
                                           the commit message, i.e. `git show --format=%s`.
                                         type: string
+                                      version:
+                                        description: |-
+                                          Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                          semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                        maxLength: 255
+                                        type: string
                                     type: object
                                 type: object
                               maxItems: 100
@@ -6609,6 +6675,12 @@ spec:
                                       subject:
                                         description: Subject is the subject line of
                                           the commit message, i.e. `git show --format=%s`.
+                                        type: string
+                                      version:
+                                        description: |-
+                                          Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                          semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                        maxLength: 255
                                         type: string
                                     type: object
                                 type: object
@@ -6702,6 +6774,12 @@ spec:
                                       subject:
                                         description: Subject is the subject line of
                                           the commit message, i.e. `git show --format=%s`.
+                                        type: string
+                                      version:
+                                        description: |-
+                                          Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                          semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                        maxLength: 255
                                         type: string
                                     type: object
                                 type: object
@@ -6851,6 +6929,12 @@ spec:
                                         description: Subject is the subject line of
                                           the commit message, i.e. `git show --format=%s`.
                                         type: string
+                                      version:
+                                        description: |-
+                                          Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                          semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                        maxLength: 255
+                                        type: string
                                     type: object
                                 type: object
                               maxItems: 100
@@ -6934,6 +7018,12 @@ spec:
                                       subject:
                                         description: Subject is the subject line of
                                           the commit message, i.e. `git show --format=%s`.
+                                        type: string
+                                      version:
+                                        description: |-
+                                          Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                          semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                        maxLength: 255
                                         type: string
                                     type: object
                                 type: object
@@ -7027,6 +7117,12 @@ spec:
                                       subject:
                                         description: Subject is the subject line of
                                           the commit message, i.e. `git show --format=%s`.
+                                        type: string
+                                      version:
+                                        description: |-
+                                          Version is the version of the code in the referenced repository at this commit, such as a release tag,
+                                          semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+                                        maxLength: 255
                                         type: string
                                     type: object
                                 type: object
@@ -11438,20 +11534,22 @@ spec:
         {{- $head := "" -}}
         {{- $activeSubject := "" -}}
         {{- $proposedSubject := "" -}}
+        {{- $activeVersion := "" -}}
+        {{- $proposedVersion := "" -}}
         {{- with .ChangeTransferPolicy.Status.Active.Dry.References }}{{- with index . 0 }}{{- with .Commit -}}
-        {{- $base = .Sha -}}{{- $activeSubject = .Subject -}}{{- if .RepoURL -}}{{- $repo = .RepoURL -}}{{- end -}}
+        {{- $base = .Sha -}}{{- $activeSubject = .Subject -}}{{- $activeVersion = .Version -}}{{- if .RepoURL -}}{{- $repo = .RepoURL -}}{{- end -}}
         {{- end -}}{{- end -}}{{- end -}}
         {{- with .ChangeTransferPolicy.Status.Proposed.Dry.References }}{{- with index . 0 }}{{- with .Commit -}}
-        {{- $head = .Sha -}}{{- $proposedSubject = .Subject -}}{{- if and (not $repo) .RepoURL -}}{{- $repo = .RepoURL -}}{{- end -}}
+        {{- $head = .Sha -}}{{- $proposedSubject = .Subject -}}{{- $proposedVersion = .Version -}}{{- if and (not $repo) .RepoURL -}}{{- $repo = .RepoURL -}}{{- end -}}
         {{- end -}}{{- end -}}{{- end -}}
         {{- if or $base $head }}
 
         ### Code reference
         {{- if $base }}
-        **Active:** {{ if and $repo $base }}[{{ trunc 7 $base }}]({{ trimSuffix "/" $repo }}/commit/{{ $base }}){{ else }}{{ trunc 7 $base }}{{ end }} — {{ $activeSubject }}
+        **Active:** {{ if and $repo $base }}[{{ trunc 7 $base }}]({{ trimSuffix "/" $repo }}/commit/{{ $base }}){{ else }}{{ trunc 7 $base }}{{ end }}{{ if $activeVersion }} (`{{ $activeVersion }}`){{ end }} — {{ $activeSubject }}
         {{- end }}
         {{- if $head }}
-        **Proposed:** {{ if and $repo $head }}[{{ trunc 7 $head }}]({{ trimSuffix "/" $repo }}/commit/{{ $head }}){{ else }}{{ trunc 7 $head }}{{ end }} — {{ $proposedSubject }}
+        **Proposed:** {{ if and $repo $head }}[{{ trunc 7 $head }}]({{ trimSuffix "/" $repo }}/commit/{{ $head }}){{ else }}{{ trunc 7 $head }}{{ end }}{{ if $proposedVersion }} (`{{ $proposedVersion }}`){{ end }} — {{ $proposedSubject }}
         {{- end }}
         {{- if and $repo $base $head }}
         **Diff:** [{{ trunc 7 $base }}...{{ trunc 7 $head }}]({{ trimSuffix "/" $repo }}/compare/{{ $base }}...{{ $head }})

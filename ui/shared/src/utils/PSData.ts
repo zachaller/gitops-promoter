@@ -147,12 +147,13 @@ function extractReferenceCommitData(dryCommit: Commit): null | ReferenceCommit {
   const author = referenceCommit.author ? extractNameOnly(referenceCommit.author) : '-';
   const subject = referenceCommit.subject || '-';
   const body = referenceCommit.body || '-';
+  const version = referenceCommit.version || undefined;
 
   // Pass RFC 3339 through for TimeAgo; do not formatDate here.
   const date = referenceCommit.date;
   const url = getCommitUrl(referenceCommit.repoURL || '', referenceCommit.sha || '');
 
-  return { sha, author, subject, body, date, url };
+  return { sha, author, subject, body, date, url, version };
 }
 
 function derivePrTooltip(pr: EnvironmentPullRequest | null): PrTooltip | null {

@@ -894,6 +894,34 @@ var _ = Describe("ActivePath support", func() {
 		Expect(strings.TrimSpace(commitSha)).To(Equal(branchSha))
 	})
 
+	It("GetShaMetadataFromFile carries code reference versions from hydrator.metadata", func() {
+		codeSha := "1111111111111111111111111111111111111111"
+		metadataJSON := `{"drySha":"app-sha","references":[{"commit":{"sha":"` + codeSha +
+			`","repoURL":"https://github.com/org/code","subject":"feat: ship it","version":"v1.4.0"}}]}`
+		Expect(os.WriteFile(filepath.Join(workDir, "hydrator.metadata"), []byte(metadataJSON), 0o644)).To(Succeed())
+		_, err := runGitCmd(workDir, "add", "hydrator.metadata")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "commit", "-m", "versioned reference")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "branch", "-M", "environment/development")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = runGitCmd(workDir, "push", "-u", "origin", "environment/development")
+		Expect(err).NotTo(HaveOccurred())
+
+		gap := &fakeGitProvider{tempDirPath: tempRepoDir}
+		g = git.NewEnvironmentOperations(repo, gap, "default/testrepo")
+		Expect(g.CloneRepo(GinkgoT().Context())).To(Succeed())
+		branchSha, err := g.GetBranchSha(GinkgoT().Context(), "environment/development", "")
+		Expect(err).NotTo(HaveOccurred())
+
+		metadata, err := g.GetShaMetadataFromFile(GinkgoT().Context(), branchSha, "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(metadata.References).To(HaveLen(1))
+		Expect(metadata.References[0].Commit).NotTo(BeNil())
+		Expect(metadata.References[0].Commit.Sha).To(Equal(codeSha))
+		Expect(metadata.References[0].Commit.Version).To(Equal("v1.4.0"))
+	})
+
 	It("GetShaMetadataFromFile returns empty without error when the path is absent from the commit", func() {
 		Expect(os.MkdirAll(filepath.Join(workDir, "apps", "app-one"), 0o755)).To(Succeed())
 		Expect(os.WriteFile(filepath.Join(workDir, "apps", "app-one", "config.yaml"), []byte("version: active\n"), 0o644)).To(Succeed())

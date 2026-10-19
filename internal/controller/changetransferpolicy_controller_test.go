@@ -2534,6 +2534,11 @@ var _ = Describe("TemplatePullRequest", func() {
 			}
 		}
 
+		withVersion := func(ref promoterv1alpha1.RevisionReference, version string) promoterv1alpha1.RevisionReference {
+			ref.Commit.Version = version
+			return ref
+		}
+
 		It("renders the full shipped default template with all sections", func() {
 			cc, err := loadShippedControllerConfigurationForTests("shipped-pr-template-test")
 			Expect(err).NotTo(HaveOccurred())
@@ -2564,7 +2569,7 @@ var _ = Describe("TemplatePullRequest", func() {
 							RepoURL: gitopsRepoURL,
 							Subject: proposedSubject,
 							References: []promoterv1alpha1.RevisionReference{
-								makeRevisionReference(headRefSha, "chore(deps): bump bar", codeRepoURL),
+								withVersion(makeRevisionReference(headRefSha, "chore(deps): bump bar", codeRepoURL), "v1.4.0"),
 							},
 						},
 					},
@@ -2622,6 +2627,10 @@ var _ = Describe("TemplatePullRequest", func() {
 			Expect(description).To(ContainSubstring(fmt.Sprintf("[%s](%s/commit/%s)", headRefSha[:7], strings.TrimSuffix(codeRepoURL, "/"), headRefSha)))
 			Expect(description).To(ContainSubstring("chore(deps): bump foo"))
 			Expect(description).To(ContainSubstring("chore(deps): bump bar"))
+			Expect(description).To(ContainSubstring(fmt.Sprintf("[%s](%s/commit/%s) (`v1.4.0`) — chore(deps): bump bar",
+				headRefSha[:7], strings.TrimSuffix(codeRepoURL, "/"), headRefSha)))
+			Expect(description).To(ContainSubstring(fmt.Sprintf("[%s](%s/commit/%s) — chore(deps): bump foo",
+				baseRefSha[:7], strings.TrimSuffix(codeRepoURL, "/"), baseRefSha)))
 			Expect(description).To(ContainSubstring(fmt.Sprintf("[%s...%s](%s/compare/%s...%s)",
 				baseRefSha[:7], headRefSha[:7], strings.TrimSuffix(codeRepoURL, "/"), baseRefSha, headRefSha)))
 

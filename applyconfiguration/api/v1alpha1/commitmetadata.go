@@ -39,6 +39,9 @@ type CommitMetadataApplyConfiguration struct {
 	Sha *string `json:"sha,omitempty"`
 	// RepoURL is the URL of the repository where the commit is located.
 	RepoURL *string `json:"repoURL,omitempty"`
+	// Version is the version of the code in the referenced repository at this commit, such as a release tag,
+	// semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+	Version *string `json:"version,omitempty"`
 }
 
 // CommitMetadataApplyConfiguration constructs a declarative configuration of the CommitMetadata type for use with
@@ -92,5 +95,13 @@ func (b *CommitMetadataApplyConfiguration) WithSha(value string) *CommitMetadata
 // If called multiple times, the RepoURL field is set to the value of the last call.
 func (b *CommitMetadataApplyConfiguration) WithRepoURL(value string) *CommitMetadataApplyConfiguration {
 	b.RepoURL = &value
+	return b
+}
+
+// WithVersion sets the Version field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Version field is set to the value of the last call.
+func (b *CommitMetadataApplyConfiguration) WithVersion(value string) *CommitMetadataApplyConfiguration {
+	b.Version = &value
 	return b
 }

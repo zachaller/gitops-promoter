@@ -227,6 +227,11 @@ type CommitMetadata struct {
 	// +kubebuilder:validation:XValidation:rule="self == '' || isURL(self)",message="must be a valid URL"
 	// +kubebuilder:validation:Pattern="^(https?://.*)?$"
 	RepoURL string `json:"repoURL,omitempty"`
+	// Version is the version of the code in the referenced repository at this commit, such as a release tag,
+	// semantic version, or build identifier. It is supplied by the hydrator and displayed alongside the commit.
+	// +kubebuilder:validation:MaxLength=255
+	// +optional
+	Version string `json:"version,omitempty"`
 }
 
 // RevisionReference contains a reference to a some information that is related in some way to another commit. For now,

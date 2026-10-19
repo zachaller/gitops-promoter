@@ -428,6 +428,9 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: subject
       type:
         scalar: string
+    - name: version
+      type:
+        scalar: string
 - name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.CommitShaState
   map:
     fields:

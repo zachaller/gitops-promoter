@@ -355,6 +355,23 @@ describe('DetailDrawer restore command', () => {
     expect(container.querySelector('.hp-drawer__restore-note')).toBeNull();
   });
 
+  it('shows the version of each referenced code commit that carries one', () => {
+    render(
+      makeCell([], {
+        kind: 'live',
+        health: 'success',
+        references: [
+          { sha: 'c'.repeat(40), subject: 'feat: versioned', version: 'v1.4.0' },
+          { sha: 'd'.repeat(40), subject: 'chore: unversioned' },
+        ],
+      }),
+    );
+
+    const versions = container.querySelectorAll('.hp-drawer__ref-version');
+    expect(versions).toHaveLength(1);
+    expect(versions[0]?.textContent).toBe('v1.4.0');
+  });
+
   it('hides the restore section for live cells', () => {
     render(
       makeCell([], {
