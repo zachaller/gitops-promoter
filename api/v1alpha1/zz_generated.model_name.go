@@ -451,6 +451,46 @@ func (in PollingModeSpec) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ProgressiveOrderCommitStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.ProgressiveOrderCommitStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ProgressiveOrderCommitStatusConfiguration) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.ProgressiveOrderCommitStatusConfiguration"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ProgressiveOrderCommitStatusEnvironmentStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.ProgressiveOrderCommitStatusEnvironmentStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ProgressiveOrderCommitStatusList) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.ProgressiveOrderCommitStatusList"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ProgressiveOrderCommitStatusSpec) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.ProgressiveOrderCommitStatusSpec"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ProgressiveOrderCommitStatusStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.ProgressiveOrderCommitStatusStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ProgressiveOrderCommitStatusUpstreamStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.ProgressiveOrderCommitStatusUpstreamStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ProgressiveOrderCommitStatusWatermark) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.ProgressiveOrderCommitStatusWatermark"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in PromotionStrategy) OpenAPIModelName() string {
 	return "io.argoproj.promoter.v1alpha1.PromotionStrategy"
 }

@@ -2,6 +2,31 @@
 
 This page documents breaking changes and migration steps between releases.
 
+## Unreleased — ProgressiveOrderCommitStatus controller configuration
+
+The new [ProgressiveOrderCommitStatus](gating-promotions/built-in-gates/progressive-order-commit-status.md) ordering
+gate adds a required `spec.progressiveOrderCommitStatus` block to `ControllerConfiguration`. The bundled
+`dist/install*.yaml` manifests include it. If you manage your own `ControllerConfiguration`, add the block before or
+together with the CRD update, otherwise the controller fails to start its work queue and the API server rejects updates
+to the `ControllerConfiguration` that omit it:
+
+```yaml
+spec:
+  progressiveOrderCommitStatus:
+    workQueue:
+      maxConcurrentReconciles: 10
+      requeueDuration: "5m"
+      rateLimiter:
+        maxOf:
+          - bucket:
+              qps: 10
+              bucket: 100
+          - fastSlow:
+              fastDelay: "1s"
+              slowDelay: "5m"
+              maxFastAttempts: 3
+```
+
 ## 0.41 — Promotion history moves to ChangeTransferPolicyHistory
 
 Starting in 0.41.0, promotion history no longer lives on `ChangeTransferPolicy.status.history` or

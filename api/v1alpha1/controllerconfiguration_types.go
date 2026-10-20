@@ -93,6 +93,11 @@ type ControllerConfigurationSpec struct {
 	// +required
 	DependentsSuccessfulCommitStatus DependentsSuccessfulCommitStatusConfiguration `json:"dependentsSuccessfulCommitStatus"`
 
+	// ProgressiveOrderCommitStatus contains the configuration for the ProgressiveOrderCommitStatus controller,
+	// including WorkQueue settings that control reconciliation behavior.
+	// +required
+	ProgressiveOrderCommitStatus ProgressiveOrderCommitStatusConfiguration `json:"progressiveOrderCommitStatus"`
+
 	// ScheduledCommitStatus contains the configuration for the ScheduledCommitStatus controller,
 	// including WorkQueue settings that control reconciliation behavior.
 	// +required
@@ -200,6 +205,17 @@ type TimedCommitStatusConfiguration struct {
 // requests, including requeue intervals, concurrency limits, and rate limiting behavior.
 type DependentsSuccessfulCommitStatusConfiguration struct {
 	// WorkQueue contains the work queue configuration for the DependentsSuccessfulCommitStatus controller.
+	// This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.
+	// +required
+	WorkQueue WorkQueue `json:"workQueue"`
+}
+
+// ProgressiveOrderCommitStatusConfiguration defines the configuration for the ProgressiveOrderCommitStatus controller.
+//
+// This configuration controls how the ProgressiveOrderCommitStatus controller processes reconciliation
+// requests, including requeue intervals, concurrency limits, and rate limiting behavior.
+type ProgressiveOrderCommitStatusConfiguration struct {
+	// WorkQueue contains the work queue configuration for the ProgressiveOrderCommitStatus controller.
 	// This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.
 	// +required
 	WorkQueue WorkQueue `json:"workQueue"`

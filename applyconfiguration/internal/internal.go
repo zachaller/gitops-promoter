@@ -580,6 +580,9 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: instanceID
       type:
         scalar: string
+    - name: progressiveOrderCommitStatus
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusConfiguration
     - name: promotionStrategy
       type:
         namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.PromotionStrategyConfiguration
@@ -1210,6 +1213,126 @@ var schemaYAML = typed.YAMLObject(`types:
       type:
         namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Duration
       default: 1m
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatus
+  map:
+    fields:
+    - name: apiVersion
+      type:
+        scalar: string
+    - name: kind
+      type:
+        scalar: string
+    - name: metadata
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta
+    - name: spec
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusSpec
+    - name: status
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusStatus
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusConfiguration
+  map:
+    fields:
+    - name: workQueue
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.WorkQueue
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusEnvironmentStatus
+  map:
+    fields:
+    - name: activeCommitStatuses
+      type:
+        list:
+          elementType:
+            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ChangeRequestPolicyCommitStatusPhase
+          elementRelationship: associative
+          keys:
+          - key
+    - name: branch
+      type:
+        scalar: string
+    - name: description
+      type:
+        scalar: string
+    - name: lastHealthyDry
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusWatermark
+    - name: phase
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.CommitStatusPhase
+    - name: reportedSha
+      type:
+        scalar: string
+    - name: upstreams
+      type:
+        list:
+          elementType:
+            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusUpstreamStatus
+          elementRelationship: atomic
+    - name: url
+      type:
+        scalar: string
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusSpec
+  map:
+    fields:
+    - name: key
+      type:
+        scalar: string
+    - name: promotionStrategyRef
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ObjectReference
+    - name: url
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.URLConfig
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusStatus
+  map:
+    fields:
+    - name: conditions
+      type:
+        list:
+          elementType:
+            namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Condition
+          elementRelationship: associative
+          keys:
+          - type
+    - name: environments
+      type:
+        list:
+          elementType:
+            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusEnvironmentStatus
+          elementRelationship: associative
+          keys:
+          - branch
+    - name: instanceID
+      type:
+        scalar: string
+    - name: observedGeneration
+      type:
+        scalar: numeric
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusUpstreamStatus
+  map:
+    fields:
+    - name: branch
+      type:
+        scalar: string
+    - name: reason
+      type:
+        scalar: string
+    - name: satisfied
+      type:
+        scalar: boolean
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ProgressiveOrderCommitStatusWatermark
+  map:
+    fields:
+    - name: commitTime
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Time
+    - name: observedAt
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Time
+    - name: sha
+      type:
+        scalar: string
 - name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.PromotionStrategy
   map:
     fields:

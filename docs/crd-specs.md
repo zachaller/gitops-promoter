@@ -148,6 +148,20 @@ fields (`phase`, `description`, `url`, `reportedSha`) when a child exists. See
 {!internal/controller/testdata/DependentsSuccessfulCommitStatus.yaml!}
 ```
 
+### ProgressiveOrderCommitStatus
+
+A ProgressiveOrderCommitStatus is an ordering gate for high-churn repositories. It resolves the dependency graph the
+same way as [DependentsSuccessfulCommitStatus](#dependentssuccessfulcommitstatus), but instead of requiring upstreams
+to be successful on the exact dry commit being promoted, it persists a per-environment progress watermark
+(`status.environments[].lastHealthyDry`) and lets an environment promote once every upstream has been healthy on a
+commit newer than the one the environment is running and no upstream is failing. Attach it with
+`PromotionStrategy.spec.orderCommitStatusRef` (`kind: ProgressiveOrderCommitStatus`). See
+[Progressive Order Commit Status](gating-promotions/built-in-gates/progressive-order-commit-status.md).
+
+```yaml
+{!internal/controller/testdata/ProgressiveOrderCommitStatus.yaml!}
+```
+
 ### ArgoCDCommitStatus
 
 An ArgoCDCommitStatus is used as a way to aggregate all the Argo CD Applications that are being used in the promotion strategy. It is used
