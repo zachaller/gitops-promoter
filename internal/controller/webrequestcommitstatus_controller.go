@@ -439,6 +439,9 @@ func (r *WebRequestCommitStatusReconciler) upsertCommitStatus(ctx context.Contex
 		WithDescription(description).
 		WithPhase(phase).
 		WithSha(sha)
+	if wrcs.Spec.PublishTo != nil {
+		commitStatusSpec = commitStatusSpec.WithPublishTo(*wrcs.Spec.PublishTo)
+	}
 
 	// Render URL template if present
 	if wrcs.Spec.UrlTemplate != "" {
@@ -508,7 +511,12 @@ func allowedHostsForScmProvider(spec *promoterv1alpha1.ScmProviderSpec) string {
 	case spec.Gitea != nil:
 		return spec.Gitea.Domain
 	case spec.BitbucketCloud != nil:
+		if spec.BitbucketCloud.Domain != "" {
+			return spec.BitbucketCloud.Domain
+		}
 		return "api.bitbucket.org"
+	case spec.BitbucketDataCenter != nil:
+		return spec.BitbucketDataCenter.Domain
 	case spec.AzureDevOps != nil:
 		if spec.AzureDevOps.Domain != "" {
 			return spec.AzureDevOps.Domain

@@ -40,7 +40,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	acmetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/ptr"
@@ -440,7 +439,7 @@ func (r *ChangeTransferPolicyReconciler) SetupWithManager(ctx context.Context, m
 			if ctpName == "" {
 				return nil
 			}
-			return []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: rc.Namespace, Name: ctpName}}}
+			return []reconcile.Request{{Namespace: rc.Namespace, Name: ctpName}}
 		}), builder.WithPredicates(predicate.Funcs{
 			CreateFunc: func(event.CreateEvent) bool { return true },
 			UpdateFunc: func(e event.UpdateEvent) bool {
@@ -1418,6 +1417,8 @@ func (r *ChangeTransferPolicyReconciler) createOrUpdatePullRequest(ctx context.C
 		prName = utils.GetPullRequestName(gitRepo.Spec.Fake.Owner, gitRepo.Spec.Fake.Name, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch)
 	case gitRepo.Spec.BitbucketCloud != nil:
 		prName = utils.GetPullRequestName(gitRepo.Spec.BitbucketCloud.Owner, gitRepo.Spec.BitbucketCloud.Name, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch)
+	case gitRepo.Spec.BitbucketDataCenter != nil:
+		prName = utils.GetPullRequestName(gitRepo.Spec.BitbucketDataCenter.Project, gitRepo.Spec.BitbucketDataCenter.Name, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch)
 	case gitRepo.Spec.AzureDevOps != nil:
 		prName = utils.GetPullRequestName(gitRepo.Spec.AzureDevOps.Project, gitRepo.Spec.AzureDevOps.Name, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch)
 	default:
@@ -1818,15 +1819,13 @@ func (r *ChangeTransferPolicyReconciler) ensureRestoreActiveCommitForRestoreTip(
 
 	name := utils.KubeSafeUniqueName(ctp.Name + "-restore-" + state.RestoredFrom)
 	rc := &promoterv1alpha1.RestoreActiveCommit{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ctp.Namespace,
-			Labels: utils.StampInstanceIDLabel(map[string]string{
-				promoterv1alpha1.PromotionStrategyLabel:    utils.KubeSafeLabel(ps.Name),
-				promoterv1alpha1.ChangeTransferPolicyLabel: utils.KubeSafeLabel(ctp.Name),
-				promoterv1alpha1.EnvironmentLabel:          utils.KubeSafeLabel(ctp.Spec.ActiveBranch),
-			}),
-		},
+		Name:      name,
+		Namespace: ctp.Namespace,
+		Labels: utils.StampInstanceIDLabel(map[string]string{
+			promoterv1alpha1.PromotionStrategyLabel:    utils.KubeSafeLabel(ps.Name),
+			promoterv1alpha1.ChangeTransferPolicyLabel: utils.KubeSafeLabel(ctp.Name),
+			promoterv1alpha1.EnvironmentLabel:          utils.KubeSafeLabel(ctp.Spec.ActiveBranch),
+		}),
 		Spec: promoterv1alpha1.RestoreActiveCommitSpec{
 			PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: ps.Name},
 			Branch:               ctp.Spec.ActiveBranch,
