@@ -53,6 +53,7 @@ import (
 	"github.com/argoproj-labs/gitops-promoter/internal/types/constants"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 	"github.com/argoproj-labs/gitops-promoter/internal/webhookreceiver"
+	"github.com/argoproj-labs/gitops-promoter/test/tracerecord"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -93,6 +94,7 @@ var (
 	k8sClientDev        client.Client
 	k8sClientStaging    client.Client
 	testEnv             *envtest.Environment
+	traceRecorder       *tracerecord.Recorder
 	testEnvDev          *envtest.Environment
 	testEnvStaging      *envtest.Environment
 	gitServer           *http.Server
@@ -141,6 +143,12 @@ var _ = BeforeSuite(func() {
 	By("bootstrapping test environments")
 	// Create a local test environment to test the single cluster functionality
 	testEnv, cfg, k8sClient = createAndStartTestEnv()
+
+	// PROMOTER_TRACE_DIR records every promotion for hack/formal/tracecheck. See hack/formal/README.md.
+	if os.Getenv("PROMOTER_TRACE_DIR") != "" {
+		traceRecorder, err = tracerecord.Start(cfg, "")
+		Expect(err).NotTo(HaveOccurred())
+	}
 
 	// Create a dev and staging test environment to test the multi cluster functionality
 	// for watching argocd applications in the other clusters
@@ -399,6 +407,13 @@ var _ = BeforeEach(func() {
 })
 
 var _ = AfterSuite(func() {
+	if traceRecorder != nil {
+		By("writing the recorded trace")
+		Expect(traceRecorder.Stop()).To(Succeed())
+		Expect(traceRecorder.WriteFile(filepath.Join(os.Getenv("PROMOTER_TRACE_DIR"),
+			fmt.Sprintf("envtest-%d.jsonl", GinkgoParallelProcess())))).To(Succeed())
+	}
+
 	By("tearing down the test environment")
 
 	cancel() // stops manager and anything else using the context

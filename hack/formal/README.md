@@ -6,7 +6,9 @@ either by random simulation or by bounded model checking with Apalache. `promote
 scripted runs through the model.
 
 It is a model, not the code. Each action names the Go function it stands for. When that function
-changes in a way that matters to the properties below, update the model too.
+changes in a way that matters to the properties below, update the model too. Trace validation (below)
+checks recorded runs of the real controllers against the model's decisions, so drift between the two
+shows up as a failing e2e job.
 
 ## What it models
 
@@ -25,9 +27,12 @@ Controllers act on what they read earlier. A ChangeTransferPolicy reconcile is s
 `ctpCompute` and `ctpAct`, and anything can happen in between. DependentsSuccessfulCommitStatus reads
 the PromotionStrategy status, which is itself an earlier copy of the ChangeTransferPolicy statuses.
 
+The controllers' decisions (`gateFor`, `upstreamCheck`, `upsertPullRequest`, `requestMerge`) and the
+order rule (`cleared*`, `orderKept`) are pure definitions in the module `logic`, which both the
+model and the trace checker import.
+
 Not modelled yet: RestoreActiveCommit and the revert gate, external (human) merges and closes, more
-than one proposed commit status key, commit-time comparisons, finalizers, history notes, controller
-restarts.
+than one proposed commit status key, finalizers, history notes, controller restarts.
 
 ## Properties
 
@@ -59,7 +64,8 @@ The same steps reproduced against the real controllers in envtest with the fake 
 
 `createOrUpdatePullRequest` now resets `spec.state` from `merged` to `open` whenever it moves
 `spec.mergeSha`, so `mergePullRequests` has to approve the new SHA again. If the commit statuses
-already pass, it does so in the same reconcile. This also covers conflict resolution, where the new
+already pass, it does so in the same reconcile, or the next one if its cache has not caught up with
+the PullRequest write yet. This also covers conflict resolution, where the new
 commit has the same content: the merge now waits for the conflict-resolution commit's statuses. The
 envtest regression test is "createOrUpdatePullRequest after the proposed branch moves past an
 approved merge" in `internal/controller/changetransferpolicy_controller_test.go`.
@@ -89,10 +95,48 @@ quint run promoter.qnt --main=linear --invariant=gatedMerge --max-samples=100000
 
 `--mbt` records the action and nondeterministic choices taken at each step in the ITF trace.
 
+## Trace validation
+
+`test/tracerecord` watches PromotionStrategies, ChangeTransferPolicies, PullRequests and
+CommitStatuses and records every change the API server stores. `hack/formal/tracecheck` orders the
+changes by resourceVersion (an etcd-backed API server assigns them from one counter), splits them into
+one trace per PromotionStrategy, numbers the SHAs the way the model does (dry SHAs in commit-time
+order), and renders each trace as a Quint module that runs `checkTrace` from `tracecheck.qnt`.
+
+`checkTrace` reports every recorded change the model cannot explain:
+
+| Rule              | Recorded change                                                         | What explains it                                                                                                   |
+|-------------------|-------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| `gate`            | a DependentsSuccessfulCommitStatus CommitStatus spec                    | `gateFor` on some PromotionStrategy status stored before it (the controller's cache may be stale, never ahead)    |
+| `pullRequestSpec` | a PullRequest created, or its `spec.state` or `spec.mergeSha` changed   | `upsertPullRequest` or `requestMerge` on that reconcile's ChangeTransferPolicy status and a PullRequest version the controller could have read |
+| `ungated`, `outOfOrder`, `rollback` | a merge on the SCM the PullRequest asked for          | the safety properties, on the facts recorded so far                                                              |
+
+Merges nobody asked for in `spec.state` (a person merged on the SCM) are counted but not checked. The
+check only covers what happened: a controller that did nothing is always explained.
+
+The e2e workflow sets `PROMOTER_TRACE_DIR`, so the SCM provider specs record the `scm-e2e` namespace,
+and then runs `make -C hack/formal check-traces`. The envtest controller suite records too when the
+variable is set:
+
+```shell
+export PROMOTER_TRACE_DIR=$(mktemp -d)
+make test                                  # or make test-e2e against a Kind cluster
+make -C hack/formal check-traces TRACE_DIR=$PROMOTER_TRACE_DIR
+```
+
+It prints, per PromotionStrategy, how many gate writes, PullRequest spec changes and merges it checked,
+and for a violation the rule, the environment and the recorded change. The generated modules are in
+`$PROMOTER_TRACE_DIR/quint`; each event there is commented with the object and resourceVersion it
+came from.
+
+Traces only see what reaches the API server, so the checker cannot tell which of several cached
+versions a controller read. It accepts any version that was stored and not yet superseded by the
+controller's own later write.
+
 ## Next steps
 
 * Model RestoreActiveCommit and the revert gate, and check that a pending restore blocks auto-merge.
 * Model external merges and closes, and human-set `spec.state`.
 * Check liveness: with green statuses and a hydrator that catches up, every environment eventually
   reaches the newest dry SHA.
-* Record traces from the e2e tests and check them against the model (trace validation).
+* Check ChangeTransferPolicy status writes against git, which the recorder cannot see yet.

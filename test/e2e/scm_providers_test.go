@@ -21,10 +21,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	"github.com/argoproj-labs/gitops-promoter/api/v1alpha1"
 	"github.com/argoproj-labs/gitops-promoter/internal/types/constants"
 	"github.com/argoproj-labs/gitops-promoter/test/scmserver"
+	"github.com/argoproj-labs/gitops-promoter/test/tracerecord"
 	"github.com/argoproj-labs/gitops-promoter/test/utils"
 )
 
@@ -176,6 +178,21 @@ func scmProviderSpecs() {
 
 		run(ctx, "", "kubectl", "create", "ns", scmE2ENamespace)
 		DeferCleanup(kubectlIgnoringErrors, "delete", "ns", scmE2ENamespace, "--ignore-not-found", "--wait=false")
+
+		// PROMOTER_TRACE_DIR records every promotion for hack/formal/tracecheck, which CI runs after the suite.
+		// Registered after the namespace's cleanup, so it stops before the namespace is deleted.
+		if traceDir := os.Getenv("PROMOTER_TRACE_DIR"); traceDir != "" {
+			By("recording the promotions for trace validation")
+			cfg, err := config.GetConfig()
+			Expect(err).NotTo(HaveOccurred())
+			recorder, err := tracerecord.Start(cfg, scmE2ENamespace)
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(func() {
+				Expect(recorder.Stop()).To(Succeed())
+				Expect(os.MkdirAll(traceDir, 0o755)).To(Succeed())
+				Expect(recorder.WriteFile(filepath.Join(traceDir, "e2e-scm-providers.jsonl"))).To(Succeed())
+			})
+		}
 	}, NodeTimeout(15*time.Minute))
 
 	// AfterEach rather than DeferCleanup: the enclosing container's AfterAll removes the controller before
