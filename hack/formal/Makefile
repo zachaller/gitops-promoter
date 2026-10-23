@@ -23,5 +23,5 @@ witnesses: ## Each witness must be violated, which shows the runs reach full pro
 	! $(QUINT) run promoter.qnt --main=diamondReset --invariant=witnessLastEnvGetsNewestDry --max-samples=$(SAMPLES) --max-steps=$(STEPS) --verbosity=0
 	! $(QUINT) run promoter.qnt --main=linearReset --invariant=witnessNoopPassThrough --max-samples=$(SAMPLES) --max-steps=$(STEPS) --verbosity=0
 
-verify: ## Bounded model checking with Apalache (needs Java 17+; slow).
-	$(QUINT) verify promoter.qnt --main=linearReset --invariant=safety --max-steps=$(or $(VERIFY_STEPS),8)
+verify: ## Bounded model checking with Apalache (needs Java 17+). 4 steps take under a minute; 8 did not finish in 30.
+	$(QUINT) verify promoter.qnt --main=linearReset --invariant=safety --max-steps=$(or $(VERIFY_STEPS),4)

@@ -74,7 +74,7 @@ Quint 0.33 runs through `npx`. Apalache needs Java 17 or newer and is fetched by
 
 ```shell
 make -C hack/formal check     # typecheck, scripted tests, simulation, witnesses
-make -C hack/formal verify    # bounded model checking with Apalache, VERIFY_STEPS=8 by default
+make -C hack/formal verify    # bounded model checking with Apalache, VERIFY_STEPS=4 by default
 ```
 
 Useful while changing the model:
