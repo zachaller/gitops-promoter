@@ -40,10 +40,10 @@ restarts.
 `safety` is all three. The `witness*` properties are meant to be violated. Violating them shows that
 runs reach full promotions and no-op pass-throughs, which a model where nothing ever merges would not.
 
-## Finding: a refreshed `spec.mergeSha` merges a commit nothing approved
+## Finding (fixed): a refreshed `spec.mergeSha` merged a commit nothing approved
 
 `mergeShaRefreshPromotesUngatedDryTest` in `promoter_test.qnt` breaks `gatedMerge` and
-`promotionOrder` in the model of the current code:
+`promotionOrder` in the model of the code before the fix:
 
 1. stg's order gate approves the commit hydrated from dry 1, and `mergePullRequests` sets the
    PullRequest's `spec.state` to `merged`.
@@ -55,18 +55,20 @@ runs reach full promotions and no-op pass-throughs, which a model where nothing 
    already `merged`.
 4. The PullRequest controller merges the dry-2 commit. dev never had dry 2.
 
-The same steps reproduce against the real controllers in envtest with the fake SCM: the active
-branch's merge commit has the unapproved SHA as its second parent.
+The same steps reproduced against the real controllers in envtest with the fake SCM.
 
-Moving `spec.mergeSha` on an approved PullRequest is deliberate after conflict resolution, where the
-new commit has the same content (see the comment in `createOrUpdatePullRequest`). The models with
-`RESET_MERGE_ON_NEW_SHA = true` reset `spec.state` to `open` whenever `spec.mergeSha` changes, so
-`mergePullRequests` has to approve the new SHA again. In the same reconcile it does, if the gate is
-already green. `resetPreventsUngatedMergeTest` replays the steps against that variant, and random
-simulation of the linear and diamond graphs finds no violation of `safety`.
+`createOrUpdatePullRequest` now resets `spec.state` from `merged` to `open` whenever it moves
+`spec.mergeSha`, so `mergePullRequests` has to approve the new SHA again. If the commit statuses
+already pass, it does so in the same reconcile. This also covers conflict resolution, where the new
+commit has the same content: the merge now waits for the conflict-resolution commit's statuses. The
+envtest regression test is "createOrUpdatePullRequest after the proposed branch moves past an
+approved merge" in `internal/controller/changetransferpolicy_controller_test.go`.
 
-Random simulation of the current-code model rarely hits this interleaving. That is why it has a
-scripted test.
+The models with `RESET_MERGE_ON_NEW_SHA = true` (`linearReset`, `diamondReset`) match the code now.
+`resetPreventsUngatedMergeTest` replays the steps against them, and random simulation of the linear
+and diamond graphs finds no violation of `safety`. `linear` keeps the code as it was before the fix.
+
+Random simulation of `linear` rarely hits this interleaving. That is why it has a scripted test.
 
 ## Running
 

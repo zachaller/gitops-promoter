@@ -38,8 +38,8 @@ module promoter {
   const DEPENDS: str -> Set[str]
   // Dry commits are numbered 0 (already everywhere at the start) up to MAX_DRY.
   const MAX_DRY: int
-  // false: createOrUpdatePullRequest keeps spec.state when it moves spec.mergeSha, as the code
-  // does today. true: it resets spec.state to open whenever spec.mergeSha changes.
+  // true: createOrUpdatePullRequest resets spec.state from merged to open whenever it moves
+  // spec.mergeSha, as the code does. false: it keeps spec.state, as the code did before that fix.
   const RESET_MERGE_ON_NEW_SHA: bool
 
   // ----------------------------------------------------------------------------------------------
@@ -470,7 +470,7 @@ module promoter {
   val witnessNoopPassThrough = everNoop.size() == 0
 }
 
-// dev -> stg -> prd, the linear chain inferred from spec.environments order.
+// dev -> stg -> prd, the linear chain inferred from spec.environments order, before the fix.
 module linear {
   import promoter(
     ENVS = Set("dev", "stg", "prd"),
@@ -480,7 +480,8 @@ module linear {
   ).*
 }
 
-// The same chain with createOrUpdatePullRequest resetting spec.state when spec.mergeSha changes.
+// The same chain with createOrUpdatePullRequest resetting spec.state when spec.mergeSha changes,
+// as the code does now.
 module linearReset {
   import promoter(
     ENVS = Set("dev", "stg", "prd"),

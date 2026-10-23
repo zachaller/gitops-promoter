@@ -4075,6 +4075,184 @@ var _ = Describe("createOrUpdatePullRequest with a merged or terminating PullReq
 	})
 })
 
+// Regression test for a merge request outliving the SHA it was approved for. mergePullRequests set
+// spec.state=merged for a proposed commit whose commit statuses all passed, then a newer hydrated commit
+// landed on the proposed branch before the SCM merged, so the SCM refused the stale mergeSha. The next
+// reconcile moved spec.mergeSha to the newer commit and kept spec.state=merged, and the PullRequest
+// controller merged a commit whose commit statuses were still pending. Found with the Quint model in
+// hack/formal (mergeShaRefreshPromotesUngatedDryTest).
+var _ = Describe("createOrUpdatePullRequest after the proposed branch moves past an approved merge", func() {
+	const gateKey = "dependents-successful"
+
+	var name string
+	var scmSecret *v1.Secret
+	var scmProvider *promoterv1alpha1.ScmProvider
+	var gitRepo *promoterv1alpha1.GitRepository
+	var ctp *promoterv1alpha1.ChangeTransferPolicy
+	var prKey types.NamespacedName
+	var gitPath string
+	var gitOps *git.EnvironmentOperations
+
+	gitCmd := func(args ...string) string {
+		GinkgoHelper()
+		out, err := runGitCmd(ctx, gitPath, args...)
+		Expect(err).NotTo(HaveOccurred())
+		return strings.TrimSpace(out)
+	}
+	pushProposedCommit := func(message string) string {
+		GinkgoHelper()
+		gitCmd("-c", "user.name=testuser", "-c", "user.email=testemail@test.com", "commit", "--allow-empty", "-m", message)
+		gitCmd("push", "origin", ctp.Spec.ProposedBranch)
+		return gitCmd("rev-parse", ctp.Spec.ProposedBranch)
+	}
+	activeTip := func() string {
+		GinkgoHelper()
+		gitCmd("fetch", "origin", ctp.Spec.ActiveBranch)
+		return gitCmd("rev-parse", "origin/"+ctp.Spec.ActiveBranch)
+	}
+
+	BeforeEach(func() {
+		name, scmSecret, scmProvider, gitRepo, _, ctp = changeTransferPolicyResources(ctx, "ctp-moved-past-approval", "default")
+		ctp.Spec.ProposedBranch = testBranchDevelopmentNext
+		ctp.Spec.ActiveBranch = testBranchDevelopment
+		ctp.Spec.ProposedCommitStatuses = []promoterv1alpha1.CommitStatusSelector{{Key: gateKey}}
+		ctp.Spec.AutoMerge = new(true)
+
+		Expect(k8sClient.Create(ctx, scmSecret)).To(Succeed())
+		Expect(k8sClient.Create(ctx, scmProvider)).To(Succeed())
+		Expect(k8sClient.Create(ctx, gitRepo)).To(Succeed())
+
+		var err error
+		gitPath, err = os.MkdirTemp("", "*")
+		Expect(err).NotTo(HaveOccurred())
+		gitCmd("clone", testGitRepoCloneURL(gitRepo), ".")
+		gitCmd("checkout", "-b", ctp.Spec.ActiveBranch, "origin/"+ctp.Spec.ProposedBranch)
+		gitCmd("push", "origin", ctp.Spec.ActiveBranch)
+		gitCmd("checkout", ctp.Spec.ProposedBranch)
+
+		prName := utils.KubeSafeUniqueName(scmTarget.prName(gitRepo, ctp.Spec.ProposedBranch, ctp.Spec.ActiveBranch))
+		prKey = types.NamespacedName{Name: prName, Namespace: "default"}
+
+		// As in the merged-PullRequest tests above, the CTP is not created in the cluster so the live CTP
+		// controller cannot interleave; the methods under test are called directly.
+		ctp.UID = types.UID("33333333-3333-3333-3333-333333333333")
+		gitOps = git.NewEnvironmentOperations(gitRepo, &localGitProvider{repoPath: gitPath}, "default/"+name)
+	})
+
+	AfterEach(func() {
+		Eventually(func(g Gomega) {
+			var livePR promoterv1alpha1.PullRequest
+			err := k8sClient.Get(ctx, prKey, &livePR)
+			if errors.IsNotFound(err) {
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+			livePR.Finalizers = nil
+			g.Expect(k8sClient.Update(ctx, &livePR)).To(Succeed())
+			g.Expect(ctrlclient.IgnoreNotFound(k8sClient.Delete(ctx, &livePR))).To(Succeed())
+		}, constants.EventuallyTimeout).Should(Succeed())
+		Expect(k8sClient.Delete(ctx, gitRepo)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, scmProvider)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, scmSecret)).To(Succeed())
+		if gitOps != nil {
+			_ = gitOps.RemoveClone()
+		}
+		_ = os.RemoveAll(gitPath)
+	})
+
+	It("does not merge the newer commit until its commit statuses pass", func() {
+		approvedSha := pushProposedCommit("hydrated from the approved dry commit")
+
+		By("Opening the PullRequest for the approved commit")
+		Expect(k8sClient.Create(ctx, &promoterv1alpha1.PullRequest{
+			Name:       prKey.Name,
+			Namespace:  prKey.Namespace,
+			Finalizers: []string{promoterv1alpha1.ChangeTransferPolicyPullRequestFinalizer},
+			Spec: promoterv1alpha1.PullRequestSpec{
+				RepositoryReference: promoterv1alpha1.ObjectReference{Name: name},
+				Title:               "promote the approved dry commit",
+				TargetBranch:        ctp.Spec.ActiveBranch,
+				SourceBranch:        ctp.Spec.ProposedBranch,
+				Commit:              promoterv1alpha1.CommitConfiguration{Message: "promote the approved dry commit"},
+				MergeSha:            approvedSha,
+				State:               promoterv1alpha1.PullRequestOpen,
+			},
+		})).To(Succeed())
+		Eventually(func(g Gomega) {
+			var livePR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, prKey, &livePR)).To(Succeed())
+			g.Expect(livePR.Status.ID).NotTo(BeEmpty())
+		}, constants.EventuallyTimeout).Should(Succeed())
+
+		By("Pushing a newer hydrated commit before the SCM merges the approved one")
+		newerSha := pushProposedCommit("hydrated from a newer dry commit")
+		activeBefore := activeTip()
+
+		By("Requesting the merge of the approved commit, which the SCM refuses because the branch moved")
+		Eventually(func(g Gomega) {
+			var livePR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, prKey, &livePR)).To(Succeed())
+			livePR.Spec.State = promoterv1alpha1.PullRequestMerged
+			g.Expect(k8sClient.Update(ctx, &livePR)).To(Succeed())
+		}, constants.EventuallyTimeout).Should(Succeed())
+		Eventually(func(g Gomega) {
+			var livePR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, prKey, &livePR)).To(Succeed())
+			ready := meta.FindStatusCondition(livePR.Status.Conditions, string(promoterConditions.Ready))
+			g.Expect(ready).NotTo(BeNil())
+			g.Expect(ready.ObservedGeneration).To(Equal(livePR.Generation))
+			g.Expect(ready.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(livePR.Status.State).To(Equal(promoterv1alpha1.PullRequestOpen))
+		}, constants.EventuallyTimeout).Should(Succeed())
+
+		By("Reconciling the newer commit while its commit statuses are pending")
+		reconciler := &ChangeTransferPolicyReconciler{
+			Client:      k8sClient,
+			Scheme:      k8sClient.Scheme(),
+			Recorder:    events.NewFakeRecorder(100),
+			SettingsMgr: settings.NewManager(k8sClient, k8sClient, settings.ManagerConfig{ControllerNamespace: "default"}),
+		}
+		Expect(gitOps.CloneRepo(ctx)).To(Succeed())
+		Expect(gitOps.FetchNotes(ctx)).To(Succeed())
+		ctp.Status.Active.Dry.Sha = strings.Repeat("c", 40)
+		ctp.Status.Active.Hydrated.Sha = activeBefore
+		ctp.Status.Proposed.Dry.Sha = strings.Repeat("e", 40)
+		ctp.Status.Proposed.Hydrated.Sha = newerSha
+		ctp.Status.Proposed.CommitStatuses = []promoterv1alpha1.ChangeRequestPolicyCommitStatusPhase{
+			{Key: gateKey, Phase: string(promoterv1alpha1.CommitPhasePending)},
+		}
+		_, err := reconciler.createOrUpdatePullRequest(ctx, ctp, gitOps, revertGate{})
+		Expect(err).NotTo(HaveOccurred())
+		_, err = reconciler.mergePullRequests(ctx, ctp, revertGate{})
+		Expect(err).NotTo(HaveOccurred())
+
+		var livePR promoterv1alpha1.PullRequest
+		Expect(k8sClient.Get(ctx, prKey, &livePR)).To(Succeed())
+		Expect(livePR.Spec.MergeSha).To(Equal(newerSha))
+		Expect(livePR.Spec.State).To(Equal(promoterv1alpha1.PullRequestOpen),
+			"the merge request was for %s; %s has not passed its commit statuses", approvedSha, newerSha)
+		Consistently(func(g Gomega) {
+			var livePR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, prKey, &livePR)).To(Succeed())
+			g.Expect(livePR.Status.State).To(Equal(promoterv1alpha1.PullRequestOpen))
+		}, 3*time.Second).Should(Succeed())
+		Expect(activeTip()).To(Equal(activeBefore))
+
+		By("Merging the newer commit once its commit statuses pass")
+		ctp.Status.Proposed.CommitStatuses[0].Phase = string(promoterv1alpha1.CommitPhaseSuccess)
+		Eventually(func(g Gomega) {
+			_, err := reconciler.createOrUpdatePullRequest(ctx, ctp, gitOps, revertGate{})
+			g.Expect(err).NotTo(HaveOccurred())
+			_, err = reconciler.mergePullRequests(ctx, ctp, revertGate{})
+			g.Expect(err).NotTo(HaveOccurred())
+			var livePR promoterv1alpha1.PullRequest
+			g.Expect(k8sClient.Get(ctx, prKey, &livePR)).To(Succeed())
+			g.Expect(livePR.Status.State).To(Equal(promoterv1alpha1.PullRequestMerged))
+		}, constants.EventuallyTimeout).Should(Succeed())
+		Expect(gitCmd("rev-list", "--parents", "-n", "1", activeTip())).To(ContainSubstring(newerSha))
+	})
+})
+
 var _ = Describe("commit status description trailers", func() {
 	var ctx context.Context
 

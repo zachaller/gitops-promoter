@@ -1505,7 +1505,7 @@ func (r *ChangeTransferPolicyReconciler) createOrUpdatePullRequest(ctx context.C
 	// Determine the state: preserve existing state if PR exists, otherwise default to open
 	prState := promoterv1alpha1.PullRequestOpen
 	if prExists {
-		prState = existingPR.Spec.State
+		prState = pullRequestSpecStateForMergeSha(ctx, existingPR, ctp.Status.Proposed.Hydrated.Sha)
 	}
 
 	desiredLabels, manageLabels, err := r.evaluatePullRequestLabels(ctp, ps)
@@ -1569,6 +1569,19 @@ func (r *ChangeTransferPolicyReconciler) createOrUpdatePullRequest(ctx context.C
 	}
 
 	return pr, nil
+}
+
+// pullRequestSpecStateForMergeSha returns the spec.state to keep on an existing PullRequest whose spec.mergeSha
+// is about to become mergeSha. A merge request only covers the mergeSha whose commit statuses mergePullRequests
+// checked. If the proposed branch moved before the SCM merged (a newer hydrated commit, or conflict resolution),
+// the request is taken back so mergePullRequests checks the new SHA's commit statuses before merging it.
+func pullRequestSpecStateForMergeSha(ctx context.Context, existingPR *promoterv1alpha1.PullRequest, mergeSha string) promoterv1alpha1.PullRequestState {
+	if existingPR.Spec.State != promoterv1alpha1.PullRequestMerged || existingPR.Spec.MergeSha == mergeSha {
+		return existingPR.Spec.State
+	}
+	log.FromContext(ctx).Info("Proposed branch moved after the merge was requested; requiring commit statuses for the new SHA before merging",
+		"pullRequest", existingPR.Name, "approvedSha", existingPR.Spec.MergeSha, "proposedSha", mergeSha)
+	return promoterv1alpha1.PullRequestOpen
 }
 
 func ctpStatusShowsPullRequestExists(ctp *promoterv1alpha1.ChangeTransferPolicy) bool {

@@ -3,9 +3,10 @@
 // Scripted runs through the promoter model. `quint test` runs every `run` whose name ends in Test.
 //
 // mergeShaRefreshPromotesUngatedDryTest replays a counterexample to gatedMerge and promotionOrder
-// in the model of the current code: stg merges dry commit 2 although its order gate only approved
-// dry commit 1 and dev never had dry commit 2. resetPreventsUngatedMergeTest replays the same
-// steps against the model with RESET_MERGE_ON_NEW_SHA = true, where the merge does not happen.
+// in the model of the code before the fix: stg merges dry commit 2 although its order gate only
+// approved dry commit 1 and dev never had dry commit 2. resetPreventsUngatedMergeTest replays the
+// same steps against the model of the code now (RESET_MERGE_ON_NEW_SHA = true), where the merge
+// does not happen.
 
 module stepsCurrent {
   import promoter(
