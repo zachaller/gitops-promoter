@@ -669,6 +669,9 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: instanceID
       type:
         scalar: string
+    - name: kubernetesResourceCommitStatus
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourceCommitStatusConfiguration
     - name: metrics
       type:
         namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.MetricsConfiguration
@@ -1278,6 +1281,150 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: subject
       type:
         scalar: string
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourceCommitStatus
+  map:
+    fields:
+    - name: apiVersion
+      type:
+        scalar: string
+    - name: kind
+      type:
+        scalar: string
+    - name: metadata
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta
+    - name: spec
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourceCommitStatusSpec
+    - name: status
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourceCommitStatusStatus
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourceCommitStatusConfiguration
+  map:
+    fields:
+    - name: templates
+      type:
+        list:
+          elementType:
+            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ResourceTemplateSource
+          elementRelationship: atomic
+    - name: workQueue
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.WorkQueue
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourceCommitStatusEnvironmentStatus
+  map:
+    fields:
+    - name: branch
+      type:
+        scalar: string
+    - name: description
+      type:
+        scalar: string
+    - name: lastEvaluationTime
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Time
+    - name: phase
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.CommitStatusPhase
+    - name: reportedSha
+      type:
+        scalar: string
+    - name: resource
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourceReference
+    - name: resourceExists
+      type:
+        scalar: boolean
+    - name: url
+      type:
+        scalar: string
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourceCommitStatusSpec
+  map:
+    fields:
+    - name: descriptionTemplate
+      type:
+        scalar: string
+    - name: historyLimit
+      type:
+        scalar: numeric
+      default: 0
+    - name: key
+      type:
+        scalar: string
+    - name: phase
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourcePhaseSpec
+    - name: pollInterval
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Duration
+      default: 30s
+    - name: promotionStrategyRef
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ObjectReference
+    - name: publishTo
+      type:
+        list:
+          elementType:
+            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.CommitStatusPublishTo
+          elementRelationship: associative
+      default:
+      - scm
+    - name: reportOn
+      type:
+        scalar: string
+      default: proposed
+    - name: templateRef
+      type:
+        namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ResourceTemplateReference
+    - name: urlTemplate
+      type:
+        scalar: string
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourceCommitStatusStatus
+  map:
+    fields:
+    - name: conditions
+      type:
+        list:
+          elementType:
+            namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Condition
+          elementRelationship: associative
+          keys:
+          - type
+    - name: environments
+      type:
+        list:
+          elementType:
+            namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourceCommitStatusEnvironmentStatus
+          elementRelationship: associative
+          keys:
+          - branch
+    - name: instanceID
+      type:
+        scalar: string
+    - name: observedGeneration
+      type:
+        scalar: numeric
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourcePhaseSpec
+  map:
+    fields:
+    - name: expression
+      type:
+        scalar: string
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.KubernetesResourceReference
+  map:
+    fields:
+    - name: apiVersion
+      type:
+        scalar: string
+    - name: kind
+      type:
+        scalar: string
+    - name: name
+      type:
+        scalar: string
+    - name: namespace
+      type:
+        scalar: string
 - name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.MetricLabelMode
   scalar: string
 - name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.MetricsConfiguration
@@ -1619,6 +1766,30 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: fastSlow
       type:
         namedType: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.FastSlow
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ResourceTemplateReference
+  map:
+    fields:
+    - name: kind
+      type:
+        scalar: string
+    - name: name
+      type:
+        scalar: string
+- name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ResourceTemplateSource
+  map:
+    fields:
+    - name: group
+      type:
+        scalar: string
+    - name: kind
+      type:
+        scalar: string
+    - name: templateKind
+      type:
+        scalar: string
+    - name: version
+      type:
+        scalar: string
 - name: com.github.argoproj-labs.gitops-promoter.api.v1alpha1.ResponseOutputSpec
   map:
     fields:

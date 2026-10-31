@@ -130,6 +130,7 @@ promoter_crds = [
     'dependentssuccessfulcommitstatuses.promoter.argoproj.io',
     'gitcommitstatuses.promoter.argoproj.io',
     'gitrepositories.promoter.argoproj.io',
+    'kubernetesresourcecommitstatuses.promoter.argoproj.io',
     'promotionstrategies.promoter.argoproj.io',
     'pullrequests.promoter.argoproj.io',
     'restoreactivecommits.promoter.argoproj.io',

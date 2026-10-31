@@ -96,6 +96,26 @@ failure; the up-to-date failure message stays visible on the resource's Ready co
 | Warning    | CommitStatusesNotReady   | One or more of the [CommitStatus](../crd-specs.md#commitstatus) resources managed by this WebRequestCommitStatus is not Ready. |
 | Normal     | OrphanedCommitStatusDeleted | An orphaned [CommitStatus](../crd-specs.md#commitstatus) was deleted after it no longer applied (e.g., environment removed). |
 
+## KubernetesResourceCommitStatus
+
+[KubernetesResourceCommitStatuses](../crd-specs.md#kubernetesresourcecommitstatus) may produce the following events:
+
+| Event Type | Event Reason             | Description                                                                                                                   |
+|------------|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| Normal     | KubernetesResourceCreated | A resource was created from the referenced template for an environment and SHA.                                             |
+| Normal     | KubernetesResourceDeleted | A resource created for a superseded SHA was deleted (see `spec.historyLimit`).                                               |
+| Normal/Warning | CommitStatusPhaseChanged | The phase computed from the live resource changed for an environment. Warning when the new phase is `failure`.          |
+| Warning    | CommitStatusesNotReady   | One or more of the [CommitStatus](../crd-specs.md#commitstatus) resources managed by this KubernetesResourceCommitStatus is not Ready. |
+| Normal     | OrphanedCommitStatusDeleted | An orphaned [CommitStatus](../crd-specs.md#commitstatus) was deleted after it no longer applied (e.g., environment removed). |
+
+## ControllerConfiguration
+
+[ControllerConfigurations](../crd-specs.md#controllerconfiguration) may produce the following events:
+
+| Event Type | Event Reason          | Description                                                                                                                      |
+|------------|-----------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| Warning    | TemplateCRDSyncFailed | A wrapped template CRD listed in `spec.kubernetesResourceCommitStatus.templates` could not be generated, for example because the source kind is not installed. |
+
 ## CommitStatus
 
 [CommitStatuses](../crd-specs.md#commitstatus) may produce the following events:

@@ -91,7 +91,10 @@ The `-namespaced` release bundles use this mode. See [Installation](../getting-s
 
 * Only resources in the install namespace are reconciled, including CommitStatuses. PromotionStrategies cannot be gated
   by CommitStatuses in other namespaces (see [CommitStatus Tenancy](#commitstatus-tenancy)).
-* CRDs are cluster-scoped and must still be installed by a cluster administrator.
+* CRDs are cluster-scoped and must still be installed by a cluster administrator. This includes the wrapped
+  template CRDs that `ControllerConfiguration.spec.kubernetesResourceCommitStatus.templates` would generate: the
+  fully isolated install cannot create them, so leave the list empty or grant CRD permissions separately (see
+  [Kubernetes Resource Commit Status](../gating-promotions/built-in-gates/kubernetes-resource-commit-status.md#rbac)).
 * The dashboard API is registered cluster-wide and requires cluster-scoped permissions for authentication. Only one
   dashboard API can be installed per cluster.
 

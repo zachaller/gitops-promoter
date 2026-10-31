@@ -39,6 +39,7 @@ var _ = Describe("GateCommitStatusKinds", func() {
 			"TimedCommitStatus",
 			"WebRequestCommitStatus",
 			"ScheduledCommitStatus",
+			"KubernetesResourceCommitStatus",
 		} {
 			Expect(got).To(HaveKey(want),
 				"%s missing from GateCommitStatusKinds. Ensure Spec has PromotionStrategyRef and the type is "+

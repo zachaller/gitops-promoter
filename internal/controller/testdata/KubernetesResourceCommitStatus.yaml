@@ -1,0 +1,66 @@
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: KubernetesResourceCommitStatus
+metadata:
+  name: smoke-test
+  namespace: default
+spec:
+  promotionStrategyRef:
+    name: example-promotion-strategy
+  # Matched against proposedCommitStatuses / activeCommitStatuses key in PromotionStrategy
+  key: smoke-test
+  # proposed (default) creates the resource for the proposed hydrated SHA; active for the deployed SHA
+  reportOn: proposed
+  # A JobTemplate (templates.promoter.argoproj.io) in the same namespace; the kind must be listed in
+  # ControllerConfiguration.spec.kubernetesResourceCommitStatus.templates
+  templateRef:
+    kind: JobTemplate
+    name: smoke-test
+  # expr expression over the live resource; returns success, pending, or failure (or a bool)
+  phase:
+    expression: >-
+      Resource == nil ? 'pending'
+        : (Resource.status?.succeeded ?? 0) > 0 ? 'success'
+        : (Resource.status?.failed ?? 0) > 0 ? 'failure'
+        : 'pending'
+  descriptionTemplate: "Smoke test {{ .ResourceName }} is {{ .Phase }} for {{ .Branch }} ({{ .ShortSha }})"
+  urlTemplate: "https://dashboard.example.com/jobs/{{ .Namespace }}/{{ .ResourceName }}"
+  # How often the live resource is re-read while an environment is pending
+  pollInterval: 30s
+  # Resources of superseded SHAs to keep per environment (the current SHA's resource is always kept)
+  historyLimit: 1
+  # Optional. Destinations copied onto each CommitStatus. Default is [scm]. An empty list keeps them in Kubernetes only.
+  publishTo:
+    - scm
+status:
+  observedGeneration: 1
+  environments:
+    - branch: environment/development
+      phase: success
+      description: Smoke test smoke-test-environment-development-abc1234-2f0a8c1e is success for environment/development (abc1234)
+      url: https://dashboard.example.com/jobs/default/smoke-test-environment-development-abc1234-2f0a8c1e
+      reportedSha: abc1234567890abc1234567890abc1234567890a
+      resource:
+        apiVersion: batch/v1
+        kind: Job
+        namespace: default
+        name: smoke-test-environment-development-abc1234-2f0a8c1e
+      resourceExists: true
+      lastEvaluationTime: "2026-07-07T10:00:00Z"
+    - branch: environment/staging
+      phase: pending
+      description: Smoke test smoke-test-environment-staging-def4567-9b3c2d1a is pending for environment/staging (def4567)
+      reportedSha: def4567890abc1234567890abc1234567890abcd
+      resource:
+        apiVersion: batch/v1
+        kind: Job
+        namespace: default
+        name: smoke-test-environment-staging-def4567-9b3c2d1a
+      resourceExists: true
+      lastEvaluationTime: "2026-07-07T10:00:00Z"
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: ReconciliationSuccess
+      message: Reconciliation succeeded
+      lastTransitionTime: "2026-07-07T10:00:00Z"
+      observedGeneration: 1

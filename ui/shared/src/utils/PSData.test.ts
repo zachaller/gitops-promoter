@@ -54,6 +54,15 @@ function scheduled(key: string, branches: string[]) {
   } as unknown as NonNullable<CommitStatusManagerBundle['scheduledCommitStatuses']>[number];
 }
 
+function kubernetesResource(key: string, branches: string[]) {
+  return {
+    spec: { key, promotionStrategyRef: { name: 'my-strategy' } },
+    status: { environments: branches.map((branch) => ({ branch, phase: 'pending' })) },
+  } as unknown as NonNullable<
+    CommitStatusManagerBundle['kubernetesResourceCommitStatuses']
+  >[number];
+}
+
 function webRequest(key: string, branches: string[]) {
   return {
     spec: { key, promotionStrategyRef: { name: 'my-strategy' } },
@@ -111,6 +120,7 @@ describe('mergeCommitStatusManagers - branch-scoped manager matching', () => {
     ['ScheduledCommitStatus', 'scheduledCommitStatuses', scheduled],
     ['WebRequestCommitStatus', 'webRequestCommitStatuses', webRequest],
     ['DependentsSuccessfulCommitStatus', 'dependentsSuccessfulCommitStatuses', dependents],
+    ['KubernetesResourceCommitStatus', 'kubernetesResourceCommitStatuses', kubernetesResource],
   ] as const)('%s', (kind, bundleKey, make) => {
     it('matches on spec.key plus a status.environments entry for the branch', () => {
       const manager = make('gate', [OTHER_BRANCH, BRANCH]);

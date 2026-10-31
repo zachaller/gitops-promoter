@@ -68,6 +68,7 @@ var _ = Describe("When ControllerConfiguration.spec.instanceID drifts from boots
 		Entry("CommitStatus", setupInstanceIDDriftCommitStatus),
 		Entry("TimedCommitStatus", setupInstanceIDDriftTimedCommitStatus),
 		Entry("ScheduledCommitStatus", setupInstanceIDDriftScheduledCommitStatus),
+		Entry("KubernetesResourceCommitStatus", setupInstanceIDDriftKubernetesResourceCommitStatus),
 		Entry("GitCommitStatus", setupInstanceIDDriftGitCommitStatus),
 		Entry("WebRequestCommitStatus", setupInstanceIDDriftWebRequestCommitStatus),
 		Entry("ArgoCDCommitStatus", setupInstanceIDDriftArgoCDCommitStatus),
@@ -295,6 +296,22 @@ func setupInstanceIDDriftScheduledCommitStatus(ctx context.Context) (utils.Promo
 	}
 	Expect(k8sClient.Create(ctx, scs)).To(Succeed())
 	return scs, key, func() { deleteIgnoringNotFound(ctx, scs) }
+}
+
+func setupInstanceIDDriftKubernetesResourceCommitStatus(ctx context.Context) (utils.PromoterResource, types.NamespacedName, func()) {
+	name := instanceIDDriftResourceName("KubernetesResourceCommitStatus")
+	key := types.NamespacedName{Name: name, Namespace: "default"}
+	krcs := &promoterv1alpha1.KubernetesResourceCommitStatus{
+		Name: name, Namespace: "default",
+		Spec: promoterv1alpha1.KubernetesResourceCommitStatusSpec{
+			PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: name + "-ps"},
+			Key:                  "instance-id-drift",
+			TemplateRef:          promoterv1alpha1.ResourceTemplateReference{Kind: "ConfigMapTemplate", Name: name},
+			Phase:                promoterv1alpha1.KubernetesResourcePhaseSpec{Expression: "Resource != nil"},
+		},
+	}
+	Expect(k8sClient.Create(ctx, krcs)).To(Succeed())
+	return krcs, key, func() { deleteIgnoringNotFound(ctx, krcs) }
 }
 
 func setupInstanceIDDriftGitCommitStatus(ctx context.Context) (utils.PromoterResource, types.NamespacedName, func()) {

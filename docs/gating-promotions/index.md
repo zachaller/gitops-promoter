@@ -158,7 +158,7 @@ publishTo: []
 Omitting the field is not an empty list. The default fills in `[scm]`. The controller posts to the SCM when `scm` is in the list. Promotion gates use the phase in every case.
 
 Every built-in gate (`ArgoCDCommitStatus`, `DependentsSuccessfulCommitStatus`, `GitCommitStatus`,
-`ScheduledCommitStatus`, `TimedCommitStatus`, and `WebRequestCommitStatus`) also has **`spec.publishTo`**. The gate
+`KubernetesResourceCommitStatus`, `ScheduledCommitStatus`, `TimedCommitStatus`, and `WebRequestCommitStatus`) also has **`spec.publishTo`**. The gate
 copies the list to every CommitStatus it creates.
 
 Use `publishTo: []` when a status in the SCM would block the check it watches. For example, a GitLab "Pipelines must succeed" rule
@@ -273,6 +273,18 @@ Key features:
 - **Templated URL, headers, body:** Go templates with `Branch`, `Phase`, `PromotionStrategy`, `WebRequestCommitStatus`, `TriggerOutput`, `ResponseOutput`, `SuccessOutput`, namespace metadata, etc.
 - **Authentication:** Basic, Bearer, OAuth2, or mutual TLS via Secrets
 - **reportOn:** Report on the proposed commit (default) or the active (deployed) commit
+
+### Kubernetes Resource Gating
+
+The [KubernetesResourceCommitStatus](built-in-gates/kubernetes-resource-commit-status.md) controller creates a Kubernetes resource of your choice (for example a `batch/v1` Job or an Argo Workflow) per environment and commit SHA, and reports the phase computed from that resource's live status. Resources are described once in a wrapped template kind that the real controller never reconciles.
+
+Key features:
+
+- **Wrapped template CRDs:** list installed kinds in `ControllerConfiguration.spec.kubernetesResourceCommitStatus.templates`; the controller generates `<Kind>Template` CRDs (`templates.promoter.argoproj.io`) with the source kind's schema
+- **One resource per environment and SHA:** rendered with Go templates (`Branch`, `Sha`, `Environment`, `PromotionStrategy`, …), owned by the gate, cleaned up when the SHA is superseded (`historyLimit` keeps recent ones)
+- **Phase expression:** an [expr](https://github.com/expr-lang/expr) expression over the live resource returns `success`, `pending`, or `failure`
+- **reportOn:** create the resource for the proposed commit (default) or the active (deployed) commit
+- **Polling:** the live resource is re-read every `pollInterval` while pending
 
 ### Custom Controllers
 

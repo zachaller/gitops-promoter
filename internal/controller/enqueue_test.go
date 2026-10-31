@@ -109,6 +109,15 @@ var _ = Describe("EnqueueCommitStatusGatesForPromotionStrategy", func() {
 				return EnqueueCommitStatusGatesForPromotionStrategy[promoterv1alpha1.ScheduledCommitStatusList](ctx, c, ps)
 			},
 		),
+		Entry("KubernetesResourceCommitStatus",
+			&promoterv1alpha1.KubernetesResourceCommitStatus{
+				Name: gateName, Namespace: ns,
+				Spec: promoterv1alpha1.KubernetesResourceCommitStatusSpec{PromotionStrategyRef: promoterv1alpha1.ObjectReference{Name: psName}},
+			},
+			func(c client.Client) []reconcile.Request {
+				return EnqueueCommitStatusGatesForPromotionStrategy[promoterv1alpha1.KubernetesResourceCommitStatusList](ctx, c, ps)
+			},
+		),
 		Entry("ArgoCDCommitStatus",
 			&promoterv1alpha1.ArgoCDCommitStatus{
 				Name: gateName, Namespace: ns,

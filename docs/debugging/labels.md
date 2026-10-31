@@ -35,11 +35,14 @@ Built-in parent-gate label keys (derived from Kind):
 | `DependentsSuccessfulCommitStatus` | `promoter.argoproj.io/dependents-successful-commit-status` |
 | `TimedCommitStatus` | `promoter.argoproj.io/timed-commit-status` |
 | `ScheduledCommitStatus` | `promoter.argoproj.io/scheduled-commit-status` |
+| `KubernetesResourceCommitStatus` | `promoter.argoproj.io/kubernetes-resource-commit-status` |
 | `ArgoCDCommitStatus` | `promoter.argoproj.io/argo-cd-commit-status` |
 | `WebRequestCommitStatus` | `promoter.argoproj.io/web-request-commit-status` |
 | `GitCommitStatus` | `promoter.argoproj.io/git-commit-status` |
 
 The prefix `promoter.argoproj.io/` is `CommitStatusGateLabelPrefix`; the middle segment is a kebab-case stem from the Kind (for example `ArgoCDCommitStatus` → `argo-cd`). Custom gate controllers should use the same pattern; see [Developing a CommitStatus](../contributing/developing-a-commitstatus.md).
+
+**Created resources:** the [KubernetesResourceCommitStatus](../gating-promotions/built-in-gates/kubernetes-resource-commit-status.md) controller sets the same three labels on every resource it creates from a template (for example a Job), plus `promoter.argoproj.io/reported-sha` with the hydrated SHA the resource was created for. CRDs it generates carry `promoter.argoproj.io/generated-template: "true"`.
 
 **Ordering gates:** Promotion ordering CommitStatuses (commonly keyed `dependents-successful`) are created directly by the [DependentsSuccessfulCommitStatus](../gating-promotions/built-in-gates/dependents-successful-commit-status.md) controller. They carry all three standard labels, including `promoter.argoproj.io/dependents-successful-commit-status` pointing at the parent gate CR name.
 

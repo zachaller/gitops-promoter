@@ -169,6 +169,18 @@ rollouts, deployment freezes, or maintenance-window policies. See [Scheduled Com
 {!internal/controller/testdata/ScheduledCommitStatus.yaml!}
 ```
 
+### KubernetesResourceCommitStatus
+
+A KubernetesResourceCommitStatus gates promotions on a Kubernetes resource the controller creates from a wrapped template
+(for example a `batch/v1` Job), one per environment and commit SHA, and reports the phase computed by an expression over
+the live resource. The template kinds (`templates.promoter.argoproj.io`) are generated from
+`ControllerConfiguration.spec.kubernetesResourceCommitStatus.templates`. See
+[Kubernetes Resource Commit Status](gating-promotions/built-in-gates/kubernetes-resource-commit-status.md) for configuration details and examples.
+
+```yaml
+{!internal/controller/testdata/KubernetesResourceCommitStatus.yaml!}
+```
+
 ### TimedCommitStatus
 
 A TimedCommitStatus provides time-based gating for environment promotions. It monitors how long commits have been running

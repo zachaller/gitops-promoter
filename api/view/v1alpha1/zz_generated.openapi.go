@@ -122,6 +122,14 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		apiv1alpha1.HealthyDryShas{}.OpenAPIModelName():                                       schema_argoproj_labs_gitops_promoter_api_v1alpha1_HealthyDryShas(ref),
 		apiv1alpha1.History{}.OpenAPIModelName():                                              schema_argoproj_labs_gitops_promoter_api_v1alpha1_History(ref),
 		apiv1alpha1.HydratorMetadata{}.OpenAPIModelName():                                     schema_argoproj_labs_gitops_promoter_api_v1alpha1_HydratorMetadata(ref),
+		apiv1alpha1.KubernetesResourceCommitStatus{}.OpenAPIModelName():                       schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatus(ref),
+		apiv1alpha1.KubernetesResourceCommitStatusConfiguration{}.OpenAPIModelName():          schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatusConfiguration(ref),
+		apiv1alpha1.KubernetesResourceCommitStatusEnvironmentStatus{}.OpenAPIModelName():      schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatusEnvironmentStatus(ref),
+		apiv1alpha1.KubernetesResourceCommitStatusList{}.OpenAPIModelName():                   schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatusList(ref),
+		apiv1alpha1.KubernetesResourceCommitStatusSpec{}.OpenAPIModelName():                   schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatusSpec(ref),
+		apiv1alpha1.KubernetesResourceCommitStatusStatus{}.OpenAPIModelName():                 schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatusStatus(ref),
+		apiv1alpha1.KubernetesResourcePhaseSpec{}.OpenAPIModelName():                          schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourcePhaseSpec(ref),
+		apiv1alpha1.KubernetesResourceReference{}.OpenAPIModelName():                          schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceReference(ref),
 		apiv1alpha1.MetricsConfiguration{}.OpenAPIModelName():                                 schema_argoproj_labs_gitops_promoter_api_v1alpha1_MetricsConfiguration(ref),
 		apiv1alpha1.MetricsLabelsConfiguration{}.OpenAPIModelName():                           schema_argoproj_labs_gitops_promoter_api_v1alpha1_MetricsLabelsConfiguration(ref),
 		apiv1alpha1.ModeSpec{}.OpenAPIModelName():                                             schema_argoproj_labs_gitops_promoter_api_v1alpha1_ModeSpec(ref),
@@ -145,6 +153,8 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		apiv1alpha1.PullRequestTemplate{}.OpenAPIModelName():                                  schema_argoproj_labs_gitops_promoter_api_v1alpha1_PullRequestTemplate(ref),
 		apiv1alpha1.RateLimiter{}.OpenAPIModelName():                                          schema_argoproj_labs_gitops_promoter_api_v1alpha1_RateLimiter(ref),
 		apiv1alpha1.RateLimiterTypes{}.OpenAPIModelName():                                     schema_argoproj_labs_gitops_promoter_api_v1alpha1_RateLimiterTypes(ref),
+		apiv1alpha1.ResourceTemplateReference{}.OpenAPIModelName():                            schema_argoproj_labs_gitops_promoter_api_v1alpha1_ResourceTemplateReference(ref),
+		apiv1alpha1.ResourceTemplateSource{}.OpenAPIModelName():                               schema_argoproj_labs_gitops_promoter_api_v1alpha1_ResourceTemplateSource(ref),
 		apiv1alpha1.ResponseOutputSpec{}.OpenAPIModelName():                                   schema_argoproj_labs_gitops_promoter_api_v1alpha1_ResponseOutputSpec(ref),
 		apiv1alpha1.RestoreActiveCommit{}.OpenAPIModelName():                                  schema_argoproj_labs_gitops_promoter_api_v1alpha1_RestoreActiveCommit(ref),
 		apiv1alpha1.RestoreActiveCommitConfiguration{}.OpenAPIModelName():                     schema_argoproj_labs_gitops_promoter_api_v1alpha1_RestoreActiveCommitConfiguration(ref),
@@ -2601,6 +2611,13 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ControllerConfigurationSp
 							Ref:         ref(apiv1alpha1.ScheduledCommitStatusConfiguration{}.OpenAPIModelName()),
 						},
 					},
+					"kubernetesResourceCommitStatus": {
+						SchemaProps: spec.SchemaProps{
+							Description: "KubernetesResourceCommitStatus contains the configuration for the KubernetesResourceCommitStatus controller, including WorkQueue settings and the list of kinds for which wrapped template CRDs are generated.",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.KubernetesResourceCommitStatusConfiguration{}.OpenAPIModelName()),
+						},
+					},
 					"restoreActiveCommit": {
 						SchemaProps: spec.SchemaProps{
 							Description: "RestoreActiveCommit contains the configuration for the RestoreActiveCommit controller, including WorkQueue settings that control reconciliation behavior.",
@@ -2630,11 +2647,11 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ControllerConfigurationSp
 						},
 					},
 				},
-				Required: []string{"promotionStrategy", "changeTransferPolicyHistory", "changeTransferPolicy", "pullRequest", "commitStatus", "argocdCommitStatus", "timedCommitStatus", "gitCommitStatus", "webRequestCommitStatus", "dependentsSuccessfulCommitStatus", "scheduledCommitStatus", "restoreActiveCommit"},
+				Required: []string{"promotionStrategy", "changeTransferPolicyHistory", "changeTransferPolicy", "pullRequest", "commitStatus", "argocdCommitStatus", "timedCommitStatus", "gitCommitStatus", "webRequestCommitStatus", "dependentsSuccessfulCommitStatus", "scheduledCommitStatus", "kubernetesResourceCommitStatus", "restoreActiveCommit"},
 			},
 		},
 		Dependencies: []string{
-			apiv1alpha1.ArgoCDCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicyConfiguration{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicyHistoryConfiguration{}.OpenAPIModelName(), apiv1alpha1.ClusterScmProviderConfiguration{}.OpenAPIModelName(), apiv1alpha1.CommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.DependentsSuccessfulCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.GitCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.MetricsConfiguration{}.OpenAPIModelName(), apiv1alpha1.PromotionStrategyConfiguration{}.OpenAPIModelName(), apiv1alpha1.PullRequestConfiguration{}.OpenAPIModelName(), apiv1alpha1.RestoreActiveCommitConfiguration{}.OpenAPIModelName(), apiv1alpha1.ScheduledCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.TimedCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.WebRequestCommitStatusConfiguration{}.OpenAPIModelName()},
+			apiv1alpha1.ArgoCDCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicyConfiguration{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicyHistoryConfiguration{}.OpenAPIModelName(), apiv1alpha1.ClusterScmProviderConfiguration{}.OpenAPIModelName(), apiv1alpha1.CommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.DependentsSuccessfulCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.GitCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.KubernetesResourceCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.MetricsConfiguration{}.OpenAPIModelName(), apiv1alpha1.PromotionStrategyConfiguration{}.OpenAPIModelName(), apiv1alpha1.PullRequestConfiguration{}.OpenAPIModelName(), apiv1alpha1.RestoreActiveCommitConfiguration{}.OpenAPIModelName(), apiv1alpha1.ScheduledCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.TimedCommitStatusConfiguration{}.OpenAPIModelName(), apiv1alpha1.WebRequestCommitStatusConfiguration{}.OpenAPIModelName()},
 	}
 }
 
@@ -4512,6 +4529,454 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_HydratorMetadata(ref comm
 	}
 }
 
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubernetesResourceCommitStatus is the Schema for the kubernetesresourcecommitstatuses API.\n\nIt gates promotions on a Kubernetes resource the controller creates from a wrapped template, for example a batch/v1 Job that runs a smoke test, and reports the phase computed from that resource's live status.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "metadata is a standard object metadata",
+							Default:     map[string]interface{}{},
+							Ref:         ref(metav1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Description: "spec defines the desired state of KubernetesResourceCommitStatus",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.KubernetesResourceCommitStatusSpec{}.OpenAPIModelName()),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Description: "status defines the observed state of KubernetesResourceCommitStatus",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.KubernetesResourceCommitStatusStatus{}.OpenAPIModelName()),
+						},
+					},
+				},
+				Required: []string{"spec"},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.KubernetesResourceCommitStatusSpec{}.OpenAPIModelName(), apiv1alpha1.KubernetesResourceCommitStatusStatus{}.OpenAPIModelName(), metav1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatusConfiguration(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubernetesResourceCommitStatusConfiguration defines the configuration for the KubernetesResourceCommitStatus controller.\n\nBesides the WorkQueue settings, it lists the kinds already installed in the cluster for which the controller generates wrapped template CRDs in the templates.promoter.argoproj.io group. A KubernetesResourceCommitStatus references one of those template kinds and the controller creates the real kind from it.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"workQueue": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WorkQueue contains the work queue configuration for the KubernetesResourceCommitStatus controller. This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.WorkQueue{}.OpenAPIModelName()),
+						},
+					},
+					"templates": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Templates lists the installed kinds to wrap. For each entry the controller generates a namespaced CustomResourceDefinition <Kind>Template.templates.promoter.argoproj.io (or templateKind when set) whose spec.template holds a manifest of the source kind. The schema of spec.template is copied from the source CustomResourceDefinition when the kind is a CRD, otherwise derived from the API server's OpenAPI v3 document; when neither is possible the template accepts any fields without validation.\n\nThe CRDs are generated at controller startup and whenever this list changes. Removing an entry does not delete its CRD (that would delete every template written against it); delete it by hand when it is no longer referenced. The controller's ServiceAccount must be allowed to create, get, list, watch, and update CustomResourceDefinitions, and to create, get, list, watch, and delete the source kinds.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.ResourceTemplateSource{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"workQueue"},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.ResourceTemplateSource{}.OpenAPIModelName(), apiv1alpha1.WorkQueue{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatusEnvironmentStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubernetesResourceCommitStatusEnvironmentStatus is the observed state for one environment.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"branch": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Branch is the environment branch name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase mirrors child CommitStatus.spec.phase.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"description": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Description mirrors child CommitStatus.spec.description.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Url mirrors child CommitStatus.spec.url.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"reportedSha": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReportedSha is the hydrated SHA the child CommitStatus is attached to (CommitStatus.spec.sha). Semantics depend on the parent gate (proposed vs active hydrated SHA). Supports both SHA-1 (40 chars) and SHA-256 (64 chars) Git hash formats.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"resource": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Resource identifies the resource created from the template for reportedSha.",
+							Ref:         ref(apiv1alpha1.KubernetesResourceReference{}.OpenAPIModelName()),
+						},
+					},
+					"resourceExists": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourceExists reports whether the resource was found on the last reconcile. False means the resource of a succeeded SHA was deleted (for example by ttlSecondsAfterFinished); its last report is kept and it is not recreated. Pending and failed resources are recreated on the next reconcile, so they read true again.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"lastEvaluationTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastEvaluationTime is when spec.phase.expression was last evaluated for this environment.",
+							Ref:         ref(metav1.Time{}.OpenAPIModelName()),
+						},
+					},
+				},
+				Required: []string{"branch"},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.KubernetesResourceReference{}.OpenAPIModelName(), metav1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatusList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubernetesResourceCommitStatusList contains a list of KubernetesResourceCommitStatus",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(metav1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.KubernetesResourceCommitStatus{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.KubernetesResourceCommitStatus{}.OpenAPIModelName(), metav1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatusSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubernetesResourceCommitStatusSpec defines the desired state of KubernetesResourceCommitStatus.\n\nFor every applicable environment of the referenced PromotionStrategy, the controller renders the referenced template (spec.templateRef) and creates one real Kubernetes resource per reported SHA (spec.reportOn). The template resource itself is never reconciled by the real controller because it is wrapped in a generated templates.promoter.argoproj.io kind; only the resource the controller creates from it is. The controller then evaluates spec.phase.expression against the live resource to report the CommitStatus phase.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"promotionStrategyRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PromotionStrategyRef references the PromotionStrategy this applies to. The controller creates resources and CommitStatuses for every environment where this KubernetesResourceCommitStatus.Spec.Key matches an entry in either:\n  - PromotionStrategy.Spec.ProposedCommitStatuses / ActiveCommitStatuses (applies to all environments), OR\n  - Environment.ProposedCommitStatuses / ActiveCommitStatuses (applies to a specific environment)\nWhich list is checked depends on spec.reportOn.",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.ObjectReference{}.OpenAPIModelName()),
+						},
+					},
+					"key": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Key is the unique identifier for this gate. It is used as the commit status key and must match a key in the PromotionStrategy's proposedCommitStatuses or activeCommitStatuses. Must be lowercase alphanumeric with hyphens, 1–63 characters (pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$).",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"publishTo": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "PublishTo is copied to spec.publishTo on each CommitStatus this controller creates. - \"scm\": the CommitStatus controller posts them to the SCM provider The default is [\"scm\"]. An empty list keeps them in Kubernetes and does not post them to the SCM. Omitting the field uses the default. Promotion gates use the phase in every case.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"reportOn": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReportOn specifies which commit SHA the resource is created for and the CommitStatus is reported on. - \"proposed\": the proposed hydrated commit SHA (default). Use it for checks that must pass before a change\n  is promoted, for example a smoke-test Job against a preview of the proposed change.\n- \"active\": the active hydrated commit SHA. Use it for checks that run against what is deployed, for\n  example an integration-test Job that must pass before the next environment may promote.\n\nA new resource is created whenever the reported SHA changes; the resources of superseded SHAs are deleted subject to spec.historyLimit. While an environment is pending or failed, a resource that disappears is created again on the next reconcile (delete a failed Job to re-run it). Once an environment reported success for a SHA, a missing resource (for example a Job removed by ttlSecondsAfterFinished) keeps the last report and is not recreated, so a gate that was open stays open.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"templateRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TemplateRef names the wrapped template resource whose spec.template is rendered and created. See ResourceTemplateReference.\n\nEvery string value in the template is rendered as a Go template with Sprig functions (except env, expandenv, and getHostByName; urlQueryEscape is also available). Template variables:\n  - {{ .Branch }}: the environment branch\n  - {{ .Sha }}: the hydrated SHA the resource is created for; {{ .ShortSha }}: its first 7 characters\n  - {{ .Key }}: spec.key; {{ .ReportOn }}: spec.reportOn\n  - {{ .ResourceName }}: the name the controller assigns to the created resource\n  - {{ .Namespace }}: the namespace the resource is created in (the KubernetesResourceCommitStatus namespace)\n  - {{ .Environment }}: the PromotionStrategy status entry for the branch (for example .Environment.Proposed.Dry.Sha)\n  - {{ .PromotionStrategy }}: the full PromotionStrategy\n  - {{ .KubernetesResourceCommitStatus }}: this resource\n\nmetadata.name, metadata.namespace, and metadata.ownerReferences in the template are replaced by the controller: the resource is named deterministically from the gate name, branch, and SHA, created in the KubernetesResourceCommitStatus namespace, and owned by the KubernetesResourceCommitStatus so it is garbage collected with it. Template labels and annotations are kept; the controller adds its own labels (promoter.argoproj.io/commit-status, promoter.argoproj.io/environment, promoter.argoproj.io/reported-sha, and the parent gate label).",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.ResourceTemplateReference{}.OpenAPIModelName()),
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase maps the live resource to the commit status phase. See KubernetesResourcePhaseSpec.",
+							Default:     map[string]interface{}{},
+							Ref:         ref(apiv1alpha1.KubernetesResourcePhaseSpec{}.OpenAPIModelName()),
+						},
+					},
+					"descriptionTemplate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DescriptionTemplate is the human-readable commit status description in the SCM provider. Go template with the same variables and Sprig rules as spec.templateRef, plus:\n  - {{ .Phase }}: the phase computed this reconcile\n  - {{ .Resource }}: the live resource (nil when it does not exist); for example {{ .Resource.status.succeeded }}\nDefaults to \"<Kind> <name> is <phase>\" when empty.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"urlTemplate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UrlTemplate is the commit status target URL in the SCM provider, rendered with the same variables as DescriptionTemplate. Typical use: a link to the resource in a dashboard. Empty means no URL.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"pollInterval": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PollInterval is how often the live resource is re-read while any environment is pending. Resource status changes are observed by polling, not by a watch, so a phase change is reported at most one interval late. Once every environment is success or failure, the controller falls back to the controller's configured requeue duration; a new SHA on the PromotionStrategy triggers a reconcile immediately.",
+							Ref:         ref(metav1.Duration{}.OpenAPIModelName()),
+						},
+					},
+					"historyLimit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HistoryLimit is how many resources created for superseded SHAs are kept per environment, newest first. The resource for the current reported SHA is always kept. 0 (the default) deletes a superseded resource as soon as the reported SHA changes.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"promotionStrategyRef", "key", "templateRef", "phase"},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.KubernetesResourcePhaseSpec{}.OpenAPIModelName(), apiv1alpha1.ObjectReference{}.OpenAPIModelName(), apiv1alpha1.ResourceTemplateReference{}.OpenAPIModelName(), metav1.Duration{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceCommitStatusStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubernetesResourceCommitStatusStatus defines the observed state of KubernetesResourceCommitStatus.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration is the .metadata.generation that this status was reconciled from. Because status is written via Server-Side Apply with ForceOwnership (which has no optimistic-concurrency check), this field is the canonical way to detect stale status writes: compare status.observedGeneration with metadata.generation.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"environments": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"branch",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Environments holds the observed state of each applicable environment.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.KubernetesResourceCommitStatusEnvironmentStatus{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions represent the latest available observations of an object's state",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(metav1.Condition{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
+					"instanceID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InstanceID mirrors metadata.labels[promoter.argoproj.io/instance-id] stamped on each reconcile attempt by this install's controller, including when Ready=False; omitted when the resource has no instance-id label (default install).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			apiv1alpha1.KubernetesResourceCommitStatusEnvironmentStatus{}.OpenAPIModelName(), metav1.Condition{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourcePhaseSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubernetesResourcePhaseSpec defines how the live resource is mapped to a commit status phase.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"expression": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Expression is an expr expression (github.com/expr-lang/expr) evaluated on every reconcile against the live resource created from the template. It decides the phase reported on the CommitStatus.\n\nAccepted return values:\n  - a boolean: true is \"success\", false is \"pending\"\n  - a string: \"success\", \"pending\", or \"failure\"\n  - an object { phase }: phase is one of the strings above; an omitted or empty phase means \"pending\"\n\nAvailable variables:\n  - Resource (object): the live resource as returned by the API server (metadata, spec, status, ...).\n    The expression only runs when the resource exists (it is created first), so Resource is never nil here;\n    guarding against nil is still good practice because optional fields such as status may be missing.\n  - Branch (string): the environment branch being evaluated\n  - Sha (string): the hydrated SHA the resource was created for (see spec.reportOn)\n  - Phase (string): the phase reported for this environment by the previous reconcile (\"\" on the first)\n  - Environment (object): the PromotionStrategy status entry for Branch\n  - PromotionStrategy (object): the full PromotionStrategy spec and status\n  - KubernetesResourceCommitStatus (object): this resource's spec and status (snapshot from the previous reconcile)\n\nUse optional chaining and the nil-coalescing operator for fields that may not exist yet.\n\nExamples:\n  # batch/v1 Job: succeed once a pod completed, fail once the backoff limit is exhausted\n  - \"Resource == nil ? 'pending' : (Resource.status?.succeeded ?? 0) > 0 ? 'success' : (Resource.status?.failed ?? 0) > 0 ? 'failure' : 'pending'\"\n\n  # Argo Workflow\n  - \"Resource?.status?.phase == 'Succeeded' ? 'success' : Resource?.status?.phase in ['Failed', 'Error'] ? 'failure' : 'pending'\"\n\n  # Any resource with a Ready condition\n  - \"any(Resource?.status?.conditions ?? [], {.type == 'Ready' && .status == 'True'})\"",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"expression"},
+			},
+		},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_KubernetesResourceReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubernetesResourceReference identifies the resource the controller created for an environment.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion of the created resource, for example batch/v1.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind of the created resource, for example Job.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Namespace of the created resource (always the KubernetesResourceCommitStatus namespace).",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the created resource.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"apiVersion", "kind", "namespace", "name"},
+			},
+		},
+	}
+}
+
 func schema_argoproj_labs_gitops_promoter_api_v1alpha1_MetricsConfiguration(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -5558,6 +6023,80 @@ func schema_argoproj_labs_gitops_promoter_api_v1alpha1_RateLimiterTypes(ref comm
 		},
 		Dependencies: []string{
 			apiv1alpha1.Bucket{}.OpenAPIModelName(), apiv1alpha1.ExponentialFailure{}.OpenAPIModelName(), apiv1alpha1.FastSlow{}.OpenAPIModelName()},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ResourceTemplateReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResourceTemplateReference names the wrapped template resource whose spec.template is rendered and created for each environment. The template kind must be one of the kinds generated from ControllerConfiguration.spec.kubernetesResourceCommitStatus.templates, and the resource must live in the KubernetesResourceCommitStatus's namespace.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is the generated template kind in the templates.promoter.argoproj.io group, for example JobTemplate.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the name of the template resource in the same namespace as the KubernetesResourceCommitStatus.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"kind", "name"},
+			},
+		},
+	}
+}
+
+func schema_argoproj_labs_gitops_promoter_api_v1alpha1_ResourceTemplateSource(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResourceTemplateSource identifies an installed Kubernetes kind to wrap in a generated template CRD.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"group": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Group is the API group of the source kind. Leave empty for the core group (for example ConfigMap, Pod).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Version is the API version of the source kind, for example v1 or v1alpha1. The created resources use this version, and the template schema is taken from it.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is the source Kind, for example Job.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"templateKind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TemplateKind overrides the generated template kind. Defaults to <Kind>Template, for example JobTemplate. Set it when two source kinds in different groups share a Kind name.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"version", "kind"},
+			},
+		},
 	}
 }
 
@@ -7844,6 +8383,19 @@ func schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyDetails(ref commo
 							},
 						},
 					},
+					"kubernetesResourceCommitStatuses": {
+						SchemaProps: spec.SchemaProps{
+							Description: "KubernetesResourceCommitStatuses are the KubernetesResourceCommitStatus managers that reference the PromotionStrategy.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(apiv1alpha1.KubernetesResourceCommitStatus{}.OpenAPIModelName()),
+									},
+								},
+							},
+						},
+					},
 					"gitRepository": {
 						SchemaProps: spec.SchemaProps{
 							Description: "GitRepository is the GitRepository referenced by the PromotionStrategy, if resolvable.",
@@ -7867,7 +8419,7 @@ func schema_gitops_promoter_api_view_v1alpha1_PromotionStrategyDetails(ref commo
 			},
 		},
 		Dependencies: []string{
-			apiv1alpha1.ArgoCDCommitStatus{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicy{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicyHistory{}.OpenAPIModelName(), apiv1alpha1.ClusterScmProvider{}.OpenAPIModelName(), apiv1alpha1.CommitStatus{}.OpenAPIModelName(), apiv1alpha1.DependentsSuccessfulCommitStatus{}.OpenAPIModelName(), apiv1alpha1.GitCommitStatus{}.OpenAPIModelName(), apiv1alpha1.GitRepository{}.OpenAPIModelName(), apiv1alpha1.PromotionStrategy{}.OpenAPIModelName(), apiv1alpha1.PullRequest{}.OpenAPIModelName(), apiv1alpha1.RestoreActiveCommit{}.OpenAPIModelName(), apiv1alpha1.ScheduledCommitStatus{}.OpenAPIModelName(), apiv1alpha1.ScmProvider{}.OpenAPIModelName(), apiv1alpha1.TimedCommitStatus{}.OpenAPIModelName(), apiv1alpha1.WebRequestCommitStatus{}.OpenAPIModelName(), metav1.ObjectMeta{}.OpenAPIModelName()},
+			apiv1alpha1.ArgoCDCommitStatus{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicy{}.OpenAPIModelName(), apiv1alpha1.ChangeTransferPolicyHistory{}.OpenAPIModelName(), apiv1alpha1.ClusterScmProvider{}.OpenAPIModelName(), apiv1alpha1.CommitStatus{}.OpenAPIModelName(), apiv1alpha1.DependentsSuccessfulCommitStatus{}.OpenAPIModelName(), apiv1alpha1.GitCommitStatus{}.OpenAPIModelName(), apiv1alpha1.GitRepository{}.OpenAPIModelName(), apiv1alpha1.KubernetesResourceCommitStatus{}.OpenAPIModelName(), apiv1alpha1.PromotionStrategy{}.OpenAPIModelName(), apiv1alpha1.PullRequest{}.OpenAPIModelName(), apiv1alpha1.RestoreActiveCommit{}.OpenAPIModelName(), apiv1alpha1.ScheduledCommitStatus{}.OpenAPIModelName(), apiv1alpha1.ScmProvider{}.OpenAPIModelName(), apiv1alpha1.TimedCommitStatus{}.OpenAPIModelName(), apiv1alpha1.WebRequestCommitStatus{}.OpenAPIModelName(), metav1.ObjectMeta{}.OpenAPIModelName()},
 	}
 }
 

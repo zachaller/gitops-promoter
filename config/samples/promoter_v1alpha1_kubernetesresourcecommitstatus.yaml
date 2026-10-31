@@ -1,0 +1,52 @@
+# A JobTemplate is generated from ControllerConfiguration.spec.kubernetesResourceCommitStatus.templates
+# (group: batch, version: v1, kind: Job). It is never run by the Job controller; the
+# KubernetesResourceCommitStatus controller renders spec.template and creates a real Job per environment
+# and proposed SHA.
+apiVersion: templates.promoter.argoproj.io/v1alpha1
+kind: JobTemplate
+metadata:
+  name: smoke-test
+spec:
+  template:
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      labels:
+        app.kubernetes.io/component: smoke-test
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: smoke-test
+              image: curlimages/curl:8.5.0
+              command: ["sh", "-c"]
+              args:
+                - curl -fsS "https://{{ .Branch | replace "environment/" "" }}.example.com/healthz?sha={{ .ShortSha }}"
+---
+apiVersion: promoter.argoproj.io/v1alpha1
+kind: KubernetesResourceCommitStatus
+metadata:
+  name: smoke-test
+spec:
+  promotionStrategyRef:
+    name: promotionstrategy-sample
+  key: smoke-test
+  reportOn: proposed
+  templateRef:
+    kind: JobTemplate
+    name: smoke-test
+  phase:
+    expression: >-
+      Resource == nil ? 'pending'
+        : (Resource.status?.succeeded ?? 0) > 0 ? 'success'
+        : (Resource.status?.failed ?? 0) > 0 ? 'failure'
+        : 'pending'
+  descriptionTemplate: "Smoke test for {{ .Branch }} ({{ .ShortSha }}) is {{ .Phase }}"
+  pollInterval: 30s
+  historyLimit: 1
+  # Optional. Destinations copied onto each CommitStatus. Default is [scm]. An empty list keeps them in Kubernetes only.
+  publishTo:
+    - scm

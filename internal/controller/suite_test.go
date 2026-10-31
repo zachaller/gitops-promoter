@@ -349,6 +349,19 @@ var _ = SynchronizedBeforeSuite(func() {
 	}).SetupWithManager(ctx, k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
+	// RESTConfig makes setup generate the ConfigMapTemplate CRD configured by controllerConfigurationForTests.
+	err = (&KubernetesResourceCommitStatusReconciler{
+		Client:      k8sManager.GetClient(),
+		APIReader:   k8sManager.GetAPIReader(),
+		Scheme:      k8sManager.GetScheme(),
+		Recorder:    k8sManager.GetEventRecorder("KubernetesResourceCommitStatus"),
+		SettingsMgr: settingsMgr,
+		EnqueueCTP:  ctpReconciler.GetEnqueueFunc(),
+		RESTConfig:  cfg,
+		RESTMapper:  k8sManager.GetRESTMapper(),
+	}).SetupWithManager(ctx, k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
 	webhookReceiverPort = constants.WebhookReceiverPort + GinkgoParallelProcess()
 	whr := webhookreceiver.NewWebhookReceiver(k8sManager, webhookreceiver.EnqueueFunc(ctpReconciler.GetEnqueueFunc()))
 	go func() {
@@ -826,6 +839,11 @@ func controllerConfigurationForTests() *promoterv1alpha1.ControllerConfiguration
 	Expect(err).NotTo(HaveOccurred())
 	if faultsInjected {
 		cc = withSlowDelay(cc, "5s")
+	}
+	// The shipped configuration wraps no kinds. Tests exercise KubernetesResourceCommitStatus with a core
+	// ConfigMap, which envtest serves and whose data a spec can set to drive the phase expression.
+	cc.Spec.KubernetesResourceCommitStatus.Templates = []promoterv1alpha1.ResourceTemplateSource{
+		{Version: "v1", Kind: "ConfigMap"},
 	}
 	return cc
 }

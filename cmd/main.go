@@ -36,6 +36,7 @@ import (
 	promotercache "github.com/argoproj-labs/gitops-promoter/internal/cache"
 	"github.com/argoproj-labs/gitops-promoter/internal/controller"
 	"github.com/argoproj-labs/gitops-promoter/internal/metrics"
+	"github.com/argoproj-labs/gitops-promoter/internal/resourcetemplate"
 	"github.com/argoproj-labs/gitops-promoter/internal/utils"
 	"github.com/argoproj-labs/gitops-promoter/internal/version"
 	"github.com/argoproj-labs/gitops-promoter/internal/webserver"
@@ -368,6 +369,16 @@ func runController(
 	}).SetupWithManager(runCtx, mcMgr); err != nil {
 		panic(fmt.Errorf("unable to create ArgoCDCommitStatus controller: %w", err))
 	}
+	// Template CRDs are cluster-scoped and must be visible regardless of spec.scope, so the syncer uses a
+	// direct client rather than the (possibly namespace-scoped) manager cache.
+	directClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		panic(fmt.Errorf("unable to create direct client: %w", err))
+	}
+	templateCRDSyncer, err := resourcetemplate.NewSyncer(restConfig, directClient, localManager.GetRESTMapper())
+	if err != nil {
+		panic(fmt.Errorf("unable to create template CRD syncer: %w", err))
+	}
 	if err = (&controller.ControllerConfigurationReconciler{
 		Client:              localManager.GetClient(),
 		Scheme:              localManager.GetScheme(),
@@ -375,6 +386,7 @@ func runController(
 		ControllerNamespace: controllerNamespace,
 		StartupInstanceID:   instanceID,
 		Shutdown:            shutdown,
+		TemplateCRDSyncer:   templateCRDSyncer,
 	}).SetupWithManager(runCtx, localManager); err != nil {
 		panic(fmt.Errorf("unable to create ControllerConfiguration controller: %w", err))
 	}
@@ -434,6 +446,18 @@ func runController(
 		EnqueueCTP:  ctpReconciler.GetEnqueueFunc(),
 	}).SetupWithManager(runCtx, localManager); err != nil {
 		panic(fmt.Errorf("unable to create ScheduledCommitStatus controller: %w", err))
+	}
+	if err := (&controller.KubernetesResourceCommitStatusReconciler{
+		Client:      localManager.GetClient(),
+		APIReader:   localManager.GetAPIReader(),
+		Scheme:      localManager.GetScheme(),
+		Recorder:    localManager.GetEventRecorder("KubernetesResourceCommitStatus"),
+		SettingsMgr: settingsMgr,
+		EnqueueCTP:  ctpReconciler.GetEnqueueFunc(),
+		RESTConfig:  restConfig,
+		RESTMapper:  localManager.GetRESTMapper(),
+	}).SetupWithManager(runCtx, localManager); err != nil {
+		panic(fmt.Errorf("unable to create KubernetesResourceCommitStatus controller: %w", err))
 	}
 	//+kubebuilder:scaffold:builder
 

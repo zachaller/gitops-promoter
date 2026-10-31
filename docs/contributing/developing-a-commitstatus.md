@@ -389,6 +389,7 @@ Upsert the child `CommitStatus`, then mirror `phase`, `description`, `url`, and 
 | WebRequestCommitStatus | yes | yes | — | — | — (`reportedSha`) | HTTP outputs |
 | GitCommitStatus | yes | yes | — | — | — (`proposedHydratedSha`) | `expressionResult`, `targetedSha` |
 | ArgoCDCommitStatus | — | — | — | — | — | `applicationsSelected` |
+| KubernetesResourceCommitStatus | yes | yes | yes | yes | yes (per `reportOn`) | `resource`, `resourceExists`, `lastEvaluationTime` |
 
 DependentsSuccessfulCommitStatus is the first gate with the full `GateEnvironmentCommitStatus` embed; other gates may converge in follow-up work.
 

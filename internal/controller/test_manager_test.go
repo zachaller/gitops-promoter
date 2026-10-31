@@ -141,6 +141,17 @@ func startPartitionedManager(ctx context.Context, cfg *rest.Config, namespace st
 		EnqueueCTP:  ctpReconciler.GetEnqueueFunc(),
 	}).SetupWithManager(mgrCtx, localMgr)).To(Succeed())
 
+	Expect((&KubernetesResourceCommitStatusReconciler{
+		Client:      localMgr.GetClient(),
+		APIReader:   localMgr.GetAPIReader(),
+		Scheme:      localMgr.GetScheme(),
+		Recorder:    localMgr.GetEventRecorder("KubernetesResourceCommitStatus"),
+		SettingsMgr: settingsMgr,
+		EnqueueCTP:  ctpReconciler.GetEnqueueFunc(),
+		RESTConfig:  cfg,
+		RESTMapper:  localMgr.GetRESTMapper(),
+	}).SetupWithManager(mgrCtx, localMgr)).To(Succeed())
+
 	Expect((&ArgoCDCommitStatusReconciler{
 		Manager:            mcMgr,
 		SettingsMgr:        settingsMgr,

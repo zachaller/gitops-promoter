@@ -201,6 +201,26 @@ spec:
               fastDelay: "1s"
               slowDelay: "5m"
               maxFastAttempts: 3
+  kubernetesResourceCommitStatus:
+    workQueue:
+      maxConcurrentReconciles: 10
+      requeueDuration: "5m"
+      rateLimiter:
+        maxOf:
+          - bucket:
+              qps: 10
+              bucket: 100
+          - fastSlow:
+              fastDelay: "1s"
+              slowDelay: "5m"
+              maxFastAttempts: 3
+    # Kinds to wrap in generated <Kind>Template CRDs (templates.promoter.argoproj.io). Empty by default.
+    # Example:
+    # templates:
+    #   - group: batch
+    #     version: v1
+    #     kind: Job
+    templates: []
   restoreActiveCommit:
     workQueue:
       maxConcurrentReconciles: 10

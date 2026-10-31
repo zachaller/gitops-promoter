@@ -126,6 +126,19 @@ const (
 	// CommitStatusNoPreviousPhase is used in CommitStatusPhaseChanged messages when the gate had no previously recorded phase.
 	CommitStatusNoPreviousPhase = "<none>"
 
+	// KubernetesResourceCreatedReason indicates that a KubernetesResourceCommitStatus created the resource for a SHA.
+	KubernetesResourceCreatedReason = "KubernetesResourceCreated"
+	// KubernetesResourceCreatedMessage is the message for a created resource.
+	KubernetesResourceCreatedMessage = "Created %s %s for commit status %q on environment branch %s (sha %s)"
+	// KubernetesResourceDeletedReason indicates that a KubernetesResourceCommitStatus deleted a resource of a superseded SHA.
+	KubernetesResourceDeletedReason = "KubernetesResourceDeleted"
+	// KubernetesResourceDeletedMessage is the message for a deleted resource.
+	KubernetesResourceDeletedMessage = "Deleted %s %s created for superseded sha %s on environment branch %s"
+	// TemplateCRDSyncFailedReason indicates that generating a wrapped template CRD failed.
+	TemplateCRDSyncFailedReason = "TemplateCRDSyncFailed"
+	// TemplateCRDSyncFailedMessage is the message for a failed template CRD generation.
+	TemplateCRDSyncFailedMessage = "Failed to generate template CRD for %s: %v"
+
 	// WebRequestFailedReason indicates that the HTTP request made by a WebRequestCommitStatus failed.
 	WebRequestFailedReason = "WebRequestFailed"
 	// WebRequestFailedMessage is the message for a failed web request.

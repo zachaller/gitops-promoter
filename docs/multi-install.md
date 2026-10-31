@@ -128,7 +128,7 @@ Follow these principles whenever you add, change, or remove `promoter.argoproj.i
 
 ### Default install → multi-install
 
-1. **Label roots only** — add `promoter.argoproj.io/instance-id: <your-id>` to every Promoter CR this install should manage (`PromotionStrategy`, `GitRepository`, `ScmProvider` / `ClusterScmProvider`, `TimedCommitStatus`, `ScheduledCommitStatus`, `GitCommitStatus`, `WebRequestCommitStatus`, `ArgoCDCommitStatus`, and others as needed). Label referenced `Secret` objects (SCM, HTTP auth, kubeconfig) with the same value. Use metadata-only patches.
+1. **Label roots only** — add `promoter.argoproj.io/instance-id: <your-id>` to every Promoter CR this install should manage (`PromotionStrategy`, `GitRepository`, `ScmProvider` / `ClusterScmProvider`, `TimedCommitStatus`, `ScheduledCommitStatus`, `GitCommitStatus`, `WebRequestCommitStatus`, `ArgoCDCommitStatus`, `KubernetesResourceCommitStatus`, and others as needed). Label referenced `Secret` objects (SCM, HTTP auth, kubeconfig) and the `templates.promoter.argoproj.io` template resources referenced by `KubernetesResourceCommitStatus` with the same value. Use metadata-only patches.
 2. **Expect the gap** — the currently running default install stops reconciling relabeled parents immediately (they leave its informer cache). **Children are not relabeled until after restart** on the new partition. This is expected, not a failure.
 3. **Set `spec.instanceID`** on `ControllerConfiguration` to the same value (non-empty). The controller pod restarts automatically in a single-replica install.
 4. **Wait for propagation** — confirm children carry the label and labeled resources report `status.instanceID` (see [Verification](#verification) below).

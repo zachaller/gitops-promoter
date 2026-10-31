@@ -42,18 +42,26 @@ import (
 // revive:disable:exported // The name starting with "Controller" is fine. That's the kind name.
 type ControllerConfigurationReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
 	Recorder events.EventRecorder
+	// TemplateCRDSyncer regenerates the KubernetesResourceCommitStatus template CRDs whenever
+	// spec.kubernetesResourceCommitStatus.templates changes. Optional; nil disables the sync here.
+	TemplateCRDSyncer TemplateCRDSyncer
+	Scheme            *runtime.Scheme
 
 	Shutdown            context.CancelFunc
 	StartupInstanceID   *string
 	ControllerNamespace string
 }
 
+// TemplateCRDSyncer generates the wrapped template CRDs for the configured sources (see internal/resourcetemplate).
+type TemplateCRDSyncer interface {
+	Sync(ctx context.Context, sources []promoterv1alpha1.ResourceTemplateSource) error
+}
+
 // +kubebuilder:rbac:groups=promoter.argoproj.io,resources=controllerconfigurations,resourceNames=promoter-controller-configuration,verbs=get;list;watch
 // +kubebuilder:rbac:groups=promoter.argoproj.io,resources=controllerconfigurations/status,resourceNames=promoter-controller-configuration,verbs=get;update;patch
 
-// Reconcile applies spec.metrics, and detects spec.instanceID drift from the startup bootstrap
+// Reconcile applies spec.metrics, regenerates the KubernetesResourceCommitStatus template CRDs, and detects spec.instanceID drift from the startup bootstrap
 // value and shuts down the controller so the informer cache partition is rebuilt on restart.
 func (r *ControllerConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
@@ -85,6 +93,14 @@ func (r *ControllerConfigurationReconciler) Reconcile(ctx context.Context, req c
 	previousReady = utils.RemoveReadyCondition(&cc)
 
 	metrics.SetGitRepositoryLabels(cc.Spec.Metrics.Labels.GitRepository)
+
+	if r.TemplateCRDSyncer != nil {
+		if err := r.TemplateCRDSyncer.Sync(ctx, cc.Spec.KubernetesResourceCommitStatus.Templates); err != nil {
+			r.Recorder.Eventf(&cc, nil, "Warning", constants.TemplateCRDSyncFailedReason, "GeneratingTemplateCRDs",
+				constants.TemplateCRDSyncFailedMessage, "spec.kubernetesResourceCommitStatus.templates", err)
+			return ctrl.Result{}, fmt.Errorf("generate KubernetesResourceCommitStatus template CRDs: %w", err)
+		}
+	}
 
 	if ptr.Equal(r.StartupInstanceID, cc.Spec.InstanceID) {
 		return ctrl.Result{}, nil

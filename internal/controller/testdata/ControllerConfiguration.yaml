@@ -179,6 +179,22 @@ spec:
           baseDelay: "500ms"
           maxDelay: "1m"
 
+  # KubernetesResourceCommitStatus controller creates Kubernetes resources from wrapped templates and reports
+  # a commit status phase computed from the live resource
+  kubernetesResourceCommitStatus:
+    workQueue:
+      requeueDuration: "5m"
+      maxConcurrentReconciles: 5
+      rateLimiter:
+        exponentialFailure:
+          baseDelay: "500ms"
+          maxDelay: "1m"
+    # Installed kinds to wrap in generated <Kind>Template CRDs (templates.promoter.argoproj.io)
+    templates:
+      - group: batch
+        version: v1
+        kind: Job
+
   # RestoreActiveCommit controller restores an environment's active branch to a previous hydrated commit
   restoreActiveCommit:
     workQueue:

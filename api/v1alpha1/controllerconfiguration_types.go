@@ -98,6 +98,11 @@ type ControllerConfigurationSpec struct {
 	// +required
 	ScheduledCommitStatus ScheduledCommitStatusConfiguration `json:"scheduledCommitStatus"`
 
+	// KubernetesResourceCommitStatus contains the configuration for the KubernetesResourceCommitStatus controller,
+	// including WorkQueue settings and the list of kinds for which wrapped template CRDs are generated.
+	// +required
+	KubernetesResourceCommitStatus KubernetesResourceCommitStatusConfiguration `json:"kubernetesResourceCommitStatus"`
+
 	// RestoreActiveCommit contains the configuration for the RestoreActiveCommit controller,
 	// including WorkQueue settings that control reconciliation behavior.
 	// +required
@@ -331,6 +336,73 @@ type ScheduledCommitStatusConfiguration struct {
 	// This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.
 	// +required
 	WorkQueue WorkQueue `json:"workQueue"`
+}
+
+// KubernetesResourceCommitStatusConfiguration defines the configuration for the KubernetesResourceCommitStatus controller.
+//
+// Besides the WorkQueue settings, it lists the kinds already installed in the cluster for which the controller
+// generates wrapped template CRDs in the templates.promoter.argoproj.io group. A KubernetesResourceCommitStatus
+// references one of those template kinds and the controller creates the real kind from it.
+type KubernetesResourceCommitStatusConfiguration struct {
+	// WorkQueue contains the work queue configuration for the KubernetesResourceCommitStatus controller.
+	// This includes requeue duration, maximum concurrent reconciles, and rate limiter settings.
+	// +required
+	WorkQueue WorkQueue `json:"workQueue"`
+
+	// Templates lists the installed kinds to wrap. For each entry the controller generates a namespaced
+	// CustomResourceDefinition <Kind>Template.templates.promoter.argoproj.io (or templateKind when set) whose
+	// spec.template holds a manifest of the source kind. The schema of spec.template is copied from the source
+	// CustomResourceDefinition when the kind is a CRD, otherwise derived from the API server's OpenAPI v3
+	// document; when neither is possible the template accepts any fields without validation.
+	//
+	// The CRDs are generated at controller startup and whenever this list changes. Removing an entry does not
+	// delete its CRD (that would delete every template written against it); delete it by hand when it is no
+	// longer referenced. The controller's ServiceAccount must be allowed to create, get, list, watch, and
+	// update CustomResourceDefinitions, and to create, get, list, watch, and delete the source kinds.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=50
+	Templates []ResourceTemplateSource `json:"templates,omitempty"`
+}
+
+// ResourceTemplateSource identifies an installed Kubernetes kind to wrap in a generated template CRD.
+type ResourceTemplateSource struct {
+	// Group is the API group of the source kind. Leave empty for the core group (for example ConfigMap, Pod).
+	// +optional
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$`
+	Group string `json:"group,omitempty"`
+
+	// Version is the API version of the source kind, for example v1 or v1alpha1. The created resources use this
+	// version, and the template schema is taken from it.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]+$`
+	Version string `json:"version"`
+
+	// Kind is the source Kind, for example Job.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[A-Z][A-Za-z0-9]*$`
+	Kind string `json:"kind"`
+
+	// TemplateKind overrides the generated template kind. Defaults to <Kind>Template, for example JobTemplate.
+	// Set it when two source kinds in different groups share a Kind name.
+	// +optional
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[A-Z][A-Za-z0-9]*$`
+	TemplateKind string `json:"templateKind,omitempty"`
+}
+
+// TemplateKindName returns the generated template kind for the source: TemplateKind when set, otherwise
+// Kind + ResourceTemplateKindSuffix.
+func (s ResourceTemplateSource) TemplateKindName() string {
+	if s.TemplateKind != "" {
+		return s.TemplateKind
+	}
+	return s.Kind + ResourceTemplateKindSuffix
 }
 
 // RestoreActiveCommitConfiguration defines the configuration for the RestoreActiveCommit controller.

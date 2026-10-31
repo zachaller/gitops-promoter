@@ -456,6 +456,46 @@ func (in HydratorMetadata) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in KubernetesResourceCommitStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.KubernetesResourceCommitStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in KubernetesResourceCommitStatusConfiguration) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.KubernetesResourceCommitStatusConfiguration"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in KubernetesResourceCommitStatusEnvironmentStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.KubernetesResourceCommitStatusEnvironmentStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in KubernetesResourceCommitStatusList) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.KubernetesResourceCommitStatusList"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in KubernetesResourceCommitStatusSpec) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.KubernetesResourceCommitStatusSpec"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in KubernetesResourceCommitStatusStatus) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.KubernetesResourceCommitStatusStatus"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in KubernetesResourcePhaseSpec) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.KubernetesResourcePhaseSpec"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in KubernetesResourceReference) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.KubernetesResourceReference"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in MetricsConfiguration) OpenAPIModelName() string {
 	return "io.argoproj.promoter.v1alpha1.MetricsConfiguration"
 }
@@ -568,6 +608,16 @@ func (in RateLimiter) OpenAPIModelName() string {
 // OpenAPIModelName returns the OpenAPI model name for this type.
 func (in RateLimiterTypes) OpenAPIModelName() string {
 	return "io.argoproj.promoter.v1alpha1.RateLimiterTypes"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ResourceTemplateReference) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.ResourceTemplateReference"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ResourceTemplateSource) OpenAPIModelName() string {
+	return "io.argoproj.promoter.v1alpha1.ResourceTemplateSource"
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.

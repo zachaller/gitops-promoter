@@ -2,6 +2,35 @@
 
 This page documents breaking changes and migration steps between releases.
 
+## 0.49 — `kubernetesResourceCommitStatus` is required on ControllerConfiguration
+
+The new [KubernetesResourceCommitStatus](gating-promotions/built-in-gates/kubernetes-resource-commit-status.md) gate adds
+a required `spec.kubernetesResourceCommitStatus` section to `ControllerConfiguration`, like every other controller.
+The install bundles ship it with `templates: []`, so no wrapped template CRDs are generated until you list kinds there.
+If you maintain your own ControllerConfiguration, add the section before upgrading:
+
+```yaml
+spec:
+  kubernetesResourceCommitStatus:
+    workQueue:
+      maxConcurrentReconciles: 10
+      requeueDuration: "5m"
+      rateLimiter:
+        maxOf:
+          - bucket:
+              qps: 10
+              bucket: 100
+          - fastSlow:
+              fastDelay: "1s"
+              slowDelay: "5m"
+              maxFastAttempts: 3
+    templates: []
+```
+
+The controller's role gains `create`, `get`, `list`, `watch`, and `update` on `customresourcedefinitions` and read
+access to `templates.promoter.argoproj.io`. Permissions on the kinds you wrap (for example `batch/v1` Jobs) are not
+part of the bundles; grant them as described on the gate page.
+
 ## 0.46 — WebRequestCommitStatus authentication Secrets must be labeled
 
 > [!IMPORTANT]

@@ -56,6 +56,9 @@ var _ = Describe("All", func() {
 			"kinds.All did not find ControllerConfiguration; ensure it is registered with SchemeBuilder")
 		Expect(seen).To(HaveKey("PromotionStrategy"),
 			"kinds.All did not find PromotionStrategy; ensure it is registered with SchemeBuilder")
+		Expect(seen).To(HaveKey("KubernetesResourceCommitStatus"),
+			"kinds.All did not find KubernetesResourceCommitStatus. Register the type with SchemeBuilder in api/v1alpha1 "+
+				"so instance-id cache partitioning and metrics pick it up automatically")
 		Expect(seen).To(HaveKey("ScheduledCommitStatus"),
 			"kinds.All did not find ScheduledCommitStatus. Register the type with SchemeBuilder in api/v1alpha1 "+
 				"so instance-id cache partitioning and metrics pick it up automatically")

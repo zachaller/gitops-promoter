@@ -3,6 +3,7 @@ package utils
 import (
 	"sync"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -16,12 +17,14 @@ var (
 	schemeOnce sync.Once
 )
 
-// GetScheme returns a process-wide scheme with promoter (and core) types registered.
+// GetScheme returns a process-wide scheme with promoter (and core) types registered, plus
+// apiextensions.k8s.io/v1 so the KubernetesResourceCommitStatus controller can generate template CRDs.
 // Used by the manager, tests, and apiutil.GVKForObject when TypeMeta.Kind is empty.
 func GetScheme() *runtime.Scheme {
 	schemeOnce.Do(func() {
 		scheme = runtime.NewScheme()
 		utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+		utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
 		utilruntime.Must(promoterv1alpha1.AddToScheme(scheme))
 		utilruntime.Must(argocd.AddToScheme(scheme))
 	})

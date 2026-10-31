@@ -30,6 +30,7 @@ function managersFromBundle(bundle: PromotionStrategyDetails): CommitStatusManag
     timedCommitStatuses: bundle.timedCommitStatuses,
     gitCommitStatuses: bundle.gitCommitStatuses,
     scheduledCommitStatuses: bundle.scheduledCommitStatuses,
+    kubernetesResourceCommitStatuses: bundle.kubernetesResourceCommitStatuses,
     argoCDCommitStatuses: bundle.argoCDCommitStatuses,
     webRequestCommitStatuses: bundle.webRequestCommitStatuses,
     dependentsSuccessfulCommitStatuses: bundle.dependentsSuccessfulCommitStatuses,
