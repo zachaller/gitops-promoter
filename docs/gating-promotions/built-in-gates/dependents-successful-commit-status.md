@@ -270,6 +270,12 @@ omit those fields but still report `activeCommitStatuses` and `upstreams`.
 (same evaluation as the gate). The gate's own pass/fail checks **direct** `PromotionStrategy.spec.environments[].dependsOn`
 only; each direct upstream's `satisfied` value was computed with full no-op recursion.
 
+> [!NOTE]
+> An upstream rolled back with a [RestoreActiveCommit](../../advanced-usage/rolling-back.md) holds its downstream
+> environments. Its active dry SHA becomes the restored version, so downstream environments promoting the newer change
+> report `Waiting for "<branch>" to be promoted` until the upstream promotes that change or a newer one (usually the
+> fix forward). See [Effect on downstream environments](../../advanced-usage/rolling-back.md#effect-on-downstream-environments).
+
 ### Consumer workflow when pending
 
 1. Read the gated environment's `description` (matches the SCM commit status).

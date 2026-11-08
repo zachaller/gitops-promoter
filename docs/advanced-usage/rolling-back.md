@@ -66,6 +66,33 @@ can succeed while the previous workload is still serving.
 
 The restore also shows up in the environment's promotion history, marked by `restoredFrom`. A `sha` that is not in the active branch's history (for example a commit from another environment's branch or an unmerged pull request) is refused, and the Ready condition is `False` with the reason. A commit that carries `Promoter-restored-from` is itself a restore and is refused. That trailer is written on the restore commit only. The commit the restore moved off does not carry it, so that commit can be restored again. Once the active tip is already the restore of `sha` and its note carries `Promoter-restore-unblocked-at`, another RestoreActiveCommit for that same `sha` deletes itself. Nothing is written and the note is left unchanged, so the unblock stays in history and the object does not stay pending and block promotion. Deleting a RestoreActiveCommit whose restore succeeded does not stamp `Promoter-restore-unblocked-at`.
 
+## Effect on downstream environments
+
+A restore also holds every environment that depends on the restored one. This is intended: the restored environment no
+longer runs the change, so environments after it should not take that change either.
+
+The [DependentsSuccessfulCommitStatus](../gating-promotions/built-in-gates/dependents-successful-commit-status.md) gate
+compares each upstream's `status.active.dry.sha` with the dry SHA the downstream environment is promoting. After a
+restore, the upstream's active dry SHA is the version you restored to, not the dry SHA the restore moved off of. So a
+downstream environment that still has that dry SHA (or anything newer) open as a pull request stays `pending` with:
+
+```text
+Waiting for "<restored environment branch>" to be promoted
+```
+
+The gate checks only that the upstream has *deployed* the change. It does not know that the upstream deployed it once
+and was then rolled back. The hold continues even after `spec.blockEnvironment` is set to `false`, until the restored
+environment promotes that dry SHA or a newer one. Because the blocked dry SHA does not open a pull request again (see
+[Resuming promotion](#resuming-promotion)), in practice this means downstream environments wait for the fix-forward
+commit to reach the restored environment.
+
+For example, with `dev → staging → prod`, restoring `staging` while `prod` has a pull request open for the bad dry SHA
+keeps that `prod` pull request pending. Once the fix is hydrated, promoted to `staging`, and healthy there, `prod` gets
+the fix like any other change.
+
+Environments that already merged the change are not touched: a restore changes only the environment you name. To roll
+back several environments, create a RestoreActiveCommit for each.
+
 > [!NOTE]
 > Creating a RestoreActiveCommit is the authorization boundary: anyone who can create one in the PromotionStrategy's
 > namespace can restore that environment, and the push uses the controller's git credentials. Grant `create` on
