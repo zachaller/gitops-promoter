@@ -19,10 +19,12 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -112,9 +114,11 @@ var _ = Describe("Watch fan-out behavior", func() {
 			provider := newProviderWithReader(newFakeReader(seedObjects()...))
 			store := NewREST(provider)
 
-			// A watch at a specific resourceVersion gets no initial snapshot; every
-			// event it sees is a delta.
-			w, err := store.Watch(nsContext(testNamespace), &metainternalversion.ListOptions{ResourceVersion: "5"})
+			// A watch at the current resourceVersion gets no initial snapshot and has
+			// nothing to catch up on; every event it sees is a delta.
+			w, err := store.Watch(nsContext(testNamespace), &metainternalversion.ListOptions{
+				ResourceVersion: provider.currentResourceVersion(),
+			})
 			Expect(err).NotTo(HaveOccurred())
 			defer w.Stop()
 
@@ -140,6 +144,221 @@ var _ = Describe("Watch fan-out behavior", func() {
 				}
 			}, 10*time.Second, 50*time.Millisecond).Should(BeTrue(),
 				"overflowing watcher must have its result channel closed to force a client re-list")
+		})
+	})
+
+	// client-go ends every watch after a few minutes and starts a new one from the last
+	// resourceVersion it saw. Whatever is emitted between the two must not be lost, and a
+	// resourceVersion that cannot be resumed from must be refused so the client re-lists:
+	// accepting it silently would leave the client stale with no way to find out.
+	Describe("resuming from a resourceVersion", func() {
+		var (
+			cl       client.WithWatch
+			provider *BundleProvider
+			store    *REST
+		)
+		ctx := context.Background()
+		key := func(name string) types.NamespacedName {
+			return types.NamespacedName{Namespace: watchTestNamespace, Name: name}
+		}
+		reconcile := func(name string) {
+			GinkgoHelper()
+			Expect(provider.reconcileKey(ctx, key(name))).To(Succeed())
+		}
+		setLabels := func(name string, lbls map[string]string) {
+			GinkgoHelper()
+			ps := &promoterv1alpha1.PromotionStrategy{}
+			Expect(cl.Get(ctx, key(name), ps)).To(Succeed())
+			ps.Labels = lbls
+			Expect(cl.Update(ctx, ps)).To(Succeed())
+			reconcile(name)
+		}
+		deletePS := func(name string) {
+			GinkgoHelper()
+			Expect(cl.Delete(ctx, makePS(name, nil))).To(Succeed())
+			reconcile(name)
+		}
+		// resume starts a watch from resourceVersion and returns what it is sent to catch
+		// up, as "TYPE name".
+		resume := func(resourceVersion string, selector labels.Selector) []string {
+			GinkgoHelper()
+			w, err := store.Watch(nsContext(watchTestNamespace), &metainternalversion.ListOptions{
+				ResourceVersion: resourceVersion,
+				LabelSelector:   selector,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			defer w.Stop()
+			var got []string
+			for {
+				select {
+				case ev := <-w.ResultChan():
+					obj, err := meta.Accessor(ev.Object)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(obj.GetResourceVersion()).To(Equal(provider.currentResourceVersion()),
+						"a caught-up client must be left at the current resourceVersion")
+					got = append(got, fmt.Sprintf("%s %s", ev.Type, obj.GetName()))
+				case <-time.After(200 * time.Millisecond):
+					return got
+				}
+			}
+		}
+
+		BeforeEach(func() {
+			cl = newFakeClientBuilder().WithObjects(
+				makePS("ps-a", map[string]string{"env": "prod"}),
+				makePS("ps-b", map[string]string{"env": "prod"}),
+			).Build()
+			provider = newProviderWithReader(cl)
+			store = NewREST(provider)
+			// What a client that has already synced knows about.
+			reconcile("ps-a")
+			reconcile("ps-b")
+		})
+
+		It("delivers nothing when nothing changed", func() {
+			Expect(resume(provider.currentResourceVersion(), nil)).To(BeEmpty())
+		})
+
+		It("delivers what changed while no watch was open", func() {
+			seen := provider.currentResourceVersion()
+
+			reconcile("ps-a")
+			deletePS("ps-b")
+			Expect(cl.Create(ctx, makePS("ps-c", nil))).To(Succeed())
+			reconcile("ps-c")
+
+			Expect(resume(seen, nil)).To(Equal([]string{"MODIFIED ps-a", "DELETED ps-b", "ADDED ps-c"}))
+		})
+
+		It("delivers one event with the current state for an object that changed repeatedly", func() {
+			seen := provider.currentResourceVersion()
+
+			for range 5 {
+				reconcile("ps-a")
+			}
+
+			Expect(resume(seen, nil)).To(Equal([]string{"MODIFIED ps-a"}))
+		})
+
+		It("delivers nothing for an object that was created and deleted in between", func() {
+			seen := provider.currentResourceVersion()
+
+			Expect(cl.Create(ctx, makePS("ps-c", nil))).To(Succeed())
+			reconcile("ps-c")
+			deletePS("ps-c")
+
+			Expect(resume(seen, nil)).To(BeEmpty())
+		})
+
+		It("only delivers events newer than the resourceVersion", func() {
+			reconcile("ps-a")
+			seen := provider.currentResourceVersion()
+			reconcile("ps-b")
+
+			Expect(resume(seen, nil)).To(Equal([]string{"MODIFIED ps-b"}))
+		})
+
+		It("applies label selector transitions across the gap", func() {
+			prod := labels.SelectorFromSet(labels.Set{"env": "prod"})
+			seen := provider.currentResourceVersion()
+
+			setLabels("ps-a", map[string]string{"env": "dev"})
+			Expect(cl.Create(ctx, makePS("ps-c", map[string]string{"env": "dev"}))).To(Succeed())
+			reconcile("ps-c")
+			setLabels("ps-c", map[string]string{"env": "prod"})
+
+			Expect(resume(seen, prod)).To(Equal([]string{"DELETED ps-a", "ADDED ps-c"}),
+				"ps-a stopped matching and ps-c started matching while no watch was open")
+		})
+
+		It("does not deliver changes from other namespaces", func() {
+			other := &promoterv1alpha1.PromotionStrategy{Name: "elsewhere", Namespace: "other-ns"}
+			Expect(cl.Create(ctx, other)).To(Succeed())
+			seen := provider.currentResourceVersion()
+
+			Expect(provider.reconcileKey(ctx, client.ObjectKeyFromObject(other))).To(Succeed())
+
+			Expect(resume(seen, nil)).To(BeEmpty())
+		})
+
+		It("gives a deletion its own resourceVersion", func() {
+			before := provider.currentResourceVersion()
+			deletePS("ps-b")
+			Expect(provider.currentResourceVersion()).NotTo(Equal(before))
+			Expect(resume(provider.currentResourceVersion(), nil)).To(BeEmpty())
+		})
+
+		It("does not advance the resourceVersion for a reconcile that emits nothing", func() {
+			before := provider.currentResourceVersion()
+			reconcile("never-existed")
+			Expect(provider.currentResourceVersion()).To(Equal(before))
+		})
+
+		expectGone := func(resourceVersion string) {
+			GinkgoHelper()
+			_, err := store.Watch(nsContext(watchTestNamespace), &metainternalversion.ListOptions{
+				ResourceVersion: resourceVersion,
+			})
+			Expect(apierrors.IsResourceExpired(err)).To(BeTrue(), "want 410 Gone so the client re-lists, got %v", err)
+		}
+
+		It("refuses a resourceVersion issued by an earlier process", func() {
+			// A provider that has since restarted: its client still holds a resourceVersion
+			// from before, when different things may have existed.
+			seen := provider.currentResourceVersion()
+			provider = newProviderWithReader(cl)
+			store = NewREST(provider)
+
+			expectGone(seen)
+		})
+
+		It("refuses a resourceVersion ahead of its own", func() {
+			// Issued by another replica, or by a process started later.
+			current, err := strconv.ParseUint(provider.currentResourceVersion(), 10, 64)
+			Expect(err).NotTo(HaveOccurred())
+
+			expectGone(strconv.FormatUint(current+1000, 10))
+		})
+
+		It("refuses a resourceVersion older than its history", func() {
+			provider.historyLimit = 3
+			seen := provider.currentResourceVersion()
+
+			for range 3 {
+				reconcile("ps-a")
+			}
+			Expect(resume(seen, nil)).To(Equal([]string{"MODIFIED ps-a"}), "still within the history")
+
+			reconcile("ps-a")
+			expectGone(seen)
+		})
+
+		It("rejects a resourceVersion that is not a number", func() {
+			_, err := store.Watch(nsContext(watchTestNamespace), &metainternalversion.ListOptions{
+				ResourceVersion: "not-a-number",
+			})
+			Expect(apierrors.IsBadRequest(err)).To(BeTrue())
+		})
+
+		It("delivers an event emitted while the watch is being resumed exactly once", func() {
+			seen := provider.currentResourceVersion()
+			reconcile("ps-a")
+
+			w, err := store.Watch(nsContext(watchTestNamespace), &metainternalversion.ListOptions{ResourceVersion: seen})
+			Expect(err).NotTo(HaveOccurred())
+			defer w.Stop()
+			reconcile("ps-b")
+
+			var first, second watch.Event
+			Eventually(w.ResultChan()).Should(Receive(&first))
+			Eventually(w.ResultChan()).Should(Receive(&second))
+			firstObj, err := meta.Accessor(first.Object)
+			Expect(err).NotTo(HaveOccurred())
+			secondObj, err := meta.Accessor(second.Object)
+			Expect(err).NotTo(HaveOccurred())
+			Expect([]string{firstObj.GetName(), secondObj.GetName()}).To(Equal([]string{"ps-a", "ps-b"}),
+				"the missed change is replayed first, then the live one follows")
+			Consistently(w.ResultChan(), 200*time.Millisecond).ShouldNot(Receive())
 		})
 	})
 

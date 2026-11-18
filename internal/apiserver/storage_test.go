@@ -131,9 +131,14 @@ var _ = Describe("REST storage", func() {
 			Consistently(w.ResultChan(), 200*time.Millisecond).ShouldNot(Receive())
 		})
 
-		It("skips the snapshot when a resourceVersion is supplied", func() {
+		It("skips the snapshot when watching from the resourceVersion of a List", func() {
 			ctx := nsContext()
-			w, err := store.Watch(ctx, &metainternalversion.ListOptions{ResourceVersion: "5"})
+			obj, err := store.List(ctx, &metainternalversion.ListOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			list, ok := obj.(*viewv1alpha1.PromotionStrategyDetailsList)
+			Expect(ok).To(BeTrue())
+
+			w, err := store.Watch(ctx, &metainternalversion.ListOptions{ResourceVersion: list.ResourceVersion})
 			Expect(err).NotTo(HaveOccurred())
 			defer w.Stop()
 

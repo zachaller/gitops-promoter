@@ -109,6 +109,10 @@ func (r *REST) List(ctx context.Context, options *metainternalversion.ListOption
 // reflectors (client-go v0.32+) hang waiting for that bookmark, so emitting it is
 // required for the dashboard's controller-runtime cache to sync. Plain watches
 // (resourceVersion == "" / "0") also get the initial snapshot, without the bookmark.
+//
+// Any other resourceVersion resumes from that point: the changes made since are
+// delivered first, or the request fails with 410 Gone when they are no longer known
+// (so the client re-lists).
 func (r *REST) Watch(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
 	namespace := genericapirequest.NamespaceValue(ctx)
 
@@ -126,7 +130,11 @@ func (r *REST) Watch(ctx context.Context, options *metainternalversion.ListOptio
 	// apiserver's own isListWatchRequest gate: the watch handler installs its
 	// watchlist-complete hook only for that combination, and an annotated bookmark on
 	// any other request makes the handler invoke a nil hook and panic.
-	return r.provider.Watch(ctx, namespace, name, labelSelectorFromOptions(options), sendInitial, sendInitialEvents && allowWatchBookmarks)
+	resourceVersion := ""
+	if options != nil {
+		resourceVersion = options.ResourceVersion
+	}
+	return r.provider.Watch(ctx, namespace, name, labelSelectorFromOptions(options), resourceVersion, sendInitial, sendInitialEvents && allowWatchBookmarks)
 }
 
 // labelSelectorFromOptions extracts the label selector, normalizing "everything"

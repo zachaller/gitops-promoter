@@ -27,7 +27,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/apiserver/pkg/authorization/authorizerfactory"
 	"k8s.io/client-go/dynamic"
 	clientrest "k8s.io/client-go/rest"
@@ -167,6 +170,88 @@ var _ = Describe("Run integration (envtest + in-process server)", func() {
 			}
 			return nil
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		cancel()
+		Eventually(errCh, 30*time.Second, 100*time.Millisecond).Should(Receive(Succeed()))
+	})
+
+	It("resumes a watch over the API without losing what changed in between", func() {
+		newPS := func(name string) *promoterv1alpha1.PromotionStrategy {
+			return &promoterv1alpha1.PromotionStrategy{
+				Name: name, Namespace: testNamespace,
+				Spec: promoterv1alpha1.PromotionStrategySpec{
+					RepositoryReference:  promoterv1alpha1.ObjectReference{Name: "my-repo"},
+					OrderCommitStatusRef: testOrderCommitStatusRef("my-dscs"),
+					Environments:         []promoterv1alpha1.Environment{{Branch: "environment/dev"}},
+				},
+			}
+		}
+		Expect(cl.Create(context.Background(), newPS(testPSName))).To(Succeed())
+
+		runtime, err := newDashboardRuntime(
+			context.Background(),
+			cfg,
+			integrationAPIServerOptions(),
+			authorizerfactory.NewAlwaysAllowAuthorizer(),
+		)
+		Expect(err).NotTo(HaveOccurred())
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		errCh := make(chan error, 1)
+		go func() {
+			defer GinkgoRecover()
+			errCh <- runtime.run(ctx)
+		}()
+
+		dyn, err := dynamic.NewForConfig(runtime.server.GenericAPIServer.LoopbackClientConfig)
+		Expect(err).NotTo(HaveOccurred())
+		details := dyn.Resource(promotionStrategyDetailsGVR).Namespace(testNamespace)
+
+		By("a client syncing, as an informer does: a watch that starts with the current state")
+		first, err := details.Watch(context.Background(), metav1.ListOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		var added watch.Event
+		Eventually(first.ResultChan(), 30*time.Second).Should(Receive(&added))
+		Expect(added.Type).To(Equal(watch.Added))
+		obj, err := meta.Accessor(added.Object)
+		Expect(err).NotTo(HaveOccurred())
+		seen := obj.GetResourceVersion()
+
+		By("its watch ending, as every watch does after a few minutes")
+		first.Stop()
+
+		By("a PromotionStrategy being created before the client watches again")
+		Expect(cl.Create(context.Background(), newPS("created-in-the-gap"))).To(Succeed())
+		Eventually(func() (int, error) {
+			list, listErr := details.List(context.Background(), metav1.ListOptions{})
+			if listErr != nil {
+				return 0, fmt.Errorf("list promotionstrategydetails: %w", listErr)
+			}
+			return len(list.Items), nil
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal(2))
+		// Let the provider emit the event for it (changes are debounced) while nobody watches.
+		Eventually(func() string {
+			return runtime.provider.currentResourceVersion()
+		}, 30*time.Second, 100*time.Millisecond).ShouldNot(Equal(seen))
+
+		By("the client resuming from the last resourceVersion it saw")
+		resumed, err := details.Watch(context.Background(), metav1.ListOptions{ResourceVersion: seen})
+		Expect(err).NotTo(HaveOccurred())
+		defer resumed.Stop()
+		Eventually(func(g Gomega) {
+			var missed watch.Event
+			g.Expect(resumed.ResultChan()).To(Receive(&missed))
+			missedObj, accErr := meta.Accessor(missed.Object)
+			g.Expect(accErr).NotTo(HaveOccurred())
+			g.Expect(missedObj.GetName()).To(Equal("created-in-the-gap"))
+			g.Expect(missed.Type).To(Equal(watch.Added))
+		}, 30*time.Second, 100*time.Millisecond).Should(Succeed(),
+			"the bundle created while no watch was open must be delivered on resume")
+
+		By("a resourceVersion this server never issued being refused, so the client re-lists")
+		_, err = details.Watch(context.Background(), metav1.ListOptions{ResourceVersion: "5"})
+		Expect(apierrors.IsResourceExpired(err) || apierrors.IsGone(err)).To(BeTrue(), "want 410 Gone, got %v", err)
 
 		cancel()
 		Eventually(errCh, 30*time.Second, 100*time.Millisecond).Should(Receive(Succeed()))
