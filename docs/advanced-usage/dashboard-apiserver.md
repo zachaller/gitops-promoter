@@ -27,6 +27,13 @@ The dashboard process watches `PromotionStrategyDetails` and forwards each bundl
 the browser over Server-Sent Events (SSE). SSE does not flow through the
 kube-aggregator proxy.
 
+Every SSE stream starts with a snapshot of the current bundles and then sends a
+heartbeat every 15 seconds. A browser that reconnects therefore catches up on its
+own, and an idle stream is not cut off by a proxy's idle timeout (commonly 60
+seconds). If you expose the dashboard through a reverse proxy, make sure it does not
+buffer the `/watch` response; the dashboard sets `X-Accel-Buffering: no`, which
+nginx-based proxies honor.
+
 ## What gets deployed
 
 `config/apiserver` ships a self-contained kustomize base (under

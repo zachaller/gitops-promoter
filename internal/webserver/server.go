@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"net/http"
-	"path"
 	"strings"
 	"time"
 
@@ -34,55 +34,31 @@ var logger = ctrl.Log.WithName("webServer")
 // the SSE event name the dashboard UI subscribes to.
 const promotionStrategyDetailsKind = "PromotionStrategyDetails"
 
+// lastAppliedAnnotation is dropped from objects sent to the UI: it is large and unused there.
+const lastAppliedAnnotation = "kubectl.kubernetes.io/last-applied-configuration"
+
+// defaultHeartbeatInterval is how often a /watch stream sends a ping. It is well under the
+// 60s idle timeout that most ingresses and load balancers default to, so a stream with
+// nothing to report is not cut off, and it bounds how long a dead connection goes unnoticed.
+const defaultHeartbeatInterval = 15 * time.Second
+
 // WebServer handles the web server functionality for the dashboard and API endpoints.
 type WebServer struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Event  *Event
+	// events fans bundle changes out to the connected /watch clients.
+	events *broadcaster
+	// heartbeatInterval is how often a /watch stream sends a ping.
+	heartbeatInterval time.Duration
 }
-
-// Event represents a server-sent event that can be broadcast to clients.
-// It keeps a list of clients those are currently attached
-type Event struct {
-	// Events are pushed to this channel by the main events-gathering routine
-	Message chan Message
-
-	// New client connections
-	newClients chan chan Message
-
-	// Closed client connections
-	closedClients chan chan Message
-
-	// Total client connections
-	totalClients map[chan Message]bool
-}
-
-// Message represents a message that can be sent to clients.
-type Message struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Kind      string `json:"kind"`
-	Data      string `json:"data"`
-}
-
-// ClientChan represents a channel for sending messages to clients.
-// New event messages are broadcast to all registered client connection channels
-type ClientChan chan Message
 
 // NewWebServer creates a new WebServer instance with the given manager.
 func NewWebServer(mgr controllerruntime.Manager) WebServer {
-	event := &Event{
-		Message:       make(chan Message, 100),
-		newClients:    make(chan chan Message),
-		closedClients: make(chan chan Message),
-		totalClients:  make(map[chan Message]bool),
-	}
-	go event.listen()
-
 	return WebServer{
-		Event:  event,
-		Scheme: mgr.GetScheme(),
-		Client: mgr.GetClient(),
+		events:            newBroadcaster(),
+		heartbeatInterval: defaultHeartbeatInterval,
+		Scheme:            mgr.GetScheme(),
+		Client:            mgr.GetClient(),
 	}
 }
 
@@ -91,33 +67,51 @@ func (ws *WebServer) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	return ctrl.Result{}, nil
 }
 
-func (ws *WebServer) sendEvent(e client.Object) {
-	annotations := e.GetAnnotations()
-	delete(annotations, "kubectl.kubernetes.io/last-applied-configuration")
-	e.SetAnnotations(annotations)
-	e.SetManagedFields(nil)
-
-	jsonString, err := json.Marshal(e)
-	if err != nil {
-		logger.Error(err, "failed to marshal for SSE", "name", e.GetName(), "kind", e.GetObjectKind().GroupVersionKind().Kind)
-		return
+// bundleForClient returns the bundle as it is sent to the UI: with its kind and apiVersion
+// set and without managed fields or the last-applied-configuration annotation. The bundle
+// comes from the shared informer cache and must not be modified, so the changes are made
+// on a shallow copy.
+func bundleForClient(bundle *viewv1alpha1.PromotionStrategyDetails) *viewv1alpha1.PromotionStrategyDetails {
+	out := *bundle
+	out.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyDetailsKind))
+	out.ManagedFields = nil
+	if _, ok := out.Annotations[lastAppliedAnnotation]; ok {
+		out.Annotations = maps.Clone(out.Annotations)
+		delete(out.Annotations, lastAppliedAnnotation)
 	}
-	m := Message{
-		Name:      e.GetName(),
-		Namespace: e.GetNamespace(),
-		Kind:      e.GetObjectKind().GroupVersionKind().Kind,
-		Data:      string(jsonString),
-	}
-	ws.Event.Message <- m
+	return &out
 }
 
-func (ws *WebServer) sendDeleteEvent(e client.Object) {
-	ws.Event.Message <- Message{
-		Name:      e.GetName(),
-		Namespace: e.GetNamespace(),
-		Kind:      e.GetObjectKind().GroupVersionKind().Kind,
-		Data:      "{action: \"delete\", name: \"" + e.GetName() + "\", namespace: \"" + e.GetNamespace() + "\"}",
+// publishBundle broadcasts the current state of a bundle to the /watch clients.
+func (ws *WebServer) publishBundle(bundle *viewv1alpha1.PromotionStrategyDetails) {
+	data, err := json.Marshal(bundleForClient(bundle))
+	if err != nil {
+		logger.Error(err, "failed to marshal for SSE", "namespace", bundle.GetNamespace(), "name", bundle.GetName())
+		return
 	}
+	ws.events.publish(Message{
+		Name:      bundle.GetName(),
+		Namespace: bundle.GetNamespace(),
+		Kind:      promotionStrategyDetailsKind,
+		Data:      string(data),
+	})
+}
+
+// publishBundleDeleted broadcasts the deletion of a bundle to the /watch clients.
+func (ws *WebServer) publishBundleDeleted(bundle *viewv1alpha1.PromotionStrategyDetails) {
+	ref := objectRef{Kind: promotionStrategyDetailsKind, Namespace: bundle.GetNamespace(), Name: bundle.GetName()}
+	data, err := json.Marshal(ref)
+	if err != nil {
+		logger.Error(err, "failed to marshal for SSE", "namespace", ref.Namespace, "name", ref.Name)
+		return
+	}
+	ws.events.publish(Message{
+		Name:      ref.Name,
+		Namespace: ref.Namespace,
+		Kind:      ref.Kind,
+		Data:      string(data),
+		Deleted:   true,
+	})
 }
 
 // SetupWithManager sets up the WebServer controller with the given manager.
@@ -132,20 +126,17 @@ func (ws *WebServer) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&viewv1alpha1.PromotionStrategyDetails{}, handler.Funcs{
 			CreateFunc: func(ctx context.Context, e event.TypedCreateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if bundle, ok := e.Object.(*viewv1alpha1.PromotionStrategyDetails); ok {
-					bundle.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyDetailsKind))
-					ws.sendEvent(bundle)
+					ws.publishBundle(bundle)
 				}
 			},
 			UpdateFunc: func(ctx context.Context, e event.TypedUpdateEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if bundle, ok := e.ObjectNew.(*viewv1alpha1.PromotionStrategyDetails); ok {
-					bundle.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyDetailsKind))
-					ws.sendEvent(bundle)
+					ws.publishBundle(bundle)
 				}
 			},
 			DeleteFunc: func(ctx context.Context, e event.TypedDeleteEvent[client.Object], w workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if bundle, ok := e.Object.(*viewv1alpha1.PromotionStrategyDetails); ok {
-					bundle.SetGroupVersionKind(viewv1alpha1.GroupVersion.WithKind(promotionStrategyDetailsKind))
-					ws.sendDeleteEvent(bundle)
+					ws.publishBundleDeleted(bundle)
 				}
 			},
 		}).
@@ -173,21 +164,7 @@ func (ws *WebServer) StartDashboard(ctx context.Context, addr string) error {
 	router.Use(webserverlogr.Ginlogr(logger, time.RFC3339, true))
 	router.Use(webserverlogr.RecoveryWithLogr(logger, time.RFC3339, true, true))
 
-	// gzip is registered before the routes so it also covers the /watch SSE stream.
-	// The bundles streamed over /watch are large, repetitive JSON, so compression is a
-	// clear bandwidth win. gin-contrib/gzip's writer flushes the underlying gzip.Writer
-	// on Flush(), so the per-event c.Writer.Flush() in httpWatch still delivers events in
-	// real time. No minLength is set: a non-zero minLength buffers sub-threshold frames in
-	// a pre-compression buffer that Flush() does not drain, which would stall small SSE
-	// events until a later larger one arrives.
-	router.Use(gzip.Gzip(gzip.DefaultCompression))
-
-	router.GET("/watch", WatchHeadersMiddleware(), ws.Event.serveHTTP(), ws.httpWatch)
-	router.GET("/list", ws.httpList)
-
-	router.GET("/healthz", func(c *gin.Context) {
-		c.JSON(http.StatusOK, "ok")
-	})
+	ws.registerAPIRoutes(router)
 
 	// Handle favicon (serve from embed so /favicon.png is not caught by SPA catch-all)
 	router.GET("/favicon.ico", func(c *gin.Context) {
@@ -350,116 +327,112 @@ func (ws *WebServer) httpList(c *gin.Context) {
 	}
 }
 
-func (ws *WebServer) httpWatch(c *gin.Context) {
-	v, ok := c.Get("clientChan")
-	if !ok {
-		return
-	}
-	clientChan, ok := v.(ClientChan)
-	if !ok {
-		return
-	}
+// registerAPIRoutes registers the compression middleware and the dashboard's API endpoints.
+func (ws *WebServer) registerAPIRoutes(router *gin.Engine) {
+	// gzip is registered before the routes so it also covers the /watch SSE stream.
+	// The bundles streamed over /watch are large, repetitive JSON, so compression is a
+	// clear bandwidth win. gin-contrib/gzip's writer flushes the underlying gzip.Writer
+	// on Flush(), so the per-event c.Writer.Flush() in httpWatch still delivers events in
+	// real time. No minLength is set: a non-zero minLength buffers sub-threshold frames in
+	// a pre-compression buffer that Flush() does not drain, which would stall small SSE
+	// events until a later larger one arrives.
+	router.Use(gzip.Gzip(gzip.DefaultCompression))
 
-	gone := c.Stream(func(w io.Writer) bool {
-		// Stream message to client from message channel
-		if msg, ok := <-clientChan; ok {
-			match, err := filter(msg, c)
-			if err != nil {
-				logger.Error(err, "failed to filter message", "name", msg.Name, "kind", msg.Kind)
-				return false
-			}
+	router.GET("/watch", ws.httpWatch)
+	router.GET("/list", ws.httpList)
 
-			if match {
-				c.SSEvent(msg.Kind, msg.Data)
-				c.Writer.Flush()
-			}
-
-			return true
-		}
-		return false
+	router.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, "ok")
 	})
-	if gone {
-		logger.Info("client gone stream")
-		// Send closed connection to event server
-		ws.Event.closedClients <- clientChan
-	}
 }
 
-// It Listens all incoming requests from clients.
-// Handles addition and removal of clients and broadcast messages to clients.
-func (stream *Event) listen() {
+// httpWatch streams bundle changes to the browser as server-sent events.
+//
+// Every connection starts with a snapshot event holding the complete current state for the
+// requested filter, followed by one event per change (named after the Kind for an update,
+// "deleted" for a deletion) and a periodic ping. The browser's EventSource reconnects on its
+// own when a connection drops, and because the new connection starts with a fresh snapshot,
+// whatever changed while it was away is picked up rather than lost.
+func (ws *WebServer) httpWatch(c *gin.Context) {
+	filter, err := newWatchFilter(c.Query("kind"), c.Query("namespace"), c.Query("name"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx := c.Request.Context()
+
+	// Subscribe before taking the snapshot. A change that lands in between is then queued
+	// and sent after the snapshot, instead of falling into a gap between the two.
+	sub := ws.events.subscribe(filter)
+	defer ws.events.unsubscribe(sub)
+
+	snapshot, err := ws.snapshot(ctx, filter, c.Query("namespace"))
+	if err != nil {
+		logger.Error(err, "failed to build watch snapshot")
+		c.JSON(http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	header := c.Writer.Header()
+	header.Set("Content-Type", "text/event-stream")
+	header.Set("Cache-Control", "no-cache")
+	header.Set("Connection", "keep-alive")
+	// Tell nginx-based proxies not to buffer the stream, which would delay events.
+	header.Set("X-Accel-Buffering", "no")
+
+	// Writing the snapshot also sends the response headers right away. Until they arrive
+	// the browser's EventSource is still connecting, and a proxy waiting on them for an
+	// idle stream answers with a gateway timeout, which EventSource does not retry.
+	if err := writeSSE(c.Writer, eventSnapshot, snapshot); err != nil {
+		return
+	}
+	c.Writer.Flush()
+
+	heartbeat := time.NewTicker(ws.heartbeatInterval)
+	defer heartbeat.Stop()
 	for {
 		select {
-		// Add new available client
-		case client := <-stream.newClients:
-			stream.totalClients[client] = true
-			logger.Info("Client added.", "clientCount", len(stream.totalClients))
-
-		// Remove closed client
-		case client := <-stream.closedClients:
-			delete(stream.totalClients, client)
-			close(client)
-			logger.Info("Removed client.", "clientCount", len(stream.totalClients))
-
-		// Broadcast message to client
-		case eventMsg := <-stream.Message:
-			for clientMessageChan := range stream.totalClients {
-				select {
-				case clientMessageChan <- eventMsg:
-					// Message sent successfully
-				default:
-					// Failed to send, dropping message
-					logger.Info("Failed to send.", "clientCount", len(stream.totalClients))
+		case <-ctx.Done():
+			// The client went away (or the server is shutting down).
+			return
+		case <-sub.notify:
+			for _, msg := range sub.drain() {
+				if err := writeSSE(c.Writer, msg.event(), msg.Data); err != nil {
+					return
 				}
 			}
+		case <-heartbeat.C:
+			if err := writeSSE(c.Writer, eventPing, "{}"); err != nil {
+				return
+			}
+		}
+		c.Writer.Flush()
+	}
+}
+
+// snapshot returns the JSON array of every bundle the filter selects, as it is now.
+func (ws *WebServer) snapshot(ctx context.Context, filter watchFilter, namespace string) (string, error) {
+	listOptions := &client.ListOptions{}
+	// A literal namespace narrows the List. A glob (or no namespace) lists everything and
+	// leaves the selection to the filter below.
+	if namespace != "" && !strings.ContainsAny(namespace, `*?[\`) {
+		listOptions.Namespace = namespace
+	}
+	bundleList := &viewv1alpha1.PromotionStrategyDetailsList{}
+	if err := ws.List(ctx, bundleList, listOptions); err != nil {
+		return "", fmt.Errorf("failed to list PromotionStrategyDetails: %w", err)
+	}
+
+	items := make([]*viewv1alpha1.PromotionStrategyDetails, 0, len(bundleList.Items))
+	for i := range bundleList.Items {
+		bundle := &bundleList.Items[i]
+		if filter.matches(promotionStrategyDetailsKind, bundle.Namespace, bundle.Name) {
+			items = append(items, bundleForClient(bundle))
 		}
 	}
-}
-
-func (stream *Event) serveHTTP() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Initialize client channel
-		clientChan := make(ClientChan)
-
-		// Send new connection to event server
-		stream.newClients <- clientChan
-
-		c.Set("clientChan", clientChan)
-
-		c.Next()
-	}
-}
-
-// WatchHeadersMiddleware returns a gin middleware that sets headers for watch requests.
-func WatchHeadersMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Writer.Header().Set("Content-Type", "text/event-stream")
-		c.Writer.Header().Set("Cache-Control", "no-cache")
-		c.Writer.Header().Set("Connection", "keep-alive")
-		c.Writer.Header().Set("Transfer-Encoding", "chunked")
-		c.Next()
-	}
-}
-
-func filter(msg Message, c *gin.Context) (bool, error) {
-	msgKey := fmt.Sprintf("%s/%s/%s", msg.Kind, msg.Namespace, msg.Name)
-	msgKey = strings.ToLower(msgKey)
-	var kindQuery, namespaceQuery, nameQuery string
-	if kindQuery = c.Query("kind"); kindQuery == "" {
-		kindQuery = "*"
-	}
-	if namespaceQuery = c.Query("namespace"); namespaceQuery == "" {
-		namespaceQuery = "*"
-	}
-	if nameQuery = c.Query("name"); nameQuery == "" {
-		nameQuery = "*"
-	}
-	queryKey := fmt.Sprintf("%s/%s/%s", strings.ToLower(kindQuery), strings.ToLower(namespaceQuery), strings.ToLower(nameQuery))
-
-	match, err := path.Match(queryKey, msgKey)
-	logger.V(1).Info("filter", "msgKey", msgKey, "queryKey", queryKey, "match", match)
+	data, err := json.Marshal(items)
 	if err != nil {
-		return false, fmt.Errorf("failed to match path: %w", err)
+		return "", fmt.Errorf("failed to marshal watch snapshot: %w", err)
 	}
-	return match, nil
+	return string(data), nil
 }
