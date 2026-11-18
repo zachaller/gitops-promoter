@@ -41,6 +41,7 @@ vi.mock('@lib/components/LiveManifestView', () => ({
 vi.mock('../src/stores/PromotionStrategyStore', () => ({
   PromotionStrategyStore: () => ({
     items: [strategy],
+    namespace: 'ns',
     scmProviders: {},
     loading: false,
     error: null,

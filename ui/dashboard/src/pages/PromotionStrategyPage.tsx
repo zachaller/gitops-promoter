@@ -41,9 +41,20 @@ const PromotionStrategyPage: React.FC<PromotionStrategyPageProps> = ({
   const currentNamespace = namespaceStore((s: NamespaceStore) => s.namespace);
   const setNamespace = namespaceStore((s: NamespaceStore) => s.setNamespace);
 
-  const { items, scmProviders, fetchItems, subscribe, unsubscribe } = PromotionStrategyStore();
+  const {
+    items,
+    scmProviders,
+    loading,
+    error,
+    namespace: loadedNamespace,
+    subscribe,
+    unsubscribe,
+  } = PromotionStrategyStore();
 
-  const selectedStrategy = items.find((ps: PromotionStrategy) => ps.metadata.name === strategyName);
+  const selectedStrategy = items.find(
+    (ps: PromotionStrategy) =>
+      ps.metadata.name === strategyName && ps.metadata.namespace === namespace,
+  );
 
   const [searchParams, setSearchParams] = useSearchParams();
   const commit = searchParams.get(COMMIT_PARAM);
@@ -106,34 +117,32 @@ const PromotionStrategyPage: React.FC<PromotionStrategyPageProps> = ({
   );
 
   useEffect(() => {
-    if (!namespace) return;
-    if (namespace !== currentNamespace) {
+    if (namespace && namespace !== currentNamespace) {
       setNamespace(namespace);
     }
+  }, [namespace, currentNamespace, setNamespace]);
 
-    if (!items.length || !selectedStrategy) {
-      fetchItems(namespace);
-    }
-
+  // The stream delivers the current state when it opens and follows it from there. It must
+  // depend on the namespace alone: depending on the items would close and reopen the stream
+  // on every update it delivers.
+  useEffect(() => {
+    if (!namespace) return;
     subscribe(namespace);
     return () => unsubscribe();
-  }, [
-    namespace,
-    currentNamespace,
-    setNamespace,
-    fetchItems,
-    subscribe,
-    unsubscribe,
-    items,
-    selectedStrategy,
-  ]);
+  }, [namespace, subscribe, unsubscribe]);
 
   const navigate = useNavigateWithParams();
 
-  if (items.length === 0) {
+  // Until the store holds this namespace (the subscription starts after the first render),
+  // there is nothing to judge "not found" by.
+  if (!selectedStrategy && (loading || loadedNamespace !== namespace)) {
     return (
       <div style={{ textAlign: 'center', marginTop: '20px' }}>Loading promotion strategies…</div>
     );
+  }
+
+  if (!selectedStrategy && error) {
+    return <div style={{ textAlign: 'center', marginTop: '20px' }}>Error: {error}</div>;
   }
 
   if (!selectedStrategy) {

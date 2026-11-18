@@ -13,14 +13,14 @@ interface NamespaceStore {
 export function PromotionStrategies() {
   const namespace = namespaceStore((s: NamespaceStore) => s.namespace);
 
-  const { items, loading, error, fetchItems, subscribe, unsubscribe } = PromotionStrategyStore();
+  const { items, loading, error, subscribe, unsubscribe } = PromotionStrategyStore();
 
+  // The stream delivers the current state when it opens and follows it from there.
   useEffect(() => {
     if (!namespace) return;
-    fetchItems(namespace);
     subscribe(namespace);
     return () => unsubscribe();
-  }, [namespace, fetchItems, subscribe, unsubscribe]);
+  }, [namespace, subscribe, unsubscribe]);
 
   if (!namespace) return null;
   if (loading) return <div>Loading...</div>;
